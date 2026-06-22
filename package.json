@@ -1,0 +1,28 @@
+{
+  "name": "pequenoscrm-pro",
+  "version": "2.47.0",
+  "description": "PequeñosCRM Pro — Ropa Infantil — Fase 2",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "dev:react": "cd frontend && npm run dev",
+    "build:react": "cd frontend && npm install && npm run build",
+    "setup": "npm install && cd frontend && npm install",
+    "test": "cd frontend && npm test",
+    "test:watch": "cd frontend && npm run test:watch",
+    "test:coverage": "cd frontend && npm run test:coverage"
+  },
+  "dependencies": {
+    "@afipsdk/afip.js": "^1.2.3",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "express": "^4.18.2",
+    "express-rate-limit": "^8.5.1",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.2",
+    "nodemailer": "^6.9.9",
+    "pdfkit": "^0.19.1"
+  }
+}

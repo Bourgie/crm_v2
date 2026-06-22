@@ -1,0 +1,169 @@
+const express = require('express');
+const router = express.Router();
+const { db, uid } = require('../db_sqlite');
+const _getDB = req => (req && req.db) || db;
+const { authMiddleware, requireRol } = require('../middleware/auth');
+
+// GET /config/plan — plan actual de la empresa + planes disponibles
+router.get('/plan', authMiddleware, (req, res) => {
+  try {
+    const { getEmpresa, getPlanes } = require('../db_master');
+    const empresa = getEmpresa(req.user.empresa || 'default');
+    const planes = getPlanes();
+    const planActual = planes.find(p => p.id === (empresa && empresa.plan_id)) || null;
+    res.json({ empresa: { nombre: empresa && empresa.nombre, plan_id: empresa && empresa.plan_id, vencimiento: empresa && empresa.vencimiento, usuarios_max: empresa && empresa.usuarios_max, sucursales_max: empresa && empresa.sucursales_max }, plan_actual: planActual, planes });
+  } catch(e) { res.json({ empresa: null, plan_actual: null, planes: [] }); }
+});
+
+// GET /config/plan/prorate — calcula prorrateo para cambio de plan
+router.get('/plan/prorate', authMiddleware, requireRol('admin'), (req, res) => {
+  try {
+    const { getEmpresa, getPlanes } = require('../db_master');
+    const empresa = getEmpresa(req.user.empresa || 'default');
+    if (!empresa) return res.json({ tiene_costo: false });
+    const planes = getPlanes();
+    const planActual = planes.find(p => p.id === empresa.plan_id);
+    const planNuevo  = planes.find(p => p.id === req.query.nuevo_plan_id);
+    if (!planActual || !planNuevo) return res.json({ tiene_costo: false });
+
+    const hoy = new Date();
+    const vto = empresa.vencimiento ? new Date(empresa.vencimiento) : null;
+    if (!vto || vto <= hoy) return res.json({ tiene_costo: false, mensaje: 'Suscripción vencida — se aplica precio completo del nuevo plan.' });
+
+    const diasRestantes = Math.ceil((vto - hoy) / 86400000);
+    const diasMes = 30;
+    const precioActual = parseFloat(planActual.precio) || 0;
+    const precioNuevo  = parseFloat(planNuevo.precio)  || 0;
+    const esUpgrade = precioNuevo > precioActual;
+
+    if (!esUpgrade) {
+      return res.json({
+        tiene_costo: false, es_downgrade: true,
+        dias_restantes: diasRestantes,
+        vencimiento_actual: empresa.vencimiento,
+        mensaje: `Tu plan actual vence el ${empresa.vencimiento}. El downgrade se aplica al renovar. No hay devolución de saldo a favor.`
+      });
+    }
+
+    const reembolso = Math.round((precioActual / diasMes) * diasRestantes * 100) / 100;
+    const costoNuevo = Math.round((precioNuevo / diasMes) * diasRestantes * 100) / 100;
+    const neto = Math.max(0, Math.round((costoNuevo - reembolso) * 100) / 100);
+
+    res.json({
+      tiene_costo: neto > 0, es_upgrade: true,
+      dias_restantes: diasRestantes,
+      vencimiento_actual: empresa.vencimiento,
+      precio_actual: precioActual, precio_nuevo: precioNuevo,
+      reembolso, costo_nuevo_periodo: costoNuevo, monto_neto: neto,
+      mensaje: `Tenés ${diasRestantes} días restantes en tu plan actual ($${precioActual}/mes). Pagás la diferencia proporcional: $${neto}`
+    });
+  } catch(e) { res.json({ tiene_costo: false, error: e.message }); }
+});
+
+// POST /config/plan/solicitar — solicita cambio de plan
+router.post('/plan/solicitar', authMiddleware, requireRol('admin'), (req, res) => {
+  const { plan_id, tipo } = req.body;
+  const empDB = _getDB(req);
+  const solicitud = {
+    plan_id, tipo,
+    fecha: new Date().toISOString(),
+    empresa: req.user.empresa,
+    usuario: req.user.nombre,
+    estado: 'pendiente'
+  };
+  // Save in empresa DB (for the user to see)
+  empDB.setConfig({ solicitud_plan: JSON.stringify(solicitud) });
+  // Also write to master DB so superadmin gets notified
+  try {
+    const { masterDb } = require('../db_master');
+    if (masterDb) {
+      const existing = masterDb.prepare('SELECT id FROM solicitudes_plan WHERE empresa_id=? AND estado=?').get(req.user.empresa, 'pendiente');
+      if (!existing) {
+        masterDb.prepare(`INSERT INTO solicitudes_plan(id,empresa_id,plan_id,tipo,fecha,usuario,estado)
+          VALUES(?,?,?,?,?,?,?)`).run(
+          'sp' + Date.now(), req.user.empresa, plan_id, tipo,
+          solicitud.fecha, req.user.nombre, 'pendiente'
+        );
+      } else {
+        masterDb.prepare(`UPDATE solicitudes_plan SET plan_id=?,tipo=?,fecha=?,usuario=?,estado=? WHERE empresa_id=? AND estado=?`)
+          .run(plan_id, tipo, solicitud.fecha, req.user.nombre, 'pendiente', req.user.empresa, 'pendiente');
+      }
+    }
+  } catch(e) { /* master db notification failed silently */ }
+  res.json({ ok: true, mensaje: 'Solicitud registrada. El administrador la procesará en breve.' });
+});
+
+router.get('/', authMiddleware, (req, res) => {
+  const db = _getDB(req);
+  const cfg = { ...db.getConfig() };
+  delete cfg.jwt_secret;
+  res.json(cfg);
+});
+
+router.put('/', authMiddleware, requireRol('admin'), (req, res) => {
+  const db = _getDB(req);
+  const safe = { ...req.body };
+  delete safe.jwt_secret;
+
+  // Handle objetivo_mes / objetivo_suc → persist into objetivos_mensuales map
+  if (safe.objetivo_mes !== undefined && safe.objetivo_mes !== '') {
+    const existing = db.getConfig();
+    const objetivos = existing.objetivos_mensuales || {};
+    const mes = new Date().toISOString().substr(0, 7);
+    const mesKey = mes + '_' + (safe.objetivo_suc || 'global');
+    objetivos[mesKey] = parseFloat(safe.objetivo_mes) || 0;
+    safe.objetivos_mensuales = objetivos;
+  }
+
+  db.setConfig(safe);
+  res.json({ ok: true });
+});
+
+// Listar backups disponibles
+router.get('/backups', requireRol('admin'), (req, res) => {
+  const db = _getDB(req);
+  const fs = require('fs'), path = require('path');
+  const dir = path.join(__dirname, '../data/backups');
+  if (!fs.existsSync(dir)) return res.json([]);
+  const files = fs.readdirSync(dir)
+    .filter(f => f.startsWith('crm_backup_') && f.endsWith('.json'))
+    .sort().reverse()
+    .map(f => {
+      const stat = fs.statSync(path.join(dir, f));
+      return { name: f, size: stat.size, fecha: f.replace('crm_backup_','').replace('.json','') };
+    });
+  res.json(files);
+});
+
+// Forzar backup manual ahora
+router.post('/backup', requireRol('admin'), (req, res) => {
+  const db = _getDB(req);
+  try {
+    const fs = require('fs'), path = require('path');
+    const { db } = require('../db_sqlite');
+    const dir = path.join(__dirname, '../data/backups');
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    const now = new Date();
+    const ts = now.toISOString().replace(/[:.]/g,'-').substr(0,19);
+    const file = path.join(dir, `crm_backup_manual_${ts}.json`);
+    const data = db.exportAll ? db.exportAll() : require('../db_sqlite')._db;
+    // Get raw data via reading current db file
+    const dbFile = path.join(__dirname, '../data/crm.json');
+    fs.copyFileSync(dbFile, file);
+    res.json({ ok: true, file: `crm_backup_manual_${ts}.json` });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Objetivo mensual ──
+router.post('/objetivo', authMiddleware, requireRol('admin','supervisor'), (req, res) => {
+  const db = _getDB(req);
+  const {mes_key, monto} = req.body;
+  if (!mes_key || monto === undefined) return res.status(400).json({error:'Datos incompletos'});
+  const cfg = db.getConfig();
+  if (!cfg.objetivos_mensuales) cfg.objetivos_mensuales = {};
+  cfg.objetivos_mensuales[mes_key] = parseFloat(monto) || 0;
+  db.setConfig(cfg);
+  res.json({ok:true, mes_key, monto: cfg.objetivos_mensuales[mes_key]});
+});
+
+module.exports = router;
