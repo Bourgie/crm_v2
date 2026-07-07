@@ -2,50 +2,58 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
 const { authMiddleware, requireRol, getSecret } = require('../middleware/auth');
+const { validate, loginSchema, createUserSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema } = require('../middleware/validate');
 
-// ── Login lockout (in-memory) ──
+// ── Login lockout (persistente en SQLite) ──
 const MAX_ATTEMPTS = 3;
 const LOCKOUT_MINUTES = 15;
-const loginAttempts = new Map(); // key: `${empresa}:${usuario}` → { count, lastAttempt, lockedUntil }
+const ACCESS_TOKEN_EXPIRY = '24h';
+const REFRESH_TOKEN_EXPIRY = 7 * 24 * 60 * 60 * 1000;
+const { getIp } = require('../lib/suspicious-activity');
+const suspicious = require('../lib/suspicious-activity');
+
+function getLoginDB(req) {
+  return _getDB(req);
+}
 
 function getLoginKey(empresa, usuario) {
   return `${empresa}:${usuario.toLowerCase().trim()}`;
 }
 
-function checkLocked(empresa, usuario) {
-  const key = getLoginKey(empresa, usuario);
-  const entry = loginAttempts.get(key);
-  if (!entry) return false;
-  if (entry.lockedUntil && new Date(entry.lockedUntil) > new Date()) return true;
-  if (entry.lockedUntil && new Date(entry.lockedUntil) <= new Date()) {
-    loginAttempts.delete(key);
-    return false;
-  }
+function checkLocked(db, key) {
+  const row = db.raw.prepare("SELECT locked_until FROM login_attempts WHERE key=?").get(key);
+  if (!row || !row.locked_until) return false;
+  if (new Date(row.locked_until) > new Date()) return true;
+  db.raw.prepare("DELETE FROM login_attempts WHERE key=?").run(key);
   return false;
 }
 
-function recordFailedAttempt(empresa, usuario) {
-  const key = getLoginKey(empresa, usuario);
+function recordFailedAttempt(db, key) {
   const now = new Date();
-  const entry = loginAttempts.get(key) || { count: 0, lastAttempt: now, lockedUntil: null };
-  entry.count += 1;
-  entry.lastAttempt = now;
-  if (entry.count >= MAX_ATTEMPTS) {
-    entry.lockedUntil = new Date(now.getTime() + LOCKOUT_MINUTES * 60000);
+  const row = db.raw.prepare("SELECT count, locked_until FROM login_attempts WHERE key=?").get(key);
+  let count = row ? row.count + 1 : 1;
+  let lockedUntil = null;
+  if (count >= MAX_ATTEMPTS) {
+    lockedUntil = new Date(now.getTime() + LOCKOUT_MINUTES * 60000).toISOString();
   }
-  loginAttempts.set(key, entry);
-  return MAX_ATTEMPTS - entry.count; // remaining attempts
+  if (row) {
+    db.raw.prepare("UPDATE login_attempts SET count=?, last_attempt=?, locked_until=? WHERE key=?")
+      .run(count, now.toISOString(), lockedUntil, key);
+  } else {
+    db.raw.prepare("INSERT INTO login_attempts(key,count,last_attempt,locked_until) VALUES(?,?,?,?)")
+      .run(key, count, now.toISOString(), lockedUntil);
+  }
+  return MAX_ATTEMPTS - count;
 }
 
-function resetAttempts(empresa, usuario) {
-  const key = getLoginKey(empresa, usuario);
-  loginAttempts.delete(key);
+function resetAttempts(db, key) {
+  db.raw.prepare("DELETE FROM login_attempts WHERE key=?").run(key);
 }
 
-// Busca el vendedor asociado a un usuario — lógica centralizada aquí
 function findVendedorForUser(user, userDB) {
   if (!user.roles) user.roles = [user.rol];
   const vends = userDB.all('vendedores');
@@ -57,7 +65,7 @@ function findVendedorForUser(user, userDB) {
   return v || null;
 }
 
-function buildLoginResponse(user, token, empresaDB) {
+function buildLoginResponse(user, token, refreshToken, empresaDB) {
   const userDB = empresaDB || db;
   const { password: _, ...userData } = user;
   if (!userData.roles) userData.roles = [userData.rol];
@@ -69,31 +77,55 @@ function buildLoginResponse(user, token, empresaDB) {
   const vendedor = findVendedorForUser(user, userDB);
   userData.vendedor_id = vendedor?.id || null;
   userData.vendedor_nombre = vendedor ? (vendedor.nombre + ' ' + vendedor.apellido) : userData.nombre;
-  return { token, user: userData, sucursal: suc, vendedor };
+  return { token, refreshToken, user: userData, sucursal: suc, vendedor };
+}
+
+function generateTokens(user, empresa) {
+  const accessToken = jwt.sign(
+    { id: user.id, rol: user.rol, empresa: empresa },
+    getSecret(),
+    { expiresIn: ACCESS_TOKEN_EXPIRY }
+  );
+  const refreshToken = crypto.randomBytes(40).toString('hex');
+  return { accessToken, refreshToken };
+}
+
+function setRefreshCookie(res, token) {
+  res.cookie('refresh-token', token, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/api/auth',
+    maxAge: REFRESH_TOKEN_EXPIRY,
+  });
 }
 
 // POST /api/auth/login
-router.post('/login', async (req, res) => {
-  const { usuario, password, empresa = 'default' } = req.body;
-  if (!usuario || !password) return res.status(400).json({ error: 'Usuario y contraseña requeridos' });
-  // Check lockout
-  if (checkLocked(empresa, usuario)) {
+router.post('/login', validate(loginSchema), async (req, res) => {
+  const { usuario, password, empresa } = req.body;
+  const { getEmpresaDB } = require('../db_sqlite');
+  const userDB = getEmpresaDB(empresa);
+  const lockKey = getLoginKey(empresa, usuario);
+
+  if (checkLocked(userDB, lockKey)) {
+    userDB.audit(null, null, 'auth', 'login_locked', 'Cuenta bloqueada por múltiples intentos fallidos', null, suspicious.buildExtra(req, { empresa, usuario, lockKey }))
     return res.status(429).json({
       error: `Demasiados intentos. Esperá ${LOCKOUT_MINUTES} minutos antes de intentar de nuevo.`,
       locked: true, locked_minutes: LOCKOUT_MINUTES
     });
   }
-  // Use empresa-specific DB at login time (no token yet)
-  const { getEmpresaDB } = require('../db_sqlite');
-  const db = getEmpresaDB(empresa);
-  const user = db.where('usuarios', u => (u.usuario === usuario || u.email === usuario) && u.activo)[0];
+
+  const user = userDB.where('usuarios', u => (u.usuario === usuario || u.email === usuario) && u.activo)[0];
   if (!user) {
-    recordFailedAttempt(empresa, usuario);
+    const cnt = recordFailedAttempt(userDB, lockKey);
+    suspicious.auditLoginFailed(req, userDB, empresa, usuario, MAX_ATTEMPTS - cnt + 1)
     return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
   }
+
   const ok = await bcrypt.compare(password, user.password);
   if (!ok) {
-    const remaining = recordFailedAttempt(empresa, usuario);
+    const remaining = recordFailedAttempt(userDB, lockKey);
+    suspicious.auditLoginFailed(req, userDB, empresa, usuario, MAX_ATTEMPTS - remaining + 1)
     if (remaining <= 0) {
       return res.status(429).json({
         error: `Demasiados intentos. Esperá ${LOCKOUT_MINUTES} minutos antes de intentar de nuevo.`,
@@ -102,77 +134,230 @@ router.post('/login', async (req, res) => {
     }
     return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
   }
-  // Successful login — reset attempts
-  resetAttempts(empresa, usuario);
-  // Auto-create default sucursal if empresa has none
+
+  resetAttempts(userDB, lockKey);
+  suspicious.auditLoginSuccess(req, userDB, user)
+
+  if (user.must_change_password) {
+    const tempToken = jwt.sign(
+      { id: user.id, purpose: 'change_password', empresa },
+      getSecret(),
+      { expiresIn: '15m' }
+    );
+    return res.json({ require_password_change: true, temp_token: tempToken, user: { nombre: user.nombre, email: user.email || '' } });
+  }
+
   try {
-    const allSucsRaw = db.find('sucursales', {});
+    const allSucsRaw = userDB.find('sucursales', {});
     const sucsActivas = allSucsRaw.filter(function(s){ return s.activo !== false && s.activo !== 0; });
-    console.log('[Auth] empresa:', empresa, '| sucs total:', allSucsRaw.length, '| activas:', sucsActivas.length);
-    if(sucsActivas.length === 0) {
-      const { uid } = require('../db_sqlite');
-      const cfgNombre = db.getConfig('nombre') || empresa;
+    if (sucsActivas.length === 0) {
+      const cfgNombre = userDB.getConfig('nombre') || empresa;
       const newId = uid();
-      db.insert('sucursales', { id: newId, nombre: cfgNombre, dir: '', activo: true, creado: new Date().toISOString() });
-      console.log('[Auth] SUCURSAL AUTO-CREADA id:', newId, 'empresa:', empresa);
+      userDB.insert('sucursales', { id: newId, nombre: cfgNombre, dir: '', activo: true, creado: new Date().toISOString() });
     }
-  } catch(e) { console.error('[Auth] Sucursal auto-create error:', e.message, e.stack); }
-  const token = jwt.sign({ id: user.id, rol: user.rol, empresa: empresa }, getSecret(), { expiresIn: '7d' });
-  res.json(buildLoginResponse(user, token, db));
+  } catch(e) { /* non-blocking */ }
+
+  // Check if user has 2FA enabled
+  const twofaRow = userDB.raw.prepare("SELECT enabled FROM user_2fa WHERE user_id=? AND enabled=1").get(user.id);
+  if (twofaRow) {
+    const tempToken = jwt.sign(
+      { id: user.id, purpose: '2fa', empresa },
+      getSecret(),
+      { expiresIn: '5m' }
+    );
+    return res.json({ require_2fa: true, temp_token: tempToken, user: { nombre: user.nombre, email: user.email || '' } });
+  }
+
+  const { accessToken, refreshToken } = generateTokens(user, empresa);
+
+  // Store refresh token hash in DB
+  const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  userDB.insert('password_reset_tokens', {
+    id: 'rt_' + uid(),
+    usuario_id: user.id,
+    email: user.email || '',
+    token: refreshHash,
+    expires: new Date(Date.now() + REFRESH_TOKEN_EXPIRY).toISOString(),
+    usado: 0,
+    creado: new Date().toISOString(),
+  });
+
+  setRefreshCookie(res, refreshToken);
+  res.json(buildLoginResponse(user, accessToken, refreshToken, userDB));
+});
+
+// POST /api/auth/refresh
+router.post('/refresh', (req, res) => {
+  const refreshToken = req.cookies && req.cookies['refresh-token'];
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'Refresh token faltante' });
+  }
+
+  const empresa = req.body.empresa || 'default';
+  const { getEmpresaDB } = require('../db_sqlite');
+  const userDB = getEmpresaDB(empresa);
+  const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+
+  const stored = userDB.where('password_reset_tokens', t =>
+    t.token === hash && t.usado === 0 && new Date(t.expires) > new Date()
+  )[0];
+
+  if (!stored) {
+    res.clearCookie('refresh-token', { path: '/api/auth' });
+    return res.status(401).json({ error: 'Refresh token inválido o expirado' });
+  }
+
+  const user = userDB.findOne('usuarios', stored.usuario_id);
+  if (!user || !user.activo) {
+    res.clearCookie('refresh-token', { path: '/api/auth' });
+    return res.status(401).json({ error: 'Usuario no válido' });
+  }
+
+  // Mark old refresh as used
+  userDB.update('password_reset_tokens', stored.id, { usado: 1 });
+
+  // Issue new tokens
+  const { accessToken, refreshToken: newRefresh } = generateTokens(user, empresa);
+  const newHash = crypto.createHash('sha256').update(newRefresh).digest('hex');
+  userDB.insert('password_reset_tokens', {
+    id: 'rt_' + uid(),
+    usuario_id: user.id,
+    email: user.email || '',
+    token: newHash,
+    expires: new Date(Date.now() + REFRESH_TOKEN_EXPIRY).toISOString(),
+    usado: 0,
+    creado: new Date().toISOString(),
+  });
+
+  setRefreshCookie(res, newRefresh);
+  res.json(buildLoginResponse(user, accessToken, newRefresh, userDB));
+});
+
+// POST /api/auth/logout
+router.post('/logout', (req, res) => {
+  const refreshToken = req.cookies && req.cookies['refresh-token'];
+  if (refreshToken) {
+    const empresa = req.body.empresa || 'default';
+    const { getEmpresaDB } = require('../db_sqlite');
+    const userDB = getEmpresaDB(empresa);
+    const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    try {
+      const stored = userDB.where('password_reset_tokens', t => t.token === hash)[0];
+      if (stored) userDB.update('password_reset_tokens', stored.id, { usado: 1 });
+    } catch(e) { /* non-blocking */ }
+  }
+  res.clearCookie('refresh-token', { path: '/api/auth' });
+  res.json({ ok: true });
 });
 
 // GET /api/auth/me
 router.get('/me', authMiddleware, (req, res) => {
   const userDB = _getDB(req);
-  const token = jwt.sign({ id: req.user.id, rol: req.user.rol, empresa: req.user.empresa }, getSecret(), { expiresIn: '7d' });
-  res.json(buildLoginResponse(req.user, token, userDB));
+  const token = jwt.sign(
+    { id: req.user.id, rol: req.user.rol, empresa: req.user.empresa },
+    getSecret(),
+    { expiresIn: ACCESS_TOKEN_EXPIRY }
+  );
+  res.json(buildLoginResponse(req.user, token, null, userDB));
 });
 
 // POST /api/auth/cambiar-password
-router.post('/cambiar-password', authMiddleware, async (req, res) => {
+router.post('/cambiar-password', authMiddleware, validate(changePasswordSchema), async (req, res) => {
   const db = _getDB(req);
   const { password_actual, password_nuevo } = req.body;
-  if (!password_actual || !password_nuevo) return res.status(400).json({ error: 'Campos requeridos' });
-  if (password_nuevo.length < 6) return res.status(400).json({ error: 'Mínimo 6 caracteres' });
   const ok = await bcrypt.compare(password_actual, req.user.password);
   if (!ok) return res.status(400).json({ error: 'Contraseña actual incorrecta' });
+
+  // Check password history (last 5)
+  const recentPasswords = db.raw.prepare(
+    "SELECT password_hash FROM password_history WHERE user_id=? ORDER BY created_at DESC LIMIT 5"
+  ).all(req.user.id).map(r => r.password_hash);
+  for (const oldHash of recentPasswords) {
+    if (await bcrypt.compare(password_nuevo, oldHash)) {
+      return res.status(400).json({ error: 'No podés usar una contraseña reciente. Elegí una que no hayas usado antes.' });
+    }
+  }
+
+  // Save old password to history before updating
+  db.insert('password_history', {
+    id: 'ph_' + uid(),
+    user_id: req.user.id,
+    password_hash: req.user.password,
+    created_at: new Date().toISOString(),
+  });
+
   const hash = await bcrypt.hash(password_nuevo, 10);
-  db.update('usuarios', req.user.id, { password: hash });
+  db.update('usuarios', req.user.id, { password: hash, must_change_password: 0 });
+
+  // Invalidate all refresh tokens for this user
+  db.raw.prepare("UPDATE password_reset_tokens SET usado=1 WHERE usuario_id=? AND id LIKE 'rt_%'").run(req.user.id);
+
+  suspicious.auditPasswordReset(req, db, req.user)
   res.json({ ok: true });
 });
 
 // GET /api/auth/usuarios
 router.get('/usuarios', authMiddleware, requireRol('admin','supervisor'), (req, res) => {
   const db = _getDB(req);
-  res.json(db.find('usuarios', { activo: true }).map(u => { const {password,...r}=u; return r; }));
+  const empleados = db.all('empleados');
+  return res.json(db.find('usuarios', { activo: true }).map(u => {
+    const {password,...r}=u;
+    const emp = empleados.find(e => e.usuario_id === u.id);
+    if (emp) r.empleado_id = emp.id;
+    return r;
+  }));
 });
 
 // POST /api/auth/usuarios
-router.post('/usuarios', authMiddleware, requireRol('admin'), async (req, res) => {
+router.post('/usuarios', authMiddleware, requireRol('admin'), validate(createUserSchema), async (req, res) => {
   const db = _getDB(req);
   const { nombre, usuario, email, password, rol, suc_id } = req.body;
   const suc_sesiones_permitidas = req.body.suc_sesiones_permitidas;
   if (!nombre || !usuario || !password) return res.status(400).json({ error: 'Nombre, usuario y contraseña requeridos' });
   const existe = db.where('usuarios', u => u.usuario === usuario)[0];
   if (existe) return res.status(400).json({ error: 'El usuario ya existe' });
-  // Check plan limit
   try {
     const { getEmpresa } = require('../db_master');
     const empresa = getEmpresa(req.user.empresa || 'default');
-    if(empresa && empresa.usuarios_max) {
+    if (empresa && empresa.usuarios_max) {
       const total = db.where('usuarios', u => u.activo !== false && u.activo != 0).length;
-      if(total >= empresa.usuarios_max) {
+      if (total >= empresa.usuarios_max) {
         return res.status(403).json({
           error: `Tu plan permite hasta ${empresa.usuarios_max} usuario(s). Ya tenés ${total}. Mejorá tu plan para agregar más.`,
           limite_plan: true
         });
       }
     }
-  } catch(e) { /* allow creation if master db check fails */ }
+  } catch(e) { }
   const hash = await bcrypt.hash(password, 10);
   const roles = req.body.roles;
-  const r = db.insert('usuarios', { id:'u'+uid(), nombre, usuario, email:email||'', password:hash, rol:rol||'vendedor', roles: Array.isArray(roles)&&roles.length?roles:[rol||'vendedor'], suc_id:suc_id||null, suc_sesiones_permitidas:Array.isArray(suc_sesiones_permitidas)?suc_sesiones_permitidas:(suc_id?[suc_id]:[]), activo:true, creado:new Date().toISOString() });
-  const {password:_,...safe}=r;
+  const userId = 'u' + uid();
+  const r = db.insert('usuarios', {
+    id: userId, nombre, usuario, email: email || '', password: hash,
+    rol: rol || 'vendedor',
+    roles: Array.isArray(roles) && roles.length ? roles : [rol || 'vendedor'],
+    suc_id: suc_id || null,
+    suc_sesiones_permitidas: Array.isArray(suc_sesiones_permitidas) ? suc_sesiones_permitidas : (suc_id ? [suc_id] : []),
+    activo: true, creado: new Date().toISOString()
+  });
+  // Optionally create empleado
+  if (req.body.crear_empleado) {
+    const empId = uid();
+    db.insert('empleados', {
+      id: empId, nombre: nombre, apellido: req.body.emp_apellido || null,
+      dni: req.body.emp_dni || null, cuil: req.body.emp_cuil || null,
+      tel: req.body.emp_tel || null, email: email || null,
+      direccion: req.body.emp_direccion || null,
+      fecha_ingreso: req.body.emp_fecha_ingreso || null,
+      puesto: req.body.emp_puesto || null,
+      salario: parseFloat(req.body.emp_salario) || 0,
+      obra_social: req.body.emp_obra_social || null,
+      suc_id: suc_id || null, activo: 1, notas: null,
+      usuario_id: userId, creado: new Date().toISOString(),
+    });
+    db.audit(req.user, suc_id, 'rrhh', 'crear_empleado', `Empleado creado desde usuario ${nombre}`, empId);
+  }
+  const { password: _, ...safe } = r;
   res.json(safe);
 });
 
@@ -182,13 +367,36 @@ router.put('/usuarios/:id', authMiddleware, requireRol('admin'), async (req, res
   const { nombre, email, rol, suc_id, password } = req.body;
   const roles = req.body.roles;
   const suc_sesiones_permitidas = req.body.suc_sesiones_permitidas;
-  const upd = { nombre, email, rol, suc_id: suc_id||null };
+  const upd = { nombre, email, rol, suc_id: suc_id || null };
   if (Array.isArray(roles) && roles.length) upd.roles = roles;
   if (Array.isArray(suc_sesiones_permitidas)) upd.suc_sesiones_permitidas = suc_sesiones_permitidas;
-  if (password && password.length >= 6) upd.password = await bcrypt.hash(password, 10);
+  if (password && password.length >= 8) {
+    // Check password history (last 5)
+    const recentPasswords = db.raw.prepare(
+      "SELECT password_hash FROM password_history WHERE user_id=? ORDER BY created_at DESC LIMIT 5"
+    ).all(req.params.id).map(r => r.password_hash);
+    for (const oldHash of recentPasswords) {
+      if (await bcrypt.compare(password, oldHash)) {
+        return res.status(400).json({ error: 'No podés usar una contraseña reciente. Elegí una que no hayas usado antes.' });
+      }
+    }
+    const targetUser = db.findOne('usuarios', req.params.id);
+    if (targetUser && targetUser.password) {
+      db.insert('password_history', {
+        id: 'ph_' + uid(),
+        user_id: req.params.id,
+        password_hash: targetUser.password,
+        created_at: new Date().toISOString(),
+      });
+    }
+    upd.password = await bcrypt.hash(password, 10);
+    upd.must_change_password = 0;
+    // Invalidate all refresh tokens for this user
+    db.raw.prepare("UPDATE password_reset_tokens SET usado=1 WHERE usuario_id=? AND id LIKE 'rt_%'").run(req.params.id);
+  }
   const r = db.update('usuarios', req.params.id, upd);
   if (!r) return res.status(404).json({ error: 'No encontrado' });
-  const {password:_,...safe}=r;
+  const { password: _, ...safe } = r;
   res.json(safe);
 });
 
@@ -200,24 +408,32 @@ router.delete('/usuarios/:id', authMiddleware, requireRol('admin'), (req, res) =
   res.json({ ok: true });
 });
 
-// ── Forgot Password ────────────────────────────────────────────
-router.post('/forgot-password', async (req, res) => {
-  const { usuario, empresa = 'default' } = req.body;
-  if (!usuario) return res.status(400).json({ error: 'Ingresá tu usuario o email' });
-  const { getEmpresaDB, uid } = require('../db_sqlite');
-  const db = getEmpresaDB(empresa);
-  const user = db.where('usuarios', u => (u.usuario === usuario || u.email === usuario) && u.activo)[0];
-  // Always return ok — don't reveal if user exists
-  if (!user) return res.json({ ok: true, mensaje: 'Si el usuario existe, recibirás un email con instrucciones' });
-  const email = user.email;
-  if (!email) return res.json({ ok: true, mensaje: 'Si el usuario existe, recibirás un email con instrucciones' });
-  const token = require('crypto').randomBytes(32).toString('hex');
-  const expires = new Date(Date.now() + 3600000).toISOString(); // 1 hour
-  db.insert('password_reset_tokens', {
-    id: uid(), usuario_id: user.id, email, token,
-    expires, usado: 0, creado: new Date().toISOString()
-  });
-  // Send email via nodemailer
+// POST /api/auth/usuarios/:id/reset-password — admin resets a user's password
+router.post('/usuarios/:id/reset-password', authMiddleware, requireRol('admin'), async (req, res) => {
+  const db = _getDB(req);
+  const user = db.findOne('usuarios', req.params.id);
+  if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+  if (!user.activo) return res.status(400).json({ error: 'Usuario inactivo' });
+
+  const tempPassword = Math.random().toString(36).substr(2, 8) + 'A1!';
+
+  // Save old password to history
+  if (user.password) {
+    db.insert('password_history', {
+      id: 'ph_' + uid(),
+      user_id: user.id,
+      password_hash: user.password,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  const hash = await bcrypt.hash(tempPassword, 10);
+  db.update('usuarios', req.params.id, { password: hash, debe_cambiar_password: 1 });
+
+  // Invalidate all refresh tokens
+  db.raw.prepare("UPDATE password_reset_tokens SET usado=1 WHERE usuario_id=? AND id LIKE 'rt_%'").run(req.params.id);
+
+  // Try to send email with temp password
   try {
     const cfg = db.getConfig();
     const host = cfg.smtp_host;
@@ -225,23 +441,108 @@ router.post('/forgot-password', async (req, res) => {
     const smtpUser = cfg.smtp_user;
     const smtpPass = cfg.smtp_pass;
     const from = cfg.smtp_from || 'noreply@flexcrm.com';
+    if (host && smtpUser && smtpPass && user.email) {
+      const loginLink = `${req.protocol}://${req.get('host')}/app/login?e=${req.user.empresa || 'default'}`;
+      const html = `<div style="font-family:sans-serif;padding:24px;max-width:480px;margin:0 auto">
+        <h2 style="color:#F97316">Contraseña restablecida</h2>
+        <p>El administrador restableció tu contraseña.</p>
+        <p style="background:#f4f4f5;padding:12px;border-radius:8px;font-family:monospace;font-size:16px;text-align:center">
+          <strong>${tempPassword}</strong>
+        </p>
+        <p>Usá esta contraseña para iniciar sesión. El sistema te pedirá que la cambies al ingresar.</p>
+        <a href="${loginLink}" style="display:inline-block;padding:10px 24px;background:#F97316;color:#fff;text-decoration:none;border-radius:8px;margin-top:12px">Ir al inicio de sesión</a>
+      </div>`;
+      await sendEmail(host, port, smtpUser, smtpPass, from, user.email, 'Tu contraseña fue restablecida', html);
+    }
+  } catch (e) { /* non-blocking */ }
+
+  res.json({ ok: true, mensaje: 'Contrasea restablecida. El usuario debe cambiarla al ingresar.' + (user.email ? ' Se envio por email.' : '') });
+});
+
+function buildResetEmailHtml(resetLink, empresaNombre) {
+  const nombre = empresaNombre || 'FlexCRM';
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 16px">
+<table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+<tr><td style="padding:32px 32px 24px;text-align:center;border-bottom:1px solid #e4e4e7">
+<div style="font-size:22px;font-weight:800;color:#18181b">${nombre}</div>
+<div style="font-size:13px;color:#71717a;margin-top:4px">Restablecer contraseña</div>
+</td></tr>
+<tr><td style="padding:24px 32px">
+<p style="font-size:14px;color:#3f3f46;line-height:1.6;margin:0 0 16px">Recibimos una solicitud para restablecer la contraseña de tu cuenta.</p>
+<p style="font-size:14px;color:#3f3f46;line-height:1.6;margin:0 0 20px">Hacé clic en el botón de abajo para crear una nueva contraseña. Este enlace es válido por <strong>1 hora</strong>.</p>
+<table cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:0 0 24px">
+<a href="${resetLink}" style="display:inline-block;padding:12px 32px;background:#F97316;color:#fff;font-size:15px;font-weight:700;text-decoration:none;border-radius:8px">Restablecer contraseña</a>
+</td></tr></table>
+<p style="font-size:13px;color:#71717a;line-height:1.5;margin:0">Si no solicitaste este cambio, podés ignorar este mensaje. Tu contraseña actual sigue siendo segura.</p>
+</td></tr>
+<tr><td style="padding:16px 32px;text-align:center;border-top:1px solid #e4e4e7;font-size:11px;color:#a1a1aa">
+${nombre} — Sistema de gestión
+</td></tr>
+</table>
+</td></tr></table></body></html>`;
+}
+
+function buildResetConfirmedHtml(loginLink) {
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 16px">
+<table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.08)">
+<tr><td style="padding:32px 32px 24px;text-align:center;border-bottom:1px solid #e4e4e7">
+<div style="font-size:22px;font-weight:800;color:#18181b">FlexCRM</div>
+</td></tr>
+<tr><td style="padding:24px 32px;text-align:center">
+<div style="font-size:48px;margin-bottom:12px">✅</div>
+<p style="font-size:15px;color:#3f3f46;font-weight:600;margin:0 0 8px">Contraseña actualizada</p>
+<p style="font-size:13px;color:#71717a;line-height:1.5;margin:0 0 20px">Tu contraseña se actualizó correctamente. Ya podés iniciar sesión con tu nueva contraseña.</p>
+<table cellpadding="0" cellspacing="0"><tr><td align="center">
+<a href="${loginLink}" style="display:inline-block;padding:12px 32px;background:#F97316;color:#fff;font-size:15px;font-weight:700;text-decoration:none;border-radius:8px">Ir al inicio de sesión</a>
+</td></tr></table>
+</td></tr></table>
+</td></tr></table></body></html>`;
+}
+
+async function sendEmail(host, port, smtpUser, smtpPass, from, to, subject, html) {
+  let nodemailer;
+  try { nodemailer = require('nodemailer'); } catch (e) { throw new Error('nodemailer not installed'); }
+  const transporter = nodemailer.createTransport({
+    host, port, secure: port === 465,
+    auth: { user: smtpUser, pass: smtpPass },
+  });
+  await transporter.sendMail({ from, to, subject, html });
+}
+
+// ── Forgot Password ──
+router.post('/forgot-password', validate(forgotPasswordSchema), async (req, res) => {
+  const { usuario, empresa } = req.body;
+  const { getEmpresaDB, uid } = require('../db_sqlite');
+  const userDB = getEmpresaDB(empresa);
+  suspicious.auditForgotPassword(req, userDB, empresa, usuario)
+  const user = userDB.where('usuarios', u => (u.usuario === usuario || u.email === usuario) && u.activo)[0];
+  if (!user || !user.email) {
+    return res.json({ ok: true, mensaje: 'Si el usuario existe, recibirás un email con instrucciones' });
+  }
+  const email = user.email;
+  const token = crypto.randomBytes(32).toString('hex');
+  const expires = new Date(Date.now() + 3600000).toISOString();
+  userDB.insert('password_reset_tokens', {
+    id: uid(), usuario_id: user.id, email,
+    token, expires, usado: 0, creado: new Date().toISOString()
+  });
+  try {
+    const cfg = userDB.getConfig();
+    const host = cfg.smtp_host;
+    const port = parseInt(cfg.smtp_port) || 465;
+    const smtpUser = cfg.smtp_user;
+    const smtpPass = cfg.smtp_pass;
+    const from = cfg.smtp_from || 'noreply@flexcrm.com';
     if (!host || !smtpUser || !smtpPass) {
-      console.log('[PasswordReset] SMTP no configurado — token:', token, 'para', email);
+      console.log('[PasswordReset] SMTP no configurado para empresa:', empresa);
       return res.json({ ok: true, mensaje: 'Si el usuario existe, recibirás un email con instrucciones' });
     }
-    let nodemailer;
-    try { nodemailer = require('nodemailer'); }
-    catch (e) { throw new Error('nodemailer not installed'); }
-    const transporter = nodemailer.createTransport({
-      host, port, secure: port === 465,
-      auth: { user: smtpUser, pass: smtpPass },
-    });
     const resetLink = `${req.protocol}://${req.get('host')}/app/reset-password?token=${token}&empresa=${empresa}`;
-    await transporter.sendMail({
-      from, to: email,
-      subject: 'Restablecer contraseña — FlexCRM',
-      html: `<p>Hacé clic para restablecer tu contraseña:</p><p><a href="${resetLink}">${resetLink}</a></p><p>Válido por 1 hora.</p>`
-    });
+    const empresaNombre = cfg.nombre || 'FlexCRM';
+    const html = buildResetEmailHtml(resetLink, empresaNombre);
+    await sendEmail(host, port, smtpUser, smtpPass, from, email, `Restablecer contraseña — ${empresaNombre}`, html);
     res.json({ ok: true, mensaje: 'Si el usuario existe, recibirás un email con instrucciones' });
   } catch (e) {
     console.error('[PasswordReset] Email error:', e.message);
@@ -249,21 +550,63 @@ router.post('/forgot-password', async (req, res) => {
   }
 });
 
-// ── Reset Password ─────────────────────────────────────────────
-router.post('/reset-password', async (req, res) => {
-  const { token, password, empresa = 'default' } = req.body;
-  if (!token || !password) return res.status(400).json({ error: 'Token y contraseña requeridos' });
-  if (password.length < 6) return res.status(400).json({ error: 'Mínimo 6 caracteres' });
+// ── Reset Password ──
+router.post('/reset-password', validate(resetPasswordSchema), async (req, res) => {
+  const { token, password, empresa } = req.body;
   const { getEmpresaDB } = require('../db_sqlite');
-  const db = getEmpresaDB(empresa);
-  const rt = db.where('password_reset_tokens', t => t.token === token && t.usado === 0)[0];
+  const userDB = getEmpresaDB(empresa);
+  const rt = userDB.where('password_reset_tokens', t => t.token === token && t.usado === 0)[0];
   if (!rt) return res.status(400).json({ error: 'Token inválido o ya usado' });
   if (new Date(rt.expires) < new Date()) return res.status(400).json({ error: 'Token expirado. Solicitá uno nuevo.' });
-  const hash = await require('bcryptjs').hash(password, 10);
-  db.update('usuarios', rt.usuario_id, { password: hash });
-  db.update('password_reset_tokens', rt.id, { usado: 1 });
-  // Log the user out globally by changing their password version? For simplicity, just succeed.
+
+  // Check password history (last 5)
+  const recentPasswords = userDB.raw.prepare(
+    "SELECT password_hash FROM password_history WHERE user_id=? ORDER BY created_at DESC LIMIT 5"
+  ).all(rt.usuario_id).map(r => r.password_hash);
+  for (const oldHash of recentPasswords) {
+    if (await bcrypt.compare(password, oldHash)) {
+      return res.status(400).json({ error: 'No podés usar una contraseña reciente. Elegí una que no hayas usado antes.' });
+    }
+  }
+
+  // Get old password for history before updating
+  const oldUser = userDB.findOne('usuarios', rt.usuario_id);
+  if (oldUser && oldUser.password) {
+    userDB.insert('password_history', {
+      id: 'ph_' + uid(),
+      user_id: rt.usuario_id,
+      password_hash: oldUser.password,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  const hash = await bcrypt.hash(password, 10);
+  userDB.update('usuarios', rt.usuario_id, { password: hash });
+  userDB.update('password_reset_tokens', rt.id, { usado: 1 });
+
+  // Invalidate all refresh tokens for this user
+  userDB.raw.prepare("UPDATE password_reset_tokens SET usado=1 WHERE usuario_id=? AND id LIKE 'rt_%'").run(rt.usuario_id);
+
+  const resetUser = userDB.findOne('usuarios', rt.usuario_id);
+  if (resetUser) suspicious.auditPasswordReset(req, userDB, resetUser)
+
+  // Send confirmation email
+  try {
+    const cfg = userDB.getConfig();
+    const host = cfg.smtp_host;
+    const smtpUser = cfg.smtp_user;
+    const smtpPass = cfg.smtp_pass;
+    const from = cfg.smtp_from || 'noreply@flexcrm.com';
+    if (host && smtpUser && smtpPass && rt.email) {
+      const loginLink = `${req.protocol}://${req.get('host')}/app/login`;
+      await sendEmail(host, parseInt(cfg.smtp_port) || 465, smtpUser, smtpPass, from, rt.email, 'Contraseña actualizada — FlexCRM', buildResetConfirmedHtml(loginLink));
+    }
+  } catch (e) { /* non-blocking */ }
+
   res.json({ ok: true, mensaje: 'Contraseña actualizada correctamente' });
 });
 
 module.exports = router;
+module.exports.buildLoginResponse = buildLoginResponse;
+module.exports.generateTokens = generateTokens;
+module.exports.setRefreshCookie = setRefreshCookie;

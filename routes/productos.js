@@ -3,6 +3,7 @@ const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
 const { authMiddleware, requireRol } = require('../middleware/auth');
+const { validate, productoSchema } = require('../middleware/validate');
 const { updateSucStock } = require('./stock_helpers');
 router.use(authMiddleware);
 
@@ -29,7 +30,7 @@ router.get('/categorias', (req,res) => {
   const cats = db.find('categorias',{activo:true}).map(c=>c.nombre).sort();
   if (cats.length) return res.json(cats);
   // fallback: extract from products
-  res.json([...new Set(db.find('productos',{activo:true}).map(p=>p.categoria).filter(Boolean))].sort());
+  res.json([...new Set(db.find('productos',{activo:true}).flatMap(p=>p.categoria ? [p.categoria] : []))].sort());
 });
 
 router.get('/categorias/list', (req,res) => {
@@ -67,7 +68,7 @@ router.get('/sin-rotacion', (req,res) => {
     return v&&!v.anulada&&new Date(v.fecha)>=desde;
   }).map(i=>i.prod_id));
   const sucId = req.query.suc_id || req.user?.suc_id || null;
-  res.json(db.find('productos',{activo:true}).filter(p=>!vendidos.has(p.id)).map(r=>db.enrichProduct(r,sucId)));
+  res.json(db.find('productos',{activo:true}).flatMap(p=>vendidos.has(p.id)?[]:[db.enrichProduct(p,sucId)]));
 });
 
 router.get('/ranking-rotacion', (req,res) => {
@@ -112,7 +113,7 @@ router.get('/:id', (req,res) => {
   res.json({...enriched, variantes: variants, movimientos: movs});
 });
 
-router.post('/', requireRol('admin','supervisor'), (req,res) => {
+router.post('/', requireRol('admin','supervisor'), validate(productoSchema), (req,res) => {
   const db = _getDB(req);
   if(!req.body.nombre||!req.body.precio_l1) return res.status(400).json({error:'Nombre y precio L1 obligatorios'});
   const body = req.body;
@@ -128,9 +129,11 @@ router.put('/:id', requireRol('admin','supervisor'), (req,res) => {
   const db = _getDB(req);
   const existing = db.findOne('productos', req.params.id);
   if (!existing) return res.status(404).json({error:'No encontrado'});
-  // Never overwrite stock via PUT — use /ajuste for that
-  const updates = {...req.body};
-  delete updates.stock; delete updates.stock_suc; delete updates.suc_id;
+  const { nombre, sku, codigo_barras, categoria, talle, color, temporada, costo, precio_l1, precio_l2, precio_l3, unidad, stock_min, stock_max, favorito } = req.body;
+  const updates = {};
+  for (const [k, v] of Object.entries({ nombre, sku, codigo_barras, categoria, talle, color, temporada, costo, precio_l1, precio_l2, precio_l3, unidad, stock_min, stock_max, favorito })) {
+    if (v !== undefined) updates[k] = v;
+  }
   const r = db.update('productos', req.params.id, updates);
   r ? res.json({ok:true}) : res.status(404).json({error:'No encontrado'});
 });
@@ -179,7 +182,11 @@ router.put('/:id/variantes/:varId', requireRol('admin','supervisor'), (req,res) 
   const db = _getDB(req);
   const existing = db.findOne('producto_variantes', req.params.varId);
   if (!existing) return res.status(404).json({error:'Variante no encontrada'});
-  const upd = {...req.body};
+  const { talle, color, sku, codigo_barras, precio, costo, stock, activo, atributos } = req.body;
+  const upd = {};
+  for (const [k, v] of Object.entries({ talle, color, sku, codigo_barras, precio, costo, stock, activo, atributos })) {
+    if (v !== undefined) upd[k] = v;
+  }
   if (typeof upd.atributos === 'object') upd.atributos = JSON.stringify(upd.atributos);
   db.update('producto_variantes', req.params.varId, upd);
   res.json({ok:true});

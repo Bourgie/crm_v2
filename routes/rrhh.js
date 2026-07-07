@@ -1,8 +1,18 @@
 const express = require('express');
 const router = express.Router();
+const bcrypt = require('bcryptjs');
 const { uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || require('../db_sqlite').db;
 const { authMiddleware, requireRol } = require('../middleware/auth');
+
+// Helper: enrich empleado list with linked user data
+function enrichEmpleados(db, list) {
+  const users = db.all('usuarios');
+  return list.map(e => {
+    const u = e.usuario_id ? users.find(u => u.id === e.usuario_id) : null;
+    return { ...e, usuario_nombre: u ? u.nombre : null, usuario_email: u ? u.email : null, usuario_rol: u ? u.rol : null, usuario_activo: u ? u.activo : null };
+  });
+}
 
 // ── Empleados ──────────────────────────────────────────────
 router.get('/empleados', authMiddleware, requireRol('admin','supervisor','cajero'), (req, res) => {
@@ -10,7 +20,7 @@ router.get('/empleados', authMiddleware, requireRol('admin','supervisor','cajero
   let list = db.all('empleados').sort((a, b) => (a.nombre||'').localeCompare(b.nombre||''));
   if (req.query.activo !== undefined) list = list.filter(e => e.activo === (req.query.activo === '1' || req.query.activo === 'true'));
   if (req.query.suc_id) list = list.filter(e => e.suc_id === req.query.suc_id);
-  res.json(list);
+  res.json(enrichEmpleados(db, list));
 });
 
 router.get('/empleados/:id', authMiddleware, requireRol('admin','supervisor','cajero'), (req, res) => {
@@ -18,21 +28,25 @@ router.get('/empleados/:id', authMiddleware, requireRol('admin','supervisor','ca
   const e = db.findOne('empleados', req.params.id);
   if (!e) return res.status(404).json({ error: 'Empleado no encontrado' });
   const ausencias = db.where('ausencias', a => a.empleado_id === req.params.id).sort((a, b) => new Date(b.fecha_inicio) - new Date(a.fecha_inicio));
-  res.json({ ...e, ausencias });
+  const historial = db.where('historial_salarios', h => h.empleado_id === req.params.id).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  const enriched = enrichEmpleados(db, [e])[0];
+  res.json({ ...enriched, ausencias, historial_salarios: historial });
 });
 
-router.post('/empleados', authMiddleware, requireRol('admin','supervisor'), (req, res) => {
+router.post('/empleados', authMiddleware, requireRol('admin','supervisor'), async (req, res) => {
   const db = _getDB(req);
   const { nombre, apellido, dni, cuil, tel, email, direccion, fecha_ingreso, puesto, salario, obra_social, suc_id, notas } = req.body;
   if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+  const empleadoId = uid();
   const r = db.insert('empleados', {
-    id: uid(), nombre, apellido: apellido || null, dni: dni || null, cuil: cuil || null,
+    id: empleadoId, nombre, apellido: apellido || null, dni: dni || null, cuil: cuil || null,
     tel: tel || null, email: email || null, direccion: direccion || null,
     fecha_ingreso: fecha_ingreso || null, puesto: puesto || null,
     salario: parseFloat(salario) || 0, obra_social: obra_social || null,
     suc_id: suc_id || null, activo: 1, notas: notas || null,
-    creado: new Date().toISOString(),
+    usuario_id: req.body.vincular_usuario_id || null, creado: new Date().toISOString(),
   });
+  db.audit(req.user, suc_id, 'rrhh', 'crear_empleado', `Empleado creado: ${nombre}`, empleadoId);
   res.json(r);
 });
 
@@ -41,10 +55,26 @@ router.put('/empleados/:id', authMiddleware, requireRol('admin','supervisor'), (
   const existing = db.findOne('empleados', req.params.id);
   if (!existing) return res.status(404).json({ error: 'Empleado no encontrado' });
   const allowed = {};
-  for (const k of ['nombre','apellido','dni','cuil','tel','email','direccion','fecha_ingreso','puesto','salario','obra_social','suc_id','activo','notas']) {
+  for (const k of ['nombre','apellido','dni','cuil','tel','email','direccion','fecha_ingreso','puesto','salario','obra_social','suc_id','activo','notas','usuario_id','vincular_usuario_id']) {
     if (req.body[k] !== undefined) allowed[k] = k === 'activo' ? (req.body[k] ? 1 : 0) : req.body[k];
   }
+  // Map vincular_usuario_id to usuario_id
+  if ('vincular_usuario_id' in allowed) {
+    allowed.usuario_id = allowed.vincular_usuario_id || null;
+    delete allowed.vincular_usuario_id;
+  }
+  const prevSalario = parseFloat(existing.salario) || 0;
+  const newSalario = 'salario' in allowed ? parseFloat(allowed.salario) || 0 : prevSalario;
+  if ('salario' in allowed && newSalario !== prevSalario) {
+    db.insert('historial_salarios', {
+      id: uid(), empleado_id: req.params.id,
+      salario_anterior: prevSalario, salario_nuevo: newSalario,
+      fecha: new Date().toISOString(), motivo: allowed.motivo_salario || null,
+      modificado_por: req.user ? req.user.nombre : null
+    });
+  }
   const r = db.update('empleados', req.params.id, allowed);
+  db.audit(req.user, allowed.suc_id || existing.suc_id, 'rrhh', 'editar_empleado', `Empleado editado: ${r.nombre}`, req.params.id, { cambios: Object.keys(allowed).join(',') });
   res.json(r);
 });
 
@@ -119,6 +149,30 @@ router.get('/reporte', authMiddleware, requireRol('admin','supervisor'), (req, r
     ausencias_por_tipo: porTipo,
     empleados_con_ausencias: [...new Set(ausencias.map(a => a.empleado_id))].length,
   });
+});
+
+// ── Asistencias (control horario) ─────────────────────────
+router.post('/asistencias', authMiddleware, requireRol('admin','supervisor','cajero'), (req, res) => {
+  const db = _getDB(req);
+  const { empleado_id, tipo, suc_id, notas } = req.body;
+  if (!empleado_id) return res.status(400).json({ error: 'Empleado requerido' });
+  const r = db.insert('asistencias', {
+    id: uid(), empleado_id, tipo: tipo || 'entrada',
+    fecha_hora: new Date().toISOString(), suc_id: suc_id || null,
+    notas: notas || null, creado: new Date().toISOString()
+  });
+  res.json(r);
+});
+
+router.get('/asistencias', authMiddleware, requireRol('admin','supervisor','cajero'), (req, res) => {
+  const db = _getDB(req);
+  let list = db.all('asistencias').sort((a, b) => new Date(b.fecha_hora) - new Date(a.fecha_hora));
+  if (req.query.empleado_id) list = list.filter(a => a.empleado_id === req.query.empleado_id);
+  if (req.query.desde) list = list.filter(a => a.fecha_hora >= req.query.desde);
+  if (req.query.hasta) list = list.filter(a => a.fecha_hora <= (req.query.hasta + 'T23:59:59'));
+  const emps = db.all('empleados');
+  list = list.map(a => ({ ...a, emp_nombre: (emps.find(e => e.id === a.empleado_id) || {}).nombre || '—' }));
+  res.json(list);
 });
 
 module.exports = router;

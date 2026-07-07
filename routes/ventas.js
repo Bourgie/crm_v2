@@ -3,8 +3,9 @@ const router = express.Router();
 const { uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || require('../db_sqlite').db;
 const { authMiddleware, requireRol } = require('../middleware/auth');
+const { validate, ventaCreateSchema } = require('../middleware/validate');
 const { dispararWebhooks } = require('./webhooks');
-const { updateSucStock, getStockSuc } = require('./stock_helpers');
+const { updateSucStock, getStockSuc, updateVariantStock } = require('./stock_helpers');
 router.use(authMiddleware);
 
 function enrichVenta(v, db) {
@@ -68,7 +69,7 @@ router.get('/:id', (req,res) => {
   res.json({...enrichVenta(v, db), items:db.where('venta_items',i=>i.venta_id===req.params.id)});
 });
 
-router.post('/', (req,res) => {
+router.post('/', validate(ventaCreateSchema), (req,res) => {
   const db = _getDB(req);
   const {suc_id,vend_id,cliente_id,items,subtotal,descuento,total,pago,comprobante,es_ctacte,recargo_pago,envio_monto,envio_detalle} = req.body;
   if(!suc_id||!items?.length) return res.status(400).json({error:'Datos incompletos'});
@@ -125,11 +126,16 @@ router.post('/', (req,res) => {
   });
 
   items.forEach(it=>{
-    db.insert('venta_items',{id:uid(),venta_id:id,prod_id:it.prod_id,nombre:it.nombre,talle:it.talle||'',precio:parseFloat(it.precio),cantidad:parseInt(it.cantidad),subtotal:parseFloat(it.subtotal),costo:parseFloat(it.costo)||0});
-    const p=db.findOne('productos',it.prod_id);
-    if(p){
-      const sucRes = updateSucStock(db, it.prod_id, suc_id, -parseInt(it.cantidad));
-      if (sucRes) db.insert('stock_movimientos',{id:uid(),prod_id:it.prod_id,nombre_prod:p.nombre,tipo:'salida',cantidad:-parseInt(it.cantidad),stock_antes:sucRes.before,stock_despues:sucRes.after,motivo:'Venta #'+numero,usuario_id:req.user.id,usuario:req.user.nombre,fecha,suc_id});
+    db.insert('venta_items',{id:uid(),venta_id:id,prod_id:it.prod_id,variante_id:it.variante_id||null,nombre:it.nombre,talle:it.talle||'',precio:parseFloat(it.precio),cantidad:parseInt(it.cantidad),subtotal:parseFloat(it.subtotal),costo:parseFloat(it.costo)||0});
+    if(it.variante_id){
+      const vRes = updateVariantStock(db, it.variante_id, suc_id, -parseInt(it.cantidad));
+      if(vRes) db.insert('stock_movimientos',{id:uid(),prod_id:it.prod_id,nombre_prod:it.nombre,tipo:'salida',cantidad:-parseInt(it.cantidad),stock_antes:vRes.before,stock_despues:vRes.after,motivo:'Venta #'+numero+' (variante)',usuario_id:req.user.id,usuario:req.user.nombre,fecha,suc_id});
+    } else {
+      const p=db.findOne('productos',it.prod_id);
+      if(p){
+        const sucRes = updateSucStock(db, it.prod_id, suc_id, -parseInt(it.cantidad));
+        if (sucRes) db.insert('stock_movimientos',{id:uid(),prod_id:it.prod_id,nombre_prod:p.nombre,tipo:'salida',cantidad:-parseInt(it.cantidad),stock_antes:sucRes.before,stock_despues:sucRes.after,motivo:'Venta #'+numero,usuario_id:req.user.id,usuario:req.user.nombre,fecha,suc_id});
+      }
     }
   });
 
@@ -149,21 +155,6 @@ router.post('/', (req,res) => {
           motivo:'Venta #'+numero,
           referencia_id:id, fecha:new Date().toISOString()
         });
-      }
-    }
-  }
-
-  // Fidelización: add puntos on sale (1 punto per $100 by default)
-  if(cliente_id) {
-    const cli = db.findOne('clientes', cliente_id);
-    if(cli) {
-      const cfg = db.getConfig();
-      const puntosXPeso = parseFloat(cfg.puntos_por_peso)||0.01;
-      const puntosGanados = Math.floor(parseFloat(total) * puntosXPeso);
-      if(puntosGanados > 0) {
-        const newPuntos = (cli.puntos||0) + puntosGanados;
-        db.update('clientes', cliente_id, {puntos: newPuntos});
-        db.insert('puntos_movimientos', {id:'pm'+uid(),cliente_id,tipo:'suma',puntos:puntosGanados,motivo:'Venta #'+numero,referencia_id:id,fecha:new Date().toISOString()});
       }
     }
   }
@@ -293,8 +284,6 @@ router.post('/:id/anular', requireRol('admin','supervisor'), (req,res) => {
     c => c.suc_id === cajaSucId && c.fecha.substr(0,10) === hoy && c.estado === 'abierta'
   )[0];
 
-  console.log(`[anular] venta #${venta.numero} cobrada=${estaCobrada} cajaAbierta=${cajaAbierta?.id||'NINGUNA'} cajaSucId=${cajaSucId}`);
-
   // Si la venta fue cobrada, EXIGIR caja abierta para poder devolver dinero
   if (estaCobrada && !venta.es_ctacte && !cajaAbierta) {
     return res.status(400).json({
@@ -319,10 +308,8 @@ router.post('/:id/anular', requireRol('admin','supervisor'), (req,res) => {
     montoDevolucion += it.precio * cantDev;
     const p = db.findOne('productos', it.prod_id);
     if (p) {
-      // Return stock to the original venta's suc
       const devSucId = venta.suc_id || req.user.suc_id;
       const sucRes = updateSucStock(db, it.prod_id, devSucId, cantDev);
-      const ns = sucRes ? sucRes.after : 0;
       if (sucRes) db.insert('stock_movimientos', {
         id: uid(), prod_id: it.prod_id, nombre_prod: p.nombre,
         tipo: 'entrada', cantidad: cantDev,
@@ -333,6 +320,8 @@ router.post('/:id/anular', requireRol('admin','supervisor'), (req,res) => {
       });
     }
   });
+
+  // Registrar egreso en la caja ABIERTA HOY
 
   // Registrar egreso en la caja ABIERTA HOY
   if (estaCobrada && !venta.es_ctacte && cajaAbierta && montoDevolucion > 0) {

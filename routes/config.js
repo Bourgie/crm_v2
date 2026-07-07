@@ -93,6 +93,42 @@ router.post('/plan/solicitar', authMiddleware, requireRol('admin'), (req, res) =
   res.json({ ok: true, mensaje: 'Solicitud registrada. El administrador la procesará en breve.' });
 });
 
+// ── Enviar solicitud de soporte ──
+router.post('/solicitud', authMiddleware, (req, res) => {
+  const db = _getDB(req);
+  const { tipo, asunto, descripcion } = req.body;
+  if (!asunto || !descripcion) return res.status(400).json({ error: 'Asunto y descripción requeridos' });
+  const fecha = new Date().toISOString();
+  // Guardar en master DB para que el superadmin lo vea
+  try {
+    const { masterDb } = require('../db_master');
+    if (masterDb) {
+      masterDb.prepare(`INSERT INTO solicitudes_soporte(id,empresa_id,tipo,asunto,descripcion,fecha,estado,creado_por)
+        VALUES(?,?,?,?,?,?,?,?)`).run(
+        'ss_' + Date.now(), req.user.empresa, tipo || 'soporte', asunto, descripcion, fecha, 'pendiente', req.user.nombre
+      );
+    }
+  } catch(e) { /* non-fatal */ }
+  db.audit(req.user, null, 'config', 'solicitud_soporte', `Solicitud: ${asunto}`);
+  res.json({ ok: true, mensaje: 'Solicitud enviada. El administrador la revisará en breve.' });
+});
+
+// ── Probar conexión SMTP ──
+router.post('/email-test', authMiddleware, (req, res) => {
+  const { host, port, user, pass, from } = req.body;
+  if (!host || !user) return res.status(400).json({ error: 'SMTP host y usuario requeridos' });
+  const emailTo = req.user.email || user;
+  try {
+    const { sendEmail } = require('../lib/send-email');
+    const smtpPass = pass || _getDB(req).getConfig().smtp_pass || '';
+    sendEmail(host, parseInt(port) || 465, user, smtpPass, from || user,
+      emailTo, 'Test de conexión — FlexCRM',
+      `<div style="font-family:sans-serif;padding:20px"><h2>✅ ¡Funciona!</h2><p>Tu configuración SMTP es correcta. Ya podés usar el envío de mails desde FlexCRM.</p><p style="color:#64748b;font-size:12px">Enviado: ${new Date().toLocaleString('es-AR')}</p></div>`
+    ).then(() => res.json({ ok: true, message: 'Mail de prueba enviado ✅' }))
+      .catch(e => res.status(500).json({ error: 'Error SMTP: ' + e.message }));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/', authMiddleware, (req, res) => {
   const db = _getDB(req);
   const cfg = { ...db.getConfig() };
@@ -102,8 +138,7 @@ router.get('/', authMiddleware, (req, res) => {
 
 router.put('/', authMiddleware, requireRol('admin'), (req, res) => {
   const db = _getDB(req);
-  const safe = { ...req.body };
-  delete safe.jwt_secret;
+  const { jwt_secret, ...safe } = req.body;
 
   // Handle objetivo_mes / objetivo_suc → persist into objetivos_mensuales map
   if (safe.objetivo_mes !== undefined && safe.objetivo_mes !== '') {

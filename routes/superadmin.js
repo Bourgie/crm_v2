@@ -3,15 +3,37 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
 const { master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa,
-        getPlanes, getPlan, getModulos, saAudit } = require('../db_master');
+        getPlanes, getPlan, getModulos, saAudit,
+        getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats } = require('../db_master');
 const { getEmpresaDB } = require('../db_sqlite');
+const { validate, superadminLoginSchema } = require('../middleware/validate');
 
 const SA_SECRET = process.env.SA_SECRET || (() => { throw new Error('SA_SECRET no configurado. Revisá el archivo .env'); })();
 
+function setAuthCookie(res, token) {
+  res.cookie('sa_token', token, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 8 * 60 * 60 * 1000,
+  });
+}
+
+// ── Superadmin rate limiter ──
+const superadminLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  message: { error: 'Demasiados intentos de login superadmin. Esperá 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // ── Superadmin auth middleware ──
 function superAuth(req, res, next) {
-  const token = (req.headers.authorization||'').replace('Bearer ','');
+  const token = req.cookies?.sa_token || (req.headers.authorization||'').replace('Bearer ','');
   if(!token) return res.status(401).json({error:'No autenticado'});
   try {
     const p = jwt.verify(token, SA_SECRET);
@@ -24,26 +46,179 @@ function superAuth(req, res, next) {
 // ══════════════════════════════════════
 // AUTH
 // ══════════════════════════════════════
-router.post('/login', (req, res) => {
+router.post('/login', superadminLoginLimiter, validate(superadminLoginSchema), (req, res) => {
   const { usuario, password } = req.body;
   const sa = master.prepare("SELECT * FROM superadmin WHERE usuario=? AND activo=1").get(usuario);
   if(!sa || !bcrypt.compareSync(password, sa.password))
     return res.status(401).json({error:'Credenciales incorrectas'});
+
+  if (sa.must_change_password) {
+    const tempToken = jwt.sign(
+      { id: sa.id, purpose: 'change_password', role: 'superadmin' },
+      SA_SECRET,
+      { expiresIn: '15m' }
+    );
+    return res.json({ require_password_change: true, temp_token: tempToken, nombre: sa.nombre });
+  }
+
+  // Check if superadmin has 2FA enabled
+  let saData = {};
+  try { saData = JSON.parse(sa.data || '{}'); } catch(e) {}
+  if (saData.twofa_enabled && saData.twofa_secret) {
+    const crypto = require('crypto');
+    const tempToken = jwt.sign(
+      { id: sa.id, purpose: '2fa', role: 'superadmin' },
+      SA_SECRET,
+      { expiresIn: '5m' }
+    );
+    return res.json({ require_2fa: true, temp_token: tempToken, nombre: sa.nombre });
+  }
+
   const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin'}, SA_SECRET, {expiresIn:'8h'});
   saAudit(sa.id, 'login', null, 'Login superadmin');
-  res.json({token, nombre:sa.nombre});
+  setAuthCookie(res, token);
+  res.json({nombre:sa.nombre});
 });
 
-router.put('/password', superAuth, (req, res) => {
+router.put('/password', superAuth, async (req, res) => {
   const { password_actual, password_nuevo } = req.body;
   if(!password_nuevo || password_nuevo.length < 8)
     return res.status(400).json({error:'Minimo 8 caracteres'});
+  if(!/[A-Z]/.test(password_nuevo) || !/[0-9]/.test(password_nuevo) || !/[^A-Za-z0-9]/.test(password_nuevo))
+    return res.status(400).json({error:'Debe contener mayúscula, número y símbolo'});
   const sa = master.prepare("SELECT * FROM superadmin WHERE id=?").get(req.sadmin.id);
   if(!sa || !bcrypt.compareSync(password_actual, sa.password))
     return res.status(401).json({error:'Contraseña actual incorrecta'});
-  master.prepare("UPDATE superadmin SET password=? WHERE id=?").run(bcrypt.hashSync(password_nuevo,10), req.sadmin.id);
+
+  // Check password history from data field
+  let data = {};
+  try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+  const history = data.password_history || [];
+  for (const oldHash of history) {
+    if (bcrypt.compareSync(password_nuevo, oldHash)) {
+      return res.status(400).json({error:'No podés usar una contraseña reciente. Elegí una que no hayas usado antes.'});
+    }
+  }
+
+  // Save old password to history (keep last 5)
+  history.push(sa.password);
+  if (history.length > 5) history.shift();
+  data.password_history = history;
+
+  master.prepare("UPDATE superadmin SET password=?, data=?, must_change_password=0 WHERE id=?")
+    .run(bcrypt.hashSync(password_nuevo,10), JSON.stringify(data), req.sadmin.id);
   saAudit(req.sadmin.id, 'cambio_password', null, 'Cambio de contraseña superadmin');
   res.json({ok:true});
+});
+
+// ── Superadmin 2FA ──
+const { totp } = require('../lib/totp');
+
+// POST /api/superadmin/2fa/status
+router.get('/2fa/status', superAuth, (req, res) => {
+  const sa = master.prepare("SELECT data FROM superadmin WHERE id=?").get(req.sadmin.id);
+  let data = {};
+  try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+  res.json({ enabled: !!data.twofa_enabled });
+});
+
+// POST /api/superadmin/2fa/setup
+router.post('/2fa/setup', superAuth, (req, res) => {
+  const sa = master.prepare("SELECT * FROM superadmin WHERE id=?").get(req.sadmin.id);
+  let data = {};
+  try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+  if (data.twofa_enabled) return res.status(400).json({ error: 'Ya tenés 2FA activo. Deshabilitalo primero.' });
+
+  const label = sa.email || sa.usuario || 'superadmin';
+  const secret = totp.generateSecret();
+  const otpauth = totp.toURI({ label, issuer: 'FlexCRM SuperAdmin', secret });
+  data.twofa_secret = secret;
+  data.twofa_enabled = false;
+  master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), req.sadmin.id);
+  res.json({ secret, otpauth, email: label });
+});
+
+// POST /api/superadmin/2fa/confirm
+router.post('/2fa/confirm', superAuth, validate(require('../middleware/validate').twofaConfirmSchema), (req, res) => {
+  const { code } = req.body;
+  const sa = master.prepare("SELECT * FROM superadmin WHERE id=?").get(req.sadmin.id);
+  let data = {};
+  try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+  if (!data.twofa_secret) return res.status(400).json({ error: 'Ejecutá /2fa/setup primero' });
+  if (data.twofa_enabled) return res.status(400).json({ error: '2FA ya está activo' });
+
+  const isValid = totp.verify({ token: code, secret: data.twofa_secret }).valid;
+  if (!isValid) return res.status(400).json({ error: 'Código inválido' });
+
+  // Generate backup codes
+  const crypto = require('crypto');
+  const backupCodes = [];
+  for (let i = 0; i < 10; i++) {
+    const bc = crypto.randomBytes(4).toString('hex').toUpperCase();
+    backupCodes.push(bc);
+  }
+  data.twofa_enabled = true;
+  data.twofa_backup = backupCodes.map(c => crypto.createHash('sha256').update(c).digest('hex'));
+  master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), req.sadmin.id);
+  saAudit(req.sadmin.id, '2fa_activado', null, '2FA activado');
+  res.json({ ok: true, backup_codes: backupCodes, mensaje: '2FA activado. Guardá tus códigos de respaldo.' });
+});
+
+// POST /api/superadmin/2fa/disable
+router.post('/2fa/disable', superAuth, (req, res) => {
+  const sa = master.prepare("SELECT * FROM superadmin WHERE id=?").get(req.sadmin.id);
+  let data = {};
+  try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+  delete data.twofa_secret;
+  delete data.twofa_enabled;
+  delete data.twofa_backup;
+  master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), req.sadmin.id);
+  saAudit(req.sadmin.id, '2fa_desactivado', null, '2FA desactivado');
+  res.json({ ok: true, mensaje: '2FA deshabilitado' });
+});
+
+// POST /api/superadmin/2fa/verify-login
+router.post('/2fa/verify-login', validate(require('../middleware/validate').superadmin2faVerifySchema), (req, res) => {
+  const { temp_token, code } = req.body;
+  let payload;
+  try {
+    payload = jwt.verify(temp_token, SA_SECRET);
+  } catch (e) {
+    return res.status(401).json({ error: 'Token temporal inválido o expirado' });
+  }
+  if (payload.purpose !== '2fa' || payload.role !== 'superadmin') {
+    return res.status(401).json({ error: 'Token inválido' });
+  }
+  const sa = master.prepare("SELECT * FROM superadmin WHERE id=?").get(payload.id);
+  if (!sa) return res.status(401).json({ error: 'Superadmin no encontrado' });
+  let data = {};
+  try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+  if (!data.twofa_enabled || !data.twofa_secret) return res.status(400).json({ error: '2FA no está activo' });
+
+  const crypto = require('crypto');
+  let valid = totp.verify({ token: code, secret: data.twofa_secret }).valid;
+  if (!valid) {
+    const hash = crypto.createHash('sha256').update(code).digest('hex');
+    const bcIndex = (data.twofa_backup || []).indexOf(hash);
+    if (bcIndex === -1) return res.status(400).json({ error: 'Código inválido o ya usado' });
+    data.twofa_backup.splice(bcIndex, 1);
+    master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), req.sadmin.id);
+  }
+
+  const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin'}, SA_SECRET, {expiresIn:'8h'});
+  saAudit(sa.id, 'login_2fa', null, 'Login superadmin con 2FA');
+  setAuthCookie(res, token);
+  res.json({nombre:sa.nombre});
+});
+
+router.get('/me', superAuth, (req, res) => {
+  const sa = master.prepare("SELECT id, usuario, nombre, email FROM superadmin WHERE id=?").get(req.sadmin.id);
+  res.json(sa || { nombre: req.sadmin.nombre });
+});
+
+router.post('/logout', (req, res) => {
+  res.clearCookie('sa_token', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production', path: '/' });
+  res.json({ ok: true });
 });
 
 // ══════════════════════════════════════
@@ -63,10 +238,12 @@ router.get('/dashboard', superAuth, (req, res) => {
 
   // MRR: sum of active empresa plan prices
   let mrr = 0;
-  empresas.filter(e => e.activo).forEach(e => {
-    const plan = planes.find(p => p.id === e.plan_id);
+  const planesById = new Map(planes.map(p => [p.id, p]));
+  for (const e of empresas) {
+    if (!e.activo) continue;
+    const plan = planesById.get(e.plan_id);
     if (plan && plan.precio) mrr += parseFloat(plan.precio) || 0;
-  });
+  }
 
   // Solicitudes de plan pendientes
   let solicitudes_pendientes = 0;
@@ -89,13 +266,14 @@ router.get('/dashboard', superAuth, (req, res) => {
 
   // Usage stats
   let totalUsuarios = 0, totalVentas = 0;
-  empresas.filter(e => e.activo).forEach(e => {
+  for (const e of empresas) {
+    if (!e.activo) continue;
     try {
       const db = getEmpresaDB(e.codigo);
       totalUsuarios += db.find('usuarios').filter(u => u.activo !== false).length;
       totalVentas   += db.all('ventas').filter(v => !v.anulada).length;
     } catch(err) {}
-  });
+  }
 
   res.json({
     empresas_total: empresas.length, empresas_activas: activas,
@@ -144,7 +322,8 @@ router.get('/empresas/:codigo', superAuth, (req, res) => {
 });
 
 router.post('/empresas', superAuth, (req, res) => {
-  const { codigo, nombre, rubro, plan_id, admin_email, admin_pass, vencimiento, usuarios_max, sucursales_max } = req.body;
+  const { codigo, nombre, rubro, plan_id, admin_email, admin_pass, admin_password, vencimiento, usuarios_max, sucursales_max } = req.body;
+  const adminPass = admin_password || admin_pass;
   if(!codigo||!nombre) return res.status(400).json({error:'Código y nombre requeridos'});
   if(!/^[a-z0-9_]+$/.test(codigo)) return res.status(400).json({error:'Solo minúsculas, números y _'});
   if(getEmpresa(codigo)) return res.status(400).json({error:'Ese código ya existe'});
@@ -169,9 +348,9 @@ router.post('/empresas', superAuth, (req, res) => {
 
     const { uid } = require('../db_sqlite');
     // Create admin user
-    if(admin_email && admin_pass) {
+    if(admin_email && adminPass) {
       try {
-        const hash = bcrypt.hashSync(admin_pass, 10);
+        const hash = bcrypt.hashSync(adminPass, 10);
         empDB.insert('usuarios', {id:uid(), nombre:'Admin', apellido:'', usuario:admin_email.split('@')[0],
           email:admin_email, password:hash, rol:'admin', activo:true, roles:JSON.stringify(['admin']), creado:new Date().toISOString()});
         console.log('[SA] PASO 4 - usuario admin creado:', admin_email);
@@ -304,6 +483,7 @@ router.post('/empresas/:codigo/login-as', superAuth, (req, res) => {
     empresa:e.codigo, roles:admin.roles, impersonated_by: req.sadmin.usuario
   }, getSecret(), {expiresIn:'2h'});
   saAudit(req.sadmin.id, 'login_as', e.id, `Acceso como: ${e.nombre} (${e.codigo})`);
+  try { empDB.audit({ id: admin.id, nombre: admin.nombre + ' (vía ' + req.sadmin.usuario + ')' }, null, 'superadmin', 'login_as', 'Superadmin ' + req.sadmin.usuario + ' accedió como admin', admin.id); } catch(ex) {}
   res.json({token, empresa:e.codigo, nombre:admin.nombre, empresa_nombre:e.nombre});
 });
 
@@ -485,6 +665,51 @@ router.get('/solicitudes-plan/prorate', superAuth, (req, res) => {
 });
 
 // ══════════════════════════════════════
+// SOLICITUDES DE SOPORTE
+// ══════════════════════════════════════
+router.get('/solicitudes-soporte', superAuth, (req, res) => {
+  try {
+    const rows = master.prepare(`
+      SELECT ss.*, e.nombre as empresa_nombre
+      FROM solicitudes_soporte ss
+      LEFT JOIN empresas e ON e.codigo = ss.empresa_id
+      ORDER BY ss.fecha DESC
+    `).all();
+    res.json(rows);
+  } catch(e) { res.json([]); }
+});
+
+router.post('/solicitudes-soporte/:id/responder', superAuth, (req, res) => {
+  const { respuesta } = req.body;
+  if (!respuesta) return res.status(400).json({ error: 'Respuesta requerida' });
+  master.prepare(`UPDATE solicitudes_soporte SET estado='respondida', respuesta=?, respondido_por=?, fecha_respuesta=? WHERE id=?`)
+    .run(respuesta, req.sadmin.nombre || req.sadmin.usuario, new Date().toISOString(), req.params.id);
+  saAudit(req.sadmin.id, 'soporte_responder', null, 'Respondida solicitud ' + req.params.id);
+  res.json({ ok: true });
+});
+
+router.delete('/solicitudes-soporte/:id', superAuth, (req, res) => {
+  master.prepare('DELETE FROM solicitudes_soporte WHERE id=?').run(req.params.id);
+  saAudit(req.sadmin.id, 'soporte_eliminar', null, 'Eliminada solicitud ' + req.params.id);
+  res.json({ ok: true });
+});
+
+// ── Reset password de empresa desde superadmin ──
+router.post('/empresas/:codigo/reset-password', superAuth, (req, res) => {
+  const e = getEmpresa(req.params.codigo);
+  if (!e) return res.status(404).json({ error: 'Empresa no encontrada' });
+  const { getEmpresaDB } = require('../db_sqlite');
+  const empDB = getEmpresaDB(e.codigo);
+  const admin = empDB.find('usuarios').find(u => u.rol === 'admin' && u.activo !== false);
+  if (!admin) return res.status(404).json({ error: 'Sin usuario admin en esta empresa' });
+  const nueva = Math.random().toString(36).slice(2, 10) + 'A1!';
+  const hash = bcrypt.hashSync(nueva, 10);
+  empDB.update('usuarios', admin.id, { password: hash, debe_cambiar_password: 1 });
+  saAudit(req.sadmin.id, 'reset_password', e.id, 'Password reseteado para admin de ' + e.codigo);
+  res.json({ ok: true, usuario: admin.usuario, mensaje: 'Contrasea reseteada. Entregala de forma segura al administrador de la empresa.' });
+});
+
+// ══════════════════════════════════════
 // BACKUP / IMPORT por empresa
 // ══════════════════════════════════════
 router.get('/empresas/:codigo/backup', superAuth, (req, res) => {
@@ -523,6 +748,113 @@ router.post('/empresas/:codigo/import', superAuth, (req, res) => {
     try { if (fs.existsSync(backupPath)) fs.copyFileSync(backupPath, dbPath); } catch (eu) { /* ignore */ }
     res.status(500).json({ error: 'Error al importar: ' + err.message });
   }
+});
+
+// ══════════════════════════════════════
+// PROSPECTOS
+// ══════════════════════════════════════
+router.get('/prospectos', superAuth, (req, res) => {
+  try { res.json(getProspectos()) } catch(e) { res.status(500).json({ error: e.message }) }
+});
+
+router.get('/prospectos/:id', superAuth, (req, res) => {
+  try {
+    const p = getProspecto(req.params.id);
+    if (!p) return res.status(404).json({ error: 'No encontrado' });
+    const seg = getProspectoSeguimiento(req.params.id);
+    res.json({ ...p, seguimiento: seg });
+  } catch(e) { res.status(500).json({ error: e.message }) }
+});
+
+router.post('/prospectos', superAuth, (req, res) => {
+  try {
+    const { nombre, telefono, email, empresa_interes, origen, notas, asignado_a } = req.body;
+    if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+    const id = 'pros_' + Date.now();
+    const fecha = new Date().toISOString();
+    master.prepare(`INSERT INTO prospectos (id,nombre,telefono,email,empresa_interes,origen,estado,notas,asignado_a,fecha_creacion)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`).run(
+      id, nombre.trim(), (telefono || '').trim(), (email || '').trim(), (empresa_interes || '').trim(),
+      origen || 'manual', 'nuevo', notas || '', asignado_a || '', fecha
+    );
+    saAudit(req.sadmin.id, 'crear_prospecto', null, `Prospecto: ${nombre}`);
+    res.json({ id, ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }) }
+});
+
+router.put('/prospectos/:id', superAuth, (req, res) => {
+  try {
+    const { nombre, telefono, email, empresa_interes, estado, notas, asignado_a } = req.body;
+    const p = getProspecto(req.params.id);
+    if (!p) return res.status(404).json({ error: 'No encontrado' });
+    master.prepare(`UPDATE prospectos SET nombre=?,telefono=?,email=?,empresa_interes=?,estado=?,notas=?,asignado_a=? WHERE id=?`)
+      .run(nombre||p.nombre, telefono||p.telefono, email||p.email, empresa_interes||p.empresa_interes,
+        estado||p.estado, notas||p.notas, asignado_a||p.asignado_a, req.params.id);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }) }
+});
+
+router.post('/prospectos/:id/seguimiento', superAuth, (req, res) => {
+  try {
+    const { tipo, descripcion } = req.body;
+    if (!descripcion) return res.status(400).json({ error: 'Descripción requerida' });
+    const id = 'seg_' + Date.now();
+    const fecha = new Date().toISOString();
+    master.prepare(`INSERT INTO prospecto_seguimiento (id,prospecto_id,tipo,descripcion,fecha,creado_por) VALUES (?,?,?,?,?,?)`)
+      .run(id, req.params.id, tipo || 'nota', descripcion, fecha, req.sadmin.usuario || 'superadmin');
+    master.prepare("UPDATE prospectos SET fecha_ultimo_contacto=?,ultimo_seguimiento=? WHERE id=?")
+      .run(fecha, descripcion, req.params.id);
+    res.json({ id, ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }) }
+});
+
+router.post('/prospectos/:id/cambiar-estado', superAuth, (req, res) => {
+  try {
+    const { estado } = req.body;
+    if (!['nuevo','contactado','interesado','calificado','cerrado_ganado','cerrado_perdido'].includes(estado)) {
+      return res.status(400).json({ error: 'Estado inválido' });
+    }
+    master.prepare("UPDATE prospectos SET estado=? WHERE id=?").run(estado, req.params.id);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }) }
+});
+
+// ══════════════════════════════════════
+// LANDING LEADS
+// ══════════════════════════════════════
+router.get('/landing-leads', superAuth, (req, res) => {
+  try { res.json(getLandingLeads(req.query.no_leidos === 'true')) } catch(e) { res.json([]) }
+});
+
+router.put('/landing-leads/:id/leer', superAuth, (req, res) => {
+  try { master.prepare("UPDATE landing_leads SET leido=1 WHERE id=?").run(req.params.id); res.json({ ok: true }) }
+  catch(e) { res.status(500).json({ error: e.message }) }
+});
+
+// ══════════════════════════════════════
+// SYSTEM STATS
+// ══════════════════════════════════════
+router.get('/stats', superAuth, (req, res) => {
+  try { res.json(getDbStats()) } catch(e) { res.status(500).json({ error: e.message }) }
+});
+
+// ══════════════════════════════════════
+// STALE PROSPECT REMINDER
+// ══════════════════════════════════════
+router.get('/prospectos-recuperables', superAuth, (req, res) => {
+  try {
+    const { getStaleProspects } = require('../lib/stale-prospect-reminder');
+    res.json(getStaleProspects());
+  } catch(e) { res.status(500).json({ error: e.message }) }
+});
+
+router.post('/prospectos-recuperables/notificar', superAuth, async (req, res) => {
+  try {
+    const { runStaleCheck } = require('../lib/stale-prospect-reminder');
+    await runStaleCheck();
+    saAudit(req.sadmin.id, 'notificar_stale_prospects', null, 'Envío manual de recordatorios a prospectos sin seguimiento');
+    res.json({ ok: true, mensaje: 'Resumen de prospectos recuperables enviado' });
+  } catch(e) { res.status(500).json({ error: e.message }) }
 });
 
 module.exports = router;

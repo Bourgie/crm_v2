@@ -32,12 +32,12 @@ function ModalApertura({ open, onClose, onAbrir }) {
   }
   return (
     <Modal open={open} onClose={onClose} title="💰 Abrir caja" size="sm"
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" onClick={abrir} disabled={saving}>
+      footer={<><button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button type="button" className="btn btn-primary" onClick={abrir} disabled={saving}>
           {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Abriendo...</> : '✅ Abrir caja'}
         </button></>}>
       <Field label="Fondo inicial ($)">
-        <input type="number" value={fondo} onChange={(e) => setFondo(e.target.value)} min="0" autoFocus style={{ textAlign: 'center', fontSize: 20, fontWeight: 700 }} />
+        <input type="number" value={fondo} onChange={(e) => setFondo(e.target.value)} min="0" style={{ textAlign: 'center', fontSize: 20, fontWeight: 700 }} />
       </Field>
     </Modal>
   )
@@ -52,9 +52,12 @@ function ModalMovimiento({ open, onClose, tipo: tipoInit, onGuardar }) {
   const [firmante, setFirmante] = useState('')
   const [saving, setSaving] = useState(false)
   const { toast } = useToast()
-  useEffect(() => { if (open) { setTipo(tipoInit || 'egreso'); setConc(''); setMonto(''); setFirmante('') } }, [open])
 
-  function imprimirRetiro(concepto, monto, firma) {
+  function sanitizeHtml(str) {
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
+function imprimirRetiro(concepto, monto, firma) {
     const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Retiro</title>
     <style>body{font-family:Arial,sans-serif;max-width:500px;margin:40px auto;padding:30px;font-size:14px}
     h1{text-align:center}.box{border:2px solid #333;border-radius:8px;padding:20px;text-align:center;margin:24px 0}
@@ -63,10 +66,10 @@ function ModalMovimiento({ open, onClose, tipo: tipoInit, onGuardar }) {
     @media print{body{margin:10px}}</style></head><body>
     <h1>Comprobante de Retiro</h1>
     <div style="text-align:center;color:#666;font-size:12px">${new Date().toLocaleString('es-AR')}</div>
-    <p><b>Concepto:</b> ${concepto}</p>
+    <p><b>Concepto:</b> ${sanitizeHtml(concepto)}</p>
     <div class="box"><div style="font-size:12px;color:#666">MONTO</div><div class="val">${fmt(monto)}</div></div>
     <div class="firma"><div class="fl"><div class="fl-line">Firma cajero</div></div>
-    <div class="fl"><div class="fl-line">${firma || 'Firma autorizado'}</div></div></div></body></html>`
+    <div class="fl"><div class="fl-line">${sanitizeHtml(firma || 'Firma autorizado')}</div></div></div></body></html>`
     const w = window.open('', '_blank', 'width=600,height=700')
     if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400) }
   }
@@ -84,8 +87,8 @@ function ModalMovimiento({ open, onClose, tipo: tipoInit, onGuardar }) {
 
   return (
     <Modal open={open} onClose={onClose} title="Movimiento de caja" size="sm"
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" onClick={guardar} disabled={saving}>Registrar</button></>}>
+      footer={<><button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button type="button" className="btn btn-primary" onClick={guardar} disabled={saving}>Registrar</button></>}>
       <Field label="Tipo">
         <select value={tipo} onChange={(e) => setTipo(e.target.value)}>
           <option value="ingreso">Ingreso</option>
@@ -107,7 +110,8 @@ function ModalMovimiento({ open, onClose, tipo: tipoInit, onGuardar }) {
 
 // ── Cobro multi-método ────────────────────────────────────────
 function ModalCobro({ open, onClose, venta, pagosMethods, onConfirm }) {
-  const [rows, setRows] = useState([{ metodo: 'efectivo', monto: '', cuotas: '1', obs: '' }])
+  const initialRows = [{ metodo: 'efectivo', monto: String(venta?.total || ''), cuotas: '1', obs: '' }]
+  const [rows, setRows] = useState(initialRows)
   const [descPct, setDescPct] = useState('')
   const [codigoInput, setCodigoInput] = useState('')
   const [codigoValido, setCodigoValido] = useState(null)
@@ -115,13 +119,6 @@ function ModalCobro({ open, onClose, venta, pagosMethods, onConfirm }) {
   const [saving, setSaving] = useState(false)
   const { toast } = useToast()
   const { api } = useApi()
-
-  useEffect(() => {
-    if (open && venta) {
-      setRows([{ metodo: 'efectivo', monto: String(venta.total), cuotas: '1', obs: '' }])
-      setDescPct(''); setCodigoInput(''); setCodigoValido(null)
-    }
-  }, [open, venta])
 
   if (!venta) return null
   const totalBase = venta.total || 0
@@ -184,8 +181,8 @@ function ModalCobro({ open, onClose, venta, pagosMethods, onConfirm }) {
 
   return (
     <Modal open={open} onClose={onClose} title={`💳 Cobrar venta #${venta.numero}`} size="md"
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" style={{ background: sumBases >= totalConDesc - 0.5 ? 'var(--ok)' : undefined }} onClick={confirmar} disabled={saving}>
+      footer={<><button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button type="button" className="btn btn-primary" style={{ background: sumBases >= totalConDesc - 0.5 ? 'var(--ok)' : undefined }} onClick={confirmar} disabled={saving}>
           {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Procesando...</> : '✅ Confirmar cobro'}
         </button></>}>
       {/* Info */}
@@ -203,12 +200,12 @@ function ModalCobro({ open, onClose, venta, pagosMethods, onConfirm }) {
             placeholder="INGRESÁ EL CÓDIGO" disabled={!!codigoValido || tieneCuotas}
             style={{ flex: 1, fontFamily: 'monospace', fontSize: 12, textTransform: 'uppercase' }} />
           {!codigoValido ? (
-            <button className="btn btn-sm" disabled={validando || tieneCuotas} onClick={validarCodigo}
+            <button type="button" className="btn btn-sm" disabled={validando || tieneCuotas} onClick={validarCodigo}
               style={{ padding: '4px 10px', fontSize: 11, background: 'var(--ac)', color: '#fff', border: 'none', borderRadius: 6 }}>
               {validando ? '⏳' : 'Validar'}
             </button>
           ) : (
-            <button className="btn btn-sm" onClick={quitarCodigo}
+            <button type="button" className="btn btn-sm" onClick={quitarCodigo}
               style={{ padding: '4px 10px', fontSize: 11, background: 'none', border: '1px solid var(--bd)', borderRadius: 6 }}>
               ✕ Quitar
             </button>
@@ -240,7 +237,7 @@ function ModalCobro({ open, onClose, venta, pagosMethods, onConfirm }) {
               <input type="number" value={row.monto} onChange={(e) => setRow(i, 'monto', e.target.value)}
                 placeholder="Monto $" min="0"
                 style={{ flex: 3, padding: '8px 10px', borderRadius: 8, border: '1.5px solid var(--bd)', fontSize: 16, fontWeight: 800, textAlign: 'right' }} />
-              {rows.length > 1 && <button onClick={() => setRows((p) => p.filter((_, idx) => idx !== i))}
+              {rows.length > 1 && <button type="button" onClick={() => setRows((p) => p.filter((_, idx) => idx !== i))}
                 style={{ background: 'none', border: '1.5px solid var(--bd)', borderRadius: 7, padding: '4px 8px', cursor: 'pointer', color: 'var(--mu)' }}>✕</button>}
             </div>
             {esCredito && rec > 0 && (
@@ -259,7 +256,7 @@ function ModalCobro({ open, onClose, venta, pagosMethods, onConfirm }) {
           </div>
         )
       })}
-      <button className="btn btn-secondary btn-sm" onClick={addRow} style={{ marginBottom: 12 }}>+ Agregar método</button>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={addRow} style={{ marginBottom: 12 }}>+ Agregar método</button>
 
       {/* Vuelto/Faltante */}
       {rowsValidos.length > 0 && (
@@ -291,7 +288,7 @@ function ModalComprobante({ open, onClose, venta, onConfirm }) {
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
         {TIPOS.map(([tipo, label]) => (
-          <button key={tipo} className="btn btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px', fontSize: 14 }}
+          <button type="button" key={tipo} className="btn btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px', fontSize: 14 }}
             onClick={() => onConfirm(tipo)}>
             {label}
           </button>
@@ -346,7 +343,7 @@ function ModalCierre({ open, onClose, estado, onCerrar }) {
     </table>
     <table>
       <tr><th>Método</th><th class="r">Monto</th><th class="r">Cant.</th></tr>
-      ${Object.entries(porPago).map(([k,v])=>`<tr><td>${k}</td><td class="r">${fmt(v.monto)}</td><td class="r">${v.cantidad}</td></tr>`).join('')}
+      ${Object.entries(porPago).map(([k,v])=>`<tr><td>${sanitizeHtml(k)}</td><td class="r">${fmt(v.monto)}</td><td class="r">${v.cantidad}</td></tr>`).join('')}
     </table>
     <p style="text-align:center;color:#666;font-size:10px;margin-top:20px">— Cierre de caja —</p>
     </body></html>`
@@ -361,9 +358,9 @@ function ModalCierre({ open, onClose, estado, onCerrar }) {
   return (
     <Modal open={open} onClose={onClose} title="🔒 Cerrar caja" size="lg"
       footer={<>
-        {resumen && <button className="btn btn-secondary" onClick={imprimirResumen}>🖨️ Imprimir resumen</button>}
-        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-danger" onClick={cerrar} disabled={saving}>
+        {resumen && <button type="button" className="btn btn-secondary" onClick={imprimirResumen}>🖨️ Imprimir resumen</button>}
+        <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button type="button" className="btn btn-danger" onClick={cerrar} disabled={saving}>
           {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Cerrando...</> : '🔒 Confirmar cierre'}
         </button>
       </>}>
@@ -394,7 +391,7 @@ function ModalCierre({ open, onClose, estado, onCerrar }) {
       )}
       <Field label="Efectivo real contado ($)">
         <input type="number" value={saldoReal} onChange={(e) => setSaldoReal(e.target.value)} min="0" step="0.01"
-          style={{ fontSize: 18, fontWeight: 700, textAlign: 'center' }} autoFocus />
+          style={{ fontSize: 18, fontWeight: 700, textAlign: 'center' }} />
       </Field>
       {saldoReal !== '' && !isNaN(parseFloat(saldoReal)) && (
         <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 8, background: Math.abs(diff) < 1 ? 'rgba(34,197,94,.1)' : diff < 0 ? 'rgba(239,68,68,.1)' : 'rgba(245,158,11,.1)' }}>
@@ -436,7 +433,7 @@ function ModalCorteParcial({ open, onClose, estado }) {
       <span>Egresos:</span><span class="b">${fmt(e?.egresos||0)}</span>
     </div>
     <table><tr><th>Método</th><th class="r">Monto</th></tr>
-    ${Object.entries(e?.por_pago||{}).map(([k,v])=>`<tr><td>${k}</td><td class="r">${fmt(v)}</td></tr>`).join('')}
+    ${Object.entries(e?.por_pago||{}).map(([k,v])=>`<tr><td>${sanitizeHtml(k)}</td><td class="r">${fmt(v)}</td></tr>`).join('')}
     </table>
     <p style="text-align:center;color:#666;font-size:10px;margin-top:20px">— Corte parcial —</p>
     </body></html>`
@@ -446,8 +443,8 @@ function ModalCorteParcial({ open, onClose, estado }) {
 
   return (
     <Modal open={open} onClose={onClose} title="📋 Corte parcial de caja" size="md"
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Cerrar</button>
-        <button className="btn btn-primary" onClick={imprimir}>🖨️ Imprimir corte</button></>}>
+      footer={<><button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
+        <button type="button" className="btn btn-primary" onClick={imprimir}>🖨️ Imprimir corte</button></>}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
         <div style={{ background: 'var(--sf)', borderRadius: 8, padding: '10px 14px' }}>
           <div style={{ fontSize: 11, color: 'var(--mu)' }}>Fondo inicial</div>
@@ -575,14 +572,14 @@ function ModalEditarVenta({ open, onClose, venta, onSave }) {
 
   return (
     <Modal open={open} onClose={onClose} title={`✏️ Editar venta #${venta?.numero || ''}`} size="md"
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" onClick={guardar} disabled={saving}>
+      footer={<><button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button type="button" className="btn btn-primary" onClick={guardar} disabled={saving}>
           {saving ? '💾 Guardando...' : '💾 Guardar cambios'}
         </button></>}>
       {/* Agregar producto */}
       <div style={{ position: 'relative', marginBottom: 12 }}>
         <input type="text" value={prodSearch} onChange={e => setProdSearch(e.target.value)}
-          placeholder="🔍 Buscar producto para agregar..." autoFocus
+          placeholder="🔍 Buscar producto para agregar..."
           style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid var(--bd)', fontSize: 14 }} />
         {prodSearch && (
           <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 8, zIndex: 10, maxHeight: 200, overflowY: 'auto', marginTop: 4 }}>
@@ -611,7 +608,7 @@ function ModalEditarVenta({ open, onClose, venta, onSave }) {
             <input type="number" value={it.cantidad} onChange={e => setItem(i, 'cantidad', e.target.value)}
               min="1" style={{ width: 50, padding: '6px 8px', borderRadius: 6, border: '1.5px solid var(--bd)', fontSize: 13, textAlign: 'center' }} />
             <span style={{ fontWeight: 700, fontSize: 13, minWidth: 60, textAlign: 'right', color: 'var(--ok)' }}>${Number((parseFloat(it.precio) || 0) * (parseInt(it.cantidad) || 0)).toLocaleString('es-AR')}</span>
-            <button onClick={() => delItem(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bad)', fontSize: 16 }}>✕</button>
+            <button type="button" onClick={() => delItem(i)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bad)', fontSize: 16 }}>✕</button>
           </div>
         ))}
       </div>
@@ -647,8 +644,8 @@ function ModalQR({ open, onClose, venta, onConfirm }) {
   return (
     <Modal open={open} onClose={onClose} title="📱 QR MercadoPago" size="sm"
       footer={<>
-        <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" style={{ background: 'var(--ok)' }} onClick={() => { setSaving(true); onConfirm() }}
+        <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button type="button" className="btn btn-primary" style={{ background: 'var(--ok)' }} onClick={() => { setSaving(true); onConfirm() }}
           disabled={saving}>
           {saving ? '⏳' : '✅ Ya se pagó'}
         </button>
@@ -874,12 +871,12 @@ export function Caja() {
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {!abierta
-              ? <button className="btn btn-primary" onClick={() => setModalApertura(true)}>🟢 Abrir caja</button>
+              ? <button type="button" className="btn btn-primary" onClick={() => setModalApertura(true)}>🟢 Abrir caja</button>
               : <>
-                <button className="btn btn-secondary" onClick={() => setModalMov('ingreso')}>+ Ingreso</button>
-                <button className="btn btn-secondary" onClick={() => setModalMov('egreso')}>− Retiro</button>
-                <button className="btn btn-secondary" onClick={() => abrirCorteParcial()}>📋 Corte parcial</button>
-                <button className="btn btn-danger" onClick={() => setModalCierre(true)}>🔒 Cerrar caja</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setModalMov('ingreso')}>+ Ingreso</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setModalMov('egreso')}>− Retiro</button>
+                <button type="button" className="btn btn-secondary" onClick={() => abrirCorteParcial()}>📋 Corte parcial</button>
+                <button type="button" className="btn btn-danger" onClick={() => setModalCierre(true)}>🔒 Cerrar caja</button>
               </>}
           </div>
         </div>
@@ -893,7 +890,7 @@ export function Caja() {
           ['historial', '📅 Historial'],
           ['reporte', '📊 Reporte'],
         ].map(([key, label]) => (
-          <button key={key} className={`btn btn-sm ${tab === key ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab(key)}>{label}</button>
+          <button type="button" key={key} className={`btn btn-sm ${tab === key ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab(key)}>{label}</button>
         ))}
       </div>
 
@@ -919,9 +916,9 @@ export function Caja() {
                     <div style={{ fontWeight: 900, fontSize: 20, color: 'var(--ok)' }}>{fmt(v.total)}</div>
                   </div>
                   <div style={{ display: 'flex', gap: 6 }}>
-                    {abierta && <button className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setModalCobro(v)}>💰 Cobrar</button>}
-                    <button className="btn btn-secondary btn-sm" title="Editar venta" onClick={() => setModalEditarVenta(v)}>✏️</button>
-                    <button className="btn btn-icon btn-sm" title="Cancelar venta" onClick={async () => {
+                    {abierta && <button type="button" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setModalCobro(v)}>💰 Cobrar</button>}
+                    <button type="button" className="btn btn-secondary btn-sm" title="Editar venta" onClick={() => setModalEditarVenta(v)}>✏️</button>
+                    <button type="button" className="btn btn-icon btn-sm" title="Cancelar venta" onClick={async () => {
                       if (!window.confirm('¿Cancelar esta venta?')) return
                       try { await api('DELETE', '/ventas/' + v.id); toast('Venta cancelada', 'ok'); load() } catch (e) { toast(e.message, 'err') }
                     }}>✕</button>
@@ -943,7 +940,7 @@ export function Caja() {
                     </div>
                     <div style={{ fontWeight: 900, fontSize: 20, color: 'var(--ac2)' }}>{fmt(v.total)}</div>
                   </div>
-                  <button className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', borderColor: 'var(--ac2)', color: 'var(--ac2)' }}
+                  <button type="button" className="btn btn-secondary" style={{ width: '100%', justifyContent: 'center', borderColor: 'var(--ac2)', color: 'var(--ac2)' }}
                     onClick={() => setModalComprobante(v)}>
                     🧾 Emitir factura / ticket
                   </button>
@@ -978,7 +975,7 @@ export function Caja() {
                       <td style={{ textAlign: 'right', fontWeight: 700, color: m.tipo === 'ingreso' ? 'var(--ok)' : 'var(--bad)' }}>
                         {m.tipo === 'egreso' ? '−' : ''}{fmt(m.monto)}
                       </td>
-                      <td>{!m.anulado && !m.auto && <button className="btn btn-icon btn-sm" onClick={() => anularMovimiento(m.id)}>✕</button>}</td>
+                      <td>{!m.anulado && !m.auto && <button type="button" className="btn btn-icon btn-sm" onClick={() => anularMovimiento(m.id)}>✕</button>}</td>
                     </tr>
                   ))}
               </tbody>
@@ -999,7 +996,7 @@ export function Caja() {
               <input type="date" value={reporteRange.hasta} onChange={e => setReporteRange(p => ({ ...p, hasta: e.target.value }))}
                 style={{ padding: '7px 10px', borderRadius: 8, border: '1.5px solid var(--bd)', fontSize: 13 }} />
             </Field>
-            <button className="btn btn-primary" onClick={cargarReporte} disabled={loadingReporte}>
+            <button type="button" className="btn btn-primary" onClick={cargarReporte} disabled={loadingReporte}>
               {loadingReporte ? '⏳ Cargando...' : '📊 Generar reporte'}
             </button>
           </div>
@@ -1043,7 +1040,7 @@ export function Caja() {
                   <div style={{ fontWeight: 800, fontSize: 20, color: 'var(--bad)' }}>{fmt(reporteData.totalEgresos)}</div>
                 </div>
               </div>
-              <button className="btn btn-secondary btn-sm" style={{ marginTop: 16 }} onClick={() => {
+              <button type="button" className="btn btn-secondary btn-sm" style={{ marginTop: 16 }} onClick={() => {
                 const headers = ['Fecha', 'Cliente', 'Método', 'Total']
                 const rows = reporteData.ventas.filter(v => !v.anulada).map(v => [
                   new Date(v.fecha).toLocaleDateString('es-AR'), v.cli_nombre || 'Consumidor', v.pago || '', v.total || 0
@@ -1080,7 +1077,7 @@ export function Caja() {
                         <td style={{ textAlign: 'center' }}><span className={`badge ${h.estado === 'abierta' ? 'badge-green' : 'badge-gray'}`}>{h.estado}</span></td>
                         <td style={{ textAlign: 'center' }}>
                           {h.estado === 'abierta' && (
-                            <button className="btn btn-sm btn-danger" onClick={() => cerrarForzado(h.id, h.fecha)}>
+                            <button type="button" className="btn btn-sm btn-danger" onClick={() => cerrarForzado(h.id, h.fecha)}>
                               🔒 Cerrar
                             </button>
                           )}
@@ -1096,9 +1093,9 @@ export function Caja() {
 
       <ModalCorteParcial open={modalCorteParcial} onClose={() => setModalCorteParcial(false)} estado={estado} />
       <ModalApertura open={modalApertura} onClose={() => setModalApertura(false)} onAbrir={abrir} />
-      <ModalMovimiento open={!!modalMov} onClose={() => setModalMov(null)} tipo={modalMov} onGuardar={registrarMovimiento} />
+      <ModalMovimiento key={modalMov || 'closed'} open={!!modalMov} onClose={() => setModalMov(null)} tipo={modalMov} onGuardar={registrarMovimiento} />
       <ModalCierre open={modalCierre} onClose={() => setModalCierre(false)} estado={estado} onCerrar={cerrar} />
-      <ModalCobro open={!!modalCobro} onClose={() => setModalCobro(null)} venta={modalCobro} pagosMethods={pagosMethods} onConfirm={confirmarCobro} />
+      <ModalCobro key={modalCobro?.id || 'cobro-closed'} open={!!modalCobro} onClose={() => setModalCobro(null)} venta={modalCobro} pagosMethods={pagosMethods} onConfirm={confirmarCobro} />
       <ModalComprobante open={!!modalComprobante} onClose={() => setModalComprobante(null)} venta={modalComprobante} onConfirm={confirmarComprobante} />
       <ModalEditarVenta open={!!modalEditarVenta} onClose={() => setModalEditarVenta(null)} venta={modalEditarVenta} onSave={guardarEditarVenta} />
       <ModalQR open={!!modalQR} onClose={() => setModalQR(null)} venta={modalQR?.venta}
@@ -1114,7 +1111,7 @@ export function Caja() {
           <div className="modal" style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h3>🧾 Tipo de comprobante</h3>
-              <button onClick={() => setModalCompTipo(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--mu)' }}>×</button>
+              <button type="button" onClick={() => setModalCompTipo(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--mu)' }}>×</button>
             </div>
             <div className="modal-body">
               <div style={{ background: 'var(--sf)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, fontSize: 13 }}>
@@ -1127,7 +1124,7 @@ export function Caja() {
                   ['facA','📄 Factura A — Responsable inscripto'],
                   ['facC','📄 Factura C — Monotributista/exento'],
                 ].map(([tipo, label]) => (
-                  <button key={tipo} className="btn btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px', fontSize: 14 }}
+                  <button type="button" key={tipo} className="btn btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px', fontSize: 14 }}
                     onClick={async () => {
                       const ventaId = modalCompTipo.venta.id
                       setModalCompTipo(null)
@@ -1150,7 +1147,7 @@ export function Caja() {
                   </button>
                 ))}
               </div>
-              <button className="btn btn-secondary btn-sm" style={{ width: '100%', justifyContent: 'center', marginTop: 10, color: 'var(--mu)' }}
+              <button type="button" className="btn btn-secondary btn-sm" style={{ width: '100%', justifyContent: 'center', marginTop: 10, color: 'var(--mu)' }}
                 onClick={() => setModalCompTipo(null)}>
                 Sin comprobante
               </button>
@@ -1161,3 +1158,5 @@ export function Caja() {
     </div>
   )
 }
+
+

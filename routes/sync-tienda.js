@@ -48,22 +48,30 @@ async function wcRequest(cfg, method, endpoint, data) {
   try { return JSON.parse(text); } catch { return text; }
 }
 
+function collectSettled(settled, total) {
+  let ok = 0;
+  const errors = [];
+  for (const s of settled) {
+    if (s.status === 'fulfilled') ok++;
+    else errors.push(s.reason);
+  }
+  return { ok, fail: total - ok, errors, total };
+}
+
 async function pushStockWoo(cfg, db, tiendaSucId) {
   const prods = db.all('productos').filter(p => p.activo !== false && p.sku);
-  let ok = 0, fail = 0, errors = [];
-  for (const prod of prods) {
+  const settled = await Promise.allSettled(prods.map(prod => (async () => {
     try {
       const stock = stockDesdeTiendaOnline(db, tiendaSucId, prod.id);
       const existing = await wcRequest(cfg, 'GET', `products?sku=${encodeURIComponent(prod.sku)}&per_page=1`);
       if (existing.length > 0) {
         await wcRequest(cfg, 'PUT', `products/${existing[0].id}`, { stock_quantity: stock, manage_stock: true });
-        ok++;
       }
     } catch (e) {
-      fail++; errors.push({ sku: prod.sku, error: e.message });
+      throw { sku: prod.sku, error: e.message };
     }
-  }
-  return { ok, fail, errors, total: prods.length };
+  })()));
+  return collectSettled(settled, prods.length);
 }
 
 async function tnRequest(cfg, method, endpoint, data) {
@@ -79,20 +87,18 @@ async function tnRequest(cfg, method, endpoint, data) {
 
 async function pushStockTN(cfg, db, tiendaSucId) {
   const prods = db.all('productos').filter(p => p.activo !== false && p.sku);
-  let ok = 0, fail = 0, errors = [];
-  for (const prod of prods) {
+  const settled = await Promise.allSettled(prods.map(prod => (async () => {
     try {
       const stock = stockDesdeTiendaOnline(db, tiendaSucId, prod.id);
       const existing = await tnRequest(cfg, 'GET', `products?sku=${encodeURIComponent(prod.sku)}`);
       if (existing.length > 0) {
         await tnRequest(cfg, 'PUT', `products/${existing[0].id}`, { stock });
-        ok++;
       }
     } catch (e) {
-      fail++; errors.push({ sku: prod.sku, error: e.message });
+      throw { sku: prod.sku, error: e.message };
     }
-  }
-  return { ok, fail, errors, total: prods.length };
+  })()));
+  return collectSettled(settled, prods.length);
 }
 
 async function meliRequest(cfg, method, endpoint, data) {
@@ -108,23 +114,21 @@ async function meliRequest(cfg, method, endpoint, data) {
 
 async function pushStockML(cfg, db, tiendaSucId) {
   const prods = db.all('productos').filter(p => p.activo !== false && p.sku);
-  let ok = 0, fail = 0, errors = [];
   const sellerId = cfg.tienda_meli_seller_id;
-  if (!sellerId) return { ok, fail, errors, total: prods.length, error: 'Seller ID no configurado' };
-  for (const prod of prods) {
+  if (!sellerId) return { ok: 0, fail: 0, errors: [], total: prods.length, error: 'Seller ID no configurado' };
+  const settled = await Promise.allSettled(prods.map(prod => (async () => {
     try {
       const stock = stockDesdeTiendaOnline(db, tiendaSucId, prod.id);
       const search = await meliRequest(cfg, 'GET', `items/search?seller=${sellerId}&sku=${encodeURIComponent(prod.sku)}`);
       const items = search?.results || [];
       if (items.length > 0) {
         await meliRequest(cfg, 'PUT', `items/${items[0]}`, { available_quantity: stock });
-        ok++;
       }
     } catch (e) {
-      fail++; errors.push({ sku: prod.sku, error: e.message });
+      throw { sku: prod.sku, error: e.message };
     }
-  }
-  return { ok, fail, errors, total: prods.length };
+  })()));
+  return collectSettled(settled, prods.length);
 }
 
 async function pullOrdersWoo(cfg, db, tiendaSucId, req) {
@@ -231,12 +235,11 @@ router.get('/status', requireRol('admin', 'supervisor'), (req, res) => {
 router.post('/push-stock', requireRol('admin', 'supervisor'), async (req, res) => {
   const db = _getDB(req); const cfg = db.getConfig();
   const suc = ensureTiendaSucursal(db);
-  const results = {};
-  for (const p of PLATFORMAS) {
-    if (isPlataformaConfigurada(cfg, p)) {
-      try { results[p] = await PUSH_FN[p](cfg, db, suc.id); } catch (e) { results[p] = { error: e.message, ok: 0, fail: 0 }; }
-    }
-  }
+  const platforms = PLATFORMAS.filter(p => isPlataformaConfigurada(cfg, p));
+  const entries = await Promise.all(platforms.map(async (p) => {
+    try { return [p, await PUSH_FN[p](cfg, db, suc.id)]; } catch (e) { return [p, { error: e.message, ok: 0, fail: 0 }]; }
+  }));
+  const results = Object.fromEntries(entries);
   db.setConfig({ tienda_ultima_sync: new Date().toISOString() });
   db.audit(req.user, req.user.suc_id, 'config', 'sync_tienda_push', `Push completado: ${JSON.stringify(Object.fromEntries(Object.entries(results).map(([k, v]) => [k, `${v.ok||0} OK, ${v.fail||0} fail`])))}`);
   res.json({ ok: true, results });
@@ -255,12 +258,11 @@ router.post('/push-stock/:platform', requireRol('admin', 'supervisor'), async (r
 router.post('/pull-orders', requireRol('admin', 'supervisor'), async (req, res) => {
   const db = _getDB(req); const cfg = db.getConfig();
   const suc = ensureTiendaSucursal(db);
-  const results = {};
-  for (const p of PLATFORMAS) {
-    if (isPlataformaConfigurada(cfg, p)) {
-      try { results[p] = await PULL_FN[p](cfg, db, suc.id, req); } catch (e) { results[p] = { error: e.message, importadas: 0 }; }
-    }
-  }
+  const platforms = PLATFORMAS.filter(p => isPlataformaConfigurada(cfg, p));
+  const entries = await Promise.all(platforms.map(async (p) => {
+    try { return [p, await PULL_FN[p](cfg, db, suc.id, req)]; } catch (e) { return [p, { error: e.message, importadas: 0 }]; }
+  }));
+  const results = Object.fromEntries(entries);
   db.audit(req.user, req.user.suc_id, 'ventas', 'importar_tienda', `Pull completado: ${JSON.stringify(Object.fromEntries(Object.entries(results).map(([k, v]) => [k, `${v.importadas||0} pedidos`])))}`);
   res.json({ ok: true, results });
 });

@@ -6,9 +6,12 @@ const { DatabaseSync } = require('node:sqlite');
 const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
+const { encryptValue, decryptValue, isSensitiveKey, isEncrypted } = require('./lib/crypto-utils');
 
 
-const uid = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
+const crypto = require('crypto');
+
+const uid = () => Date.now().toString(36) + crypto.randomBytes(8).toString('hex');
 
 function createDB(dbPath) {
 const DB_PATH = dbPath;
@@ -18,6 +21,13 @@ if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 const sqlite = new DatabaseSync(DB_PATH);
 sqlite.exec("PRAGMA journal_mode=WAL");
 sqlite.exec("PRAGMA foreign_keys=ON");
+
+const CURRENT_SCHEMA_VERSION = 3;
+sqlite.exec("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER)");
+const sv = sqlite.prepare("SELECT version FROM schema_version").get();
+const dbVersion = sv ? sv.version : 0;
+
+function ensureVersion(v) { return dbVersion < v; }
 
 
 // ─── SCHEMA ──────────────────────────────────────────────────
@@ -32,6 +42,7 @@ CREATE TABLE IF NOT EXISTS usuarios (
   password TEXT, rol TEXT, roles TEXT DEFAULT '[]',
   suc_id TEXT, suc_sesiones_permitidas TEXT DEFAULT '[]',
   activo INTEGER DEFAULT 1, creado TEXT,
+  must_change_password INTEGER DEFAULT 0,
   data TEXT DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS vendedores (
@@ -429,8 +440,54 @@ CREATE TABLE IF NOT EXISTS ausencias (
   creado TEXT
 );
 
+CREATE TABLE IF NOT EXISTS asistencias (
+  id TEXT PRIMARY KEY,
+  empleado_id TEXT NOT NULL,
+  tipo TEXT NOT NULL DEFAULT 'entrada',
+  fecha_hora TEXT NOT NULL,
+  suc_id TEXT,
+  notas TEXT,
+  creado TEXT
+);
+
+CREATE TABLE IF NOT EXISTS historial_salarios (
+  id TEXT PRIMARY KEY,
+  empleado_id TEXT NOT NULL,
+  salario_anterior REAL DEFAULT 0,
+  salario_nuevo REAL DEFAULT 0,
+  fecha TEXT NOT NULL,
+  motivo TEXT,
+  modificado_por TEXT
+);
+
 CREATE TABLE IF NOT EXISTS config (
   key TEXT PRIMARY KEY, value TEXT
+);
+
+CREATE TABLE IF NOT EXISTS login_attempts (
+  key TEXT PRIMARY KEY,
+  count INTEGER DEFAULT 0,
+  last_attempt TEXT,
+  locked_until TEXT
+);
+CREATE TABLE IF NOT EXISTS user_2fa (
+  user_id TEXT PRIMARY KEY,
+  secret TEXT NOT NULL,
+  enabled INTEGER DEFAULT 0,
+  created_at TEXT
+);
+CREATE TABLE IF NOT EXISTS user_2fa_backup_codes (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  code_hash TEXT NOT NULL,
+  used INTEGER DEFAULT 0,
+  created_at TEXT
+);
+CREATE TABLE IF NOT EXISTS password_history (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  password_hash TEXT NOT NULL,
+  created_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS categorias (
@@ -481,7 +538,8 @@ CREATE TABLE IF NOT EXISTS tareas (
 );
 `);
 
-// ─── MIGRATIONS ── add data col to tables if missing ──
+// ─── MIGRATIONS (version-gated) ──
+if (ensureVersion(1)) {
 try { sqlite.exec("ALTER TABLE pipeline_etapas ADD COLUMN data TEXT DEFAULT '{}'"); } catch(e) {}
 try { sqlite.exec("ALTER TABLE pipeline_oportunidades ADD COLUMN data TEXT DEFAULT '{}'"); } catch(e) {}
 try { sqlite.exec("ALTER TABLE pipeline_oportunidades ADD COLUMN usuario_id TEXT"); } catch(e) {}
@@ -491,6 +549,10 @@ try { sqlite.exec("ALTER TABLE pipeline_oportunidades ADD COLUMN proximo_contact
 try { sqlite.exec("ALTER TABLE pipeline_oportunidades ADD COLUMN motivo TEXT DEFAULT ''"); } catch(e) {}
 try { sqlite.exec("ALTER TABLE tareas ADD COLUMN data TEXT DEFAULT '{}'"); } catch(e) {}
 try { sqlite.exec("ALTER TABLE password_reset_tokens ADD COLUMN data TEXT DEFAULT '{}'"); } catch(e) {}
+// 2FA and password history tables (idempotent)
+try { sqlite.exec("CREATE TABLE IF NOT EXISTS user_2fa (user_id TEXT PRIMARY KEY, secret TEXT NOT NULL, enabled INTEGER DEFAULT 0, created_at TEXT)"); } catch(e) {}
+try { sqlite.exec("CREATE TABLE IF NOT EXISTS user_2fa_backup_codes (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, code_hash TEXT NOT NULL, used INTEGER DEFAULT 0, created_at TEXT)"); } catch(e) {}
+try { sqlite.exec("CREATE TABLE IF NOT EXISTS password_history (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, password_hash TEXT NOT NULL, created_at TEXT)"); } catch(e) {}
 // ARCA factura columns
 try { sqlite.exec("ALTER TABLE venta_items ADD COLUMN variante_id TEXT"); } catch(e) {}
 try { sqlite.exec("ALTER TABLE presupuesto_items ADD COLUMN variante_id TEXT"); } catch(e) {}
@@ -510,6 +572,12 @@ try { sqlite.exec("ALTER TABLE ventas ADD COLUMN cobrado_por TEXT"); } catch(e) 
 try { sqlite.exec("ALTER TABLE ventas ADD COLUMN pagos_detalle TEXT"); } catch(e) {}
 try { sqlite.exec("ALTER TABLE ventas ADD COLUMN ctacte_monto REAL DEFAULT 0"); } catch(e) {}
 try { sqlite.exec("ALTER TABLE ventas ADD COLUMN envio_detalle TEXT"); } catch(e) {}
+// RRHH-Usuarios link
+try { sqlite.exec("ALTER TABLE empleados ADD COLUMN usuario_id TEXT"); } catch(e) {}
+// Force password change flag
+try { sqlite.exec("ALTER TABLE usuarios ADD COLUMN must_change_password INTEGER DEFAULT 0"); } catch(e) {}
+}
+sqlite.prepare("INSERT OR REPLACE INTO schema_version(version) VALUES(?)").run(CURRENT_SCHEMA_VERSION);
 
 // ─── SEED ────────────────────────────────────────────────────
 function buildSeed() {
@@ -525,10 +593,12 @@ function buildSeed() {
   const insS = sqlite.prepare("INSERT INTO sucursales(id,nombre,dir,ciudad,tel,email,responsable) VALUES(?,?,?,?,?,?,?)");
   suc.forEach(s => insS.run(...s));
 
-  const pass = bcrypt.hashSync('admin123',10);
-  const pass2 = bcrypt.hashSync('vend123',10);
+  const seedAdminPass = process.env.SEED_ADMIN_PASSWORD || 'admin123';
+  const seedVendPass = process.env.SEED_ADMIN_PASSWORD || 'vend123';
+  const pass = bcrypt.hashSync(seedAdminPass,10);
+  const pass2 = bcrypt.hashSync(seedVendPass,10);
   const now = new Date().toISOString();
-  const insU = sqlite.prepare("INSERT INTO usuarios(id,nombre,usuario,email,password,rol,suc_id,suc_sesiones_permitidas,activo,creado) VALUES(?,?,?,?,?,?,?,?,1,?)");
+  const insU = sqlite.prepare("INSERT INTO usuarios(id,nombre,usuario,email,password,rol,suc_id,suc_sesiones_permitidas,activo,creado,must_change_password) VALUES(?,?,?,?,?,?,?,?,1,?,1)");
   [
     ['u1','Administrador','admin','admin@entremimos.com',pass,'admin','s1',now],
     ['u2','Laura Gómez','laura','laura@entremimos.com',pass,'supervisor','s1',now],
@@ -650,6 +720,7 @@ const pipelineStages = [
 ];
 const allEtapas = sqlite.prepare("SELECT id, nombre, orden, color FROM pipeline_etapas WHERE activo != 0").all();
 const standardNames = pipelineStages.map(s => s.nombre.toLowerCase());
+const standardNamesSet = new Set(standardNames);
 const seenNames = new Set();
 const toDelete = [];
 for (const e of allEtapas) {
@@ -670,7 +741,7 @@ for (const e of allEtapas) {
         sqlite.prepare("UPDATE pipeline_etapas SET nombre = ?, orden = ?, color = ? WHERE id = ?").run(match.nombre, match.orden, match.color, e.id);
       }
     }
-  } else if (!standardNames.includes(nameLower)) {
+  } else if (!standardNamesSet.has(nameLower)) {
     // Non-standard stage (t1, nuevo pipeline): mark for deletion unless it has opportunities
     const count = sqlite.prepare("SELECT COUNT(*) as n FROM pipeline_oportunidades WHERE etapa_id = ? AND activo != 0").get(e.id);
     if (!count || count.n === 0) {
@@ -682,7 +753,7 @@ for (const e of allEtapas) {
 const delStmt = sqlite.prepare("UPDATE pipeline_etapas SET activo = 0 WHERE id = ?");
 for (const id of toDelete) delStmt.run(id);
 // Insert any missing standard stages
-const existingNames = new Set(allEtapas.filter(e => !toDelete.includes(e.id)).map(e => e.nombre.trim().toLowerCase()));
+const existingNames = new Set(allEtapas.flatMap(e => toDelete.includes(e.id) ? [] : [e.nombre.trim().toLowerCase()]));
 for (const st of pipelineStages) {
   if (!existingNames.has(st.nombre.toLowerCase())) {
     const id = Date.now().toString(36) + Math.random().toString(36).substr(2, 4);
@@ -748,9 +819,9 @@ const COLS = {
   cajas:['id','suc_id','fecha','estado','fondo_inicial','usuario_apertura','usuario_cierre','saldo_esperado_efectivo','saldo_real','diferencia','fecha_cierre','notas','cierre_forzado'],
   movimientos_caja:['id','caja_id','suc_id','fecha','tipo','concepto','monto','pago_metodo','usuario','auto','anulado','pendiente_id','venta_id'],
   presupuestos:['id','numero','fecha','fecha_vto','suc_id','vend_id','vend_nombre_fallback','cliente_id','cli_nombre_manual','subtotal','descuento','total','notas','observaciones','estado','dias_validez'],
-  presupuesto_items:['id','presupuesto_id','prod_id','nombre','talle','precio','cantidad','subtotal'],
+  presupuesto_items:['id','presupuesto_id','prod_id','variante_id','nombre','talle','precio','cantidad','subtotal'],
   pendientes:['id','numero','fecha','fecha_vto','fecha_entrega_estimada','fecha_entrega','suc_id','suc_entrega','suc_cobro','vend_id','vend_nombre_fallback','cliente_id','total','sena','saldo','estado','concepto','notas','venta_id','activo_stock'],
-  pendiente_items:['id','pendiente_id','prod_id','nombre','talle','precio','cantidad','subtotal','entregado'],
+  pendiente_items:['id','pendiente_id','prod_id','variante_id','nombre','talle','precio','cantidad','subtotal','entregado'],
   ctacte_movimientos:['id','cliente_id','tipo','concepto','monto','fecha','fecha_vto','cancelado','suc_id','venta_id','pendiente_id','observaciones'],
   proveedores:['id','nombre','cuit','dir','tel','email','contacto','categoria','condicion_pago','notas','activo'],
   prov_oc:['id','numero','prov_id','fecha','fecha_entrega_est','estado','total','notas','creado_por'],
@@ -761,7 +832,7 @@ const COLS = {
   gastos_categorias:['id','nombre','icono','activo'],
   gastos_recurrentes:['id','nombre','categoria_id','monto_estimado','dia_vencimiento','suc_id','activo','notas'],
   gastos:['id','nombre','categoria_id','categoria_nombre','monto','fecha','fecha_vencimiento','estado','metodo_pago','suc_id','recurrente_id','nro_comprobante','notas','registrado_por','pagado_por','genera_egreso_caja','caja_movimiento_id'],
-  audit_log:['id','fecha','usuario_id','usuario_nombre','suc_id','modulo','accion','descripcion','entidad_id'],
+  audit_log:['id','fecha','usuario_id','usuario_nombre','suc_id','modulo','accion','descripcion','entidad_id','data'],
   chat_messages:['id','fecha','autor_id','autor_nombre','suc_origen','suc_destino','texto','leido'],
   chat_settings:['id','suc_id','peer','fijado','activo','hasta','by','fecha'],
   lista_bebe:['id','mama','bebe','tel','email','fecha_parto','estado','notas','suc_id','creado'],
@@ -772,24 +843,30 @@ const COLS = {
   categorias:['id','nombre','icono','activo'],
   producto_variantes:['id','producto_id','nombre','sku','codigo_barras','atributos','costo','precio_l1','precio_l2','precio_l3','orden','activo'],
   variante_stock_suc:['variante_id','suc_id','cantidad'],
-  transferencia_items:['id','transferencia_id','prod_id','nombre','talle','cantidad','cantidad_recibida'],
+  transferencia_items:['id','transferencia_id','prod_id','variante_id','nombre','talle','cantidad','cantidad_recibida'],
   pipeline_etapas:['id','nombre','orden','color','suc_id','activo'],
   pipeline_oportunidades:['id','nombre','etapa_id','cliente_id','cli_nombre','valor_estimado','probabilidad','fecha_creacion','fecha_cierre_estimada','fecha_cierre','vend_id','vend_nombre','usuario_id','usuario_nombre','observacion','proximo_contacto','suc_id','notas','estado','venta_id','activo','motivo'],
   tareas:['id','creado_por','creado_nombre','descripcion','fecha_creacion','fecha_fin','asignado_a','suc_id','estado','observacion','activo'],
+  user_2fa:['user_id','secret','enabled','created_at'],
+  user_2fa_backup_codes:['id','user_id','code_hash','used','created_at'],
+  password_history:['id','user_id','password_hash','created_at'],
   password_reset_tokens:['id','usuario_id','email','token','expires','usado','creado'],
   codigos_descuento:['codigo','tipo','valor','usos_maximos','usos_actuales','monto_minimo','activo','aplica_a','vence','creado','notas'],
   webhooks:['id','url','eventos','token','activo','creado'],
-  empleados:['id','nombre','apellido','dni','cuil','tel','email','direccion','fecha_ingreso','puesto','salario','obra_social','suc_id','activo','notas','creado'],
+  empleados:['id','nombre','apellido','dni','cuil','tel','email','direccion','fecha_ingreso','puesto','salario','obra_social','suc_id','activo','notas','creado','usuario_id'],
   ausencias:['id','empleado_id','tipo','fecha_inicio','fecha_fin','motivo','certificado','aprobado_por','creado'],
+  asistencias:['id','empleado_id','tipo','fecha_hora','suc_id','notas','creado'],
+  historial_salarios:['id','empleado_id','salario_anterior','salario_nuevo','fecha','motivo','modificado_por'],
 };
 
 function prepareRow(table, obj) {
   const cols = COLS[table] || Object.keys(obj);
+  const colsSet = new Set(cols);
   const row = {};
   const extra = {};
   for (const [k, v] of Object.entries(obj)) {
-    if (k === 'stock_suc' || k === 'stock' || k === 'stock_actual') continue; // handled separately
-    if (cols.includes(k)) {
+    if (k === 'stock_suc' || k === 'stock' || k === 'stock_actual') continue;
+    if (colsSet.has(k)) {
       if (typeof v === 'boolean') row[k] = v ? 1 : 0;
       else if (Array.isArray(v) || (v && typeof v === 'object')) row[k] = JSON.stringify(v);
       else row[k] = v;
@@ -900,12 +977,16 @@ const db = {
     if (key) {
       const row = sqlite.prepare("SELECT value FROM config WHERE key=?").get(key);
       if (!row) return null;
-      try { return JSON.parse(row.value); } catch(e) { return row.value; }
+      const val = (() => { try { return JSON.parse(row.value); } catch(e) { return row.value; } })();
+      if (isSensitiveKey(key) && isEncrypted(val)) return decryptValue(val);
+      return val;
     }
     const rows = sqlite.prepare("SELECT key, value FROM config").all();
     const cfg = {};
     rows.forEach(r => {
-      try { cfg[r.key] = JSON.parse(r.value); } catch(e) { cfg[r.key] = r.value; }
+      let val = (() => { try { return JSON.parse(r.value); } catch(e) { return r.value; } })();
+      if (isSensitiveKey(r.key) && isEncrypted(val)) val = decryptValue(val);
+      cfg[r.key] = val;
     });
     return cfg;
   },
@@ -913,7 +994,9 @@ const db = {
   setConfig(data) {
     const stmt = sqlite.prepare("INSERT OR REPLACE INTO config(key,value) VALUES(?,?)");
     for (const [k, v] of Object.entries(data)) {
-      stmt.run(k, typeof v === 'string' ? v : JSON.stringify(v));
+      let val = typeof v === 'string' ? v : JSON.stringify(v);
+      if (isSensitiveKey(k) && !isEncrypted(val)) val = encryptValue(val);
+      stmt.run(k, val);
     }
   },
 
@@ -934,7 +1017,8 @@ const db = {
     const backupDir = path.join(__dirname, 'data', 'backups');
     if (!fs.existsSync(backupDir)) fs.mkdirSync(backupDir, { recursive: true });
     const dest = path.join(backupDir, `crm_backup_${today}.db`);
-    sqlite.exec(`VACUUM INTO '${dest.replace(/'/g, "''")}'`);
+    const safeDest = dest.replace(/[^a-zA-Z0-9_\\/.\-:]/g, '');
+    sqlite.exec(`VACUUM INTO '${safeDest.replace(/'/g, "''")}'`);
     // Keep last 30 backups
     const files = fs.readdirSync(backupDir).filter(f => f.endsWith('.db')).sort();
     if (files.length > 30) files.slice(0, files.length - 30).forEach(f => fs.unlinkSync(path.join(backupDir, f)));
@@ -946,7 +1030,7 @@ const db = {
   raw: sqlite,
 
   // ── Audit helper — disponible en todas las DBs ──
-  audit(usuario, suc_id, modulo, accion, descripcion, entidad_id) {
+  audit(usuario, suc_id, modulo, accion, descripcion, entidad_id, extra) {
     try {
       this.insert('audit_log', {
         id: Math.random().toString(36).substr(2,9) + Date.now().toString(36),
@@ -957,6 +1041,7 @@ const db = {
         modulo, accion,
         descripcion: descripcion || accion,
         entidad_id: entidad_id || null,
+        data: extra ? JSON.stringify(extra) : '{}',
       });
     } catch(e) { /* audit never breaks the app */ }
   },

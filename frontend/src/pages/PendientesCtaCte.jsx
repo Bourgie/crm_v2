@@ -219,7 +219,7 @@ async function buscarVentas() {
           <option value="">Todos</option>
           {Object.entries(EST_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <button className="btn btn-primary" onClick={async ()=>{
+        <button type="button" className="btn btn-primary" onClick={async ()=>{
           setModalBuscarVta(true); setVentaSeleccionada(null); setVentasSearch('');
           setBvtaDesde(new Date(new Date().getTime()-30*86400000).toISOString().substr(0,10));
           setBvtaHasta(new Date().toISOString().substr(0,10));
@@ -255,9 +255,9 @@ async function buscarVentas() {
                         <td onClick={(e) => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: 4 }}>
                             {p.estado !== 'entregado' && p.estado !== 'cancelado' && (
-                              <button className="btn btn-sm" style={{ background: '#dcfce7', color: '#15803d', border: 'none' }} onClick={() => cambiarEstado(p.id, 'entregado')}>✅</button>
+                              <button type="button" className="btn btn-sm" style={{ background: '#dcfce7', color: '#15803d', border: 'none' }} onClick={() => cambiarEstado(p.id, 'entregado')}>✅</button>
                             )}
-                            <button className="btn btn-icon btn-sm" onClick={() => setConfirm(p.id)}>🗑</button>
+                            <button type="button" className="btn btn-icon btn-sm" onClick={() => setConfirm(p.id)}>🗑</button>
                           </div>
                         </td>
                       </tr>
@@ -273,24 +273,24 @@ async function buscarVentas() {
         footer={<>
           {modal === 'new' ? (
             <>
-              <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={save} disabled={saving}>
+              <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
                 {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Guardando...</> : '💾 Crear pedido'}
               </button>
             </>
           ) : (
             <>
-              <button className="btn btn-secondary" onClick={() => setModal(null)}>Cerrar</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Cerrar</button>
               {modal?.estado !== 'entregado' && modal?.estado !== 'cancelado' && (
                 <>
-                  <button className="btn" style={{ background: '#dbeafe', color: '#1d4ed8', border: 'none' }}
+                  <button type="button" className="btn" style={{ background: '#dbeafe', color: '#1d4ed8', border: 'none' }}
                     onClick={() => { cambiarEstado(modal.id, 'listo'); setModal(null) }}>✅ Marcar listo</button>
-                  <button className="btn" style={{ background: '#dcfce7', color: '#15803d', border: 'none' }}
+                  <button type="button" className="btn" style={{ background: '#dcfce7', color: '#15803d', border: 'none' }}
                     onClick={() => { cambiarEstado(modal.id, 'entregado'); setModal(null) }}>📦 Entregar todo</button>
                 </>
               )}
               {modal?.estado === 'pendiente' && (
-                <button className="btn" style={{ background: '#fef3c7', color: '#92400e', border: 'none' }}
+                <button type="button" className="btn" style={{ background: '#fef3c7', color: '#92400e', border: 'none' }}
                   onClick={() => { cambiarEstado(modal.id, 'en_preparacion'); setModal(null) }}>👨‍🍳 En preparación</button>
               )}
             </>
@@ -329,10 +329,10 @@ async function buscarVentas() {
                   <div>{i === 0 && <label style={{ display: 'block', fontSize: 11, color: 'var(--mu)', marginBottom: 3 }}>Talle</label>}<input value={line.talle} onChange={(e) => setFItems((p) => p.map((l, idx) => idx === i ? { ...l, talle: e.target.value } : l))} placeholder="M" /></div>
                   <div>{i === 0 && <label style={{ display: 'block', fontSize: 11, color: 'var(--mu)', marginBottom: 3 }}>Precio</label>}<input type="number" value={line.precio} onChange={(e) => setFItems((p) => p.map((l, idx) => idx === i ? { ...l, precio: e.target.value } : l))} placeholder="0" min="0" /></div>
                   <div>{i === 0 && <label style={{ display: 'block', fontSize: 11, color: 'var(--mu)', marginBottom: 3 }}>Cant.</label>}<input type="number" value={line.cantidad} onChange={(e) => setFItems((p) => p.map((l, idx) => idx === i ? { ...l, cantidad: e.target.value } : l))} min="1" style={{ textAlign: 'center' }} /></div>
-                  <button onClick={() => setFItems((p) => p.filter((_, idx) => idx !== i || p.length === 1))} style={{ background: 'none', border: 'none', color: 'var(--mu)', cursor: 'pointer', fontSize: 18, paddingBottom: 2 }}>✕</button>
+                  <button type="button" onClick={() => setFItems((p) => p.filter((_, idx) => idx !== i || p.length === 1))} style={{ background: 'none', border: 'none', color: 'var(--mu)', cursor: 'pointer', fontSize: 18, paddingBottom: 2 }}>✕</button>
                 </div>
               ))}
-              <button className="btn btn-secondary btn-sm" onClick={() => setFItems((p) => [...p, { prod_id: '', nombre: '', talle: '', precio: '', cantidad: 1 }])}>+ Agregar producto</button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setFItems((p) => [...p, { prod_id: '', nombre: '', talle: '', precio: '', cantidad: 1 }])}>+ Agregar producto</button>
               {fItems.filter(i => i.nombre && i.precio).length > 0 && (<div style={{ textAlign: 'right', marginTop: 8, fontSize: 13, fontWeight: 700 }}>Total productos: {fmt(fItems.reduce((a, i) => a + (parseFloat(i.precio) || 0) * (parseInt(i.cantidad) || 1), 0))}</div>)}
             </div>
             <Field label="Notas"><textarea value={form.notas} onChange={set('notas')} rows={2} placeholder="Observaciones..." style={{ resize: 'vertical' }} /></Field>
@@ -387,7 +387,7 @@ async function buscarVentas() {
           <div className="modal" style={{maxWidth:640}}>
             <div className="modal-header">
               <h3>🔍 Crear pedido desde venta</h3>
-              <button onClick={()=>{setModalBuscarVta(false);setVentaSeleccionada(null)}} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--mu)'}}>×</button>
+              <button type="button" onClick={()=>{setModalBuscarVta(false);setVentaSeleccionada(null)}} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--mu)'}}>×</button>
             </div>
             <div className="modal-body">
               {!ventaSeleccionada ? (
@@ -411,7 +411,7 @@ async function buscarVentas() {
                               <td>{v.cli_nombre||'Consumidor'}</td>
                               <td style={{fontSize:11}}>{v.vend_nombre||''}</td>
                               <td style={{fontWeight:700,color:'var(--ac)'}}>{fmt(v.total)}</td>
-                              <td><button className="btn btn-primary btn-sm" onClick={()=>abrirDesdeVenta(v)}>Elegir</button></td>
+                              <td><button type="button" className="btn btn-primary btn-sm" onClick={()=>abrirDesdeVenta(v)}>Elegir</button></td>
                             </tr>
                           ))}
                         </tbody>
@@ -483,8 +483,8 @@ async function buscarVentas() {
                   </div>
                   <div className="fg"><label>📝 Observaciones / Personalización</label><textarea value={bvtaObs} onChange={(e)=>setBvtaObs(e.target.value)} rows={2} placeholder="Bordado, color, medidas especiales..." style={{resize:'vertical'}}/></div>
                   <div style={{display:'flex',gap:8,marginTop:4}}>
-                    <button className="btn btn-secondary" onClick={()=>setVentaSeleccionada(null)}>← Volver</button>
-                    <button className="btn btn-primary" onClick={crearDesdeVenta} disabled={saving || !bvtaItemsSel.some(x=>x.checked)} style={{flex:1,justifyContent:'center'}}>
+                    <button type="button" className="btn btn-secondary" onClick={()=>setVentaSeleccionada(null)}>← Volver</button>
+                    <button type="button" className="btn btn-primary" onClick={crearDesdeVenta} disabled={saving || !bvtaItemsSel.some(x=>x.checked)} style={{flex:1,justifyContent:'center'}}>
                       {saving?<><span className="spinner" style={{width:14,height:14}}/> Creando...</>:'✅ Crear pedido'}
                     </button>
                   </div>
@@ -626,9 +626,9 @@ export function CtaCte() {
                     <td style={{ fontSize: 12, color: 'var(--mu)' }}>{fmtDate(c.ultima_compra)}</td>
                     <td>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                        <button className="btn btn-icon btn-sm" title="Historial" onClick={() => { setModalHist(c); loadHistorial(c.id) }}>📋</button>
+                        <button type="button" className="btn btn-icon btn-sm" title="Historial" onClick={() => { setModalHist(c); loadHistorial(c.id) }}>📋</button>
                         {(c.saldo || 0) > 0 && (
-                          <button className="btn btn-sm" style={{ background: '#dcfce7', color: '#15803d', border: 'none' }} onClick={() => { setModalPago(c); setFormPago({ monto: String(Math.max(0, c.saldo || 0)), obs: '', metodo: 'efectivo' }) }}>💵 Cobrar</button>
+                          <button type="button" className="btn btn-sm" style={{ background: '#dcfce7', color: '#15803d', border: 'none' }} onClick={() => { setModalPago(c); setFormPago({ monto: String(Math.max(0, c.saldo || 0)), obs: '', metodo: 'efectivo' }) }}>💵 Cobrar</button>
                         )}
                       </div>
                     </td>
@@ -644,8 +644,8 @@ export function CtaCte() {
       <Modal open={!!modalPago} onClose={() => setModalPago(null)} size="sm"
         title={`💵 Registrar pago — ${modalPago?.nombre}`}
         footer={<>
-          <button className="btn btn-secondary" onClick={() => setModalPago(null)}>Cancelar</button>
-          <button className="btn btn-primary" style={{ background: 'var(--ok)' }} onClick={registrarPago} disabled={saving}>
+          <button type="button" className="btn btn-secondary" onClick={() => setModalPago(null)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" style={{ background: 'var(--ok)' }} onClick={registrarPago} disabled={saving}>
             {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Guardando...</> : '✅ Registrar pago'}
           </button>
         </>}
@@ -658,7 +658,7 @@ export function CtaCte() {
                 {(modalPago.saldo || 0) > 0 ? `Debe ${fmt(modalPago.saldo)}` : 'Al día'}
               </div>
             </div>
-            <Field label="Monto del pago *"><input type="number" value={formPago.monto} onChange={(e) => setFormPago((p) => ({ ...p, monto: e.target.value }))} min="0" style={{ fontSize: 18, fontWeight: 700, textAlign: 'center' }} autoFocus /></Field>
+            <Field label="Monto del pago *"><input type="number" value={formPago.monto} onChange={(e) => setFormPago((p) => ({ ...p, monto: e.target.value }))} min="0" style={{ fontSize: 18, fontWeight: 700, textAlign: 'center' }} /></Field>
             <Field label="Método">
               <select value={formPago.metodo} onChange={(e) => setFormPago((p) => ({ ...p, metodo: e.target.value }))}>
                 <option value="efectivo">💵 Efectivo</option>
@@ -700,3 +700,5 @@ export function CtaCte() {
 }
 
 const selStyle = { padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--bd)', cursor: 'pointer', fontSize: 13, background: 'var(--bg)', color: 'var(--tx)' }
+
+

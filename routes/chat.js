@@ -154,12 +154,14 @@ router.post('/mark-read', (req, res) => {
     filtro = m => m.autor_id !== req.user.id &&
       (m.suc_destino === 'all' || m.suc_destino === mySuc || m.suc_origen === mySuc);
   }
-  all.filter(filtro).forEach(m => {
+  for (const m of all) {
+    if (!filtro(m)) continue;
     const lp = Array.isArray(m.leido_por) ? m.leido_por : [];
-    if (!lp.includes(req.user.id)) {
+    const lpSet = new Set(lp);
+    if (!lpSet.has(req.user.id)) {
       empDB.update('chat_messages', m.id, { leido_por: [...lp, req.user.id], leido: true });
     }
-  });
+  }
   res.json({ ok: true });
 });
 

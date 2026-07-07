@@ -106,8 +106,8 @@ export function Layout() {
 
         {/* Topbar */}
         <div className="topbar">
-          <button
-            className="btn btn-icon hamburger"
+          <buttontype="button" 
+            type="button" className="btn btn-icon hamburger"
             onClick={() => setSidebarOpen(true)}
           >
             ☰
@@ -123,3 +123,5 @@ export function Layout() {
     </div>
   )
 }
+
+

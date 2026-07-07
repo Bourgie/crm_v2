@@ -77,7 +77,6 @@ function ModalAjustePuntos({ open, onClose, cliente, onSave }) {
   const [motivo, setMotivo] = useState('')
   const [saving, setSaving] = useState(false)
   const { toast } = useToast()
-  useEffect(() => { if (open) { setTipo('suma'); setPuntos(''); setMotivo('') } }, [open])
 
   async function guardar() {
     const pts = parseInt(puntos)
@@ -100,15 +99,15 @@ function ModalAjustePuntos({ open, onClose, cliente, onSave }) {
 
   return (
     <Modal open={open} onClose={onClose} title={`⭐ Ajustar puntos — ${cliente?.nombre || ''}`} size="sm"
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" onClick={guardar} disabled={saving}>{saving ? 'Guardando...' : '💾 Aplicar'}</button></>}>
+      footer={<><button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button type="button" className="btn btn-primary" onClick={guardar} disabled={saving}>{saving ? 'Guardando...' : '💾 Aplicar'}</button></>}>
       <div style={{ background: 'var(--sf)', borderRadius: 8, padding: '10px 14px', marginBottom: 14, display: 'flex', justifyContent: 'space-between' }}>
         <span style={{ color: 'var(--mu)' }}>Puntos actuales</span>
         <span style={{ fontWeight: 800, fontSize: 20, color: 'var(--warn)' }}>{cliente?.puntos || 0} pts</span>
       </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
         {acciones.map(a => (
-          <button key={a.id} className={`btn btn-sm ${tipo === a.id ? 'btn-primary' : 'btn-secondary'}`}
+          <button type="button" key={a.id} className={`btn btn-sm ${tipo === a.id ? 'btn-primary' : 'btn-secondary'}`}
             style={tipo === a.id ? { background: a.color, borderColor: a.color } : {}}
             onClick={() => setTipo(a.id)}>{a.label}</button>
         ))}
@@ -130,6 +129,33 @@ function ModalAjustePuntos({ open, onClose, cliente, onSave }) {
   )
 }
 
+// ── ClienteSelect ──
+function ClienteSelect({ value, onChange, search, setSearch, label, clientes }) {
+  const list = search ? clientes.filter(c =>
+    !c.activo === false &&
+    (c.nombre + ' ' + (c.apellido||'') + ' ' + (c.dni||'') + ' ' + (c.tel||'')).toLowerCase().includes(search.toLowerCase())
+  ) : []
+  return (
+    <Field label={label}>
+      <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+        placeholder="Buscar cliente..." style={{ marginBottom: 4 }} />
+      {value && <div style={{ padding: '6px 10px', background: 'var(--sf)', borderRadius: 6, fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
+        {clientes.find(c => c.id === value)?.nombre || ''} {clientes.find(c => c.id === value)?.apellido || ''}
+      </div>}
+      {search && list.length > 0 && (
+        <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid var(--bd)', borderRadius: 6 }}>
+          {list.slice(0, 10).map(c => (
+            <div key={c.id} onClick={() => { onChange(c.id); setSearch('') }}
+              style={{ padding: '6px 10px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid var(--bd)' }}>
+              {c.nombre} {c.apellido || ''} {c.dni ? `· ${c.dni}` : ''}
+            </div>
+          ))}
+        </div>
+      )}
+    </Field>
+  )
+}
+
 // ── Modal Merge Clientes ──
 function ModalMerge({ open, onClose, clientes, onMerge }) {
   const [origen, setOrigen] = useState('')
@@ -139,15 +165,12 @@ function ModalMerge({ open, onClose, clientes, onMerge }) {
   const [searchD, setSearchD] = useState('')
   const { toast } = useToast()
 
-  const filtered = (search) => clientes.filter(c =>
-    !c.activo === false &&
-    (c.nombre + ' ' + (c.apellido||'') + ' ' + (c.dni||'') + ' ' + (c.tel||'')).toLowerCase().includes(search.toLowerCase())
-  )
-
   const origenCli = clientes.find(c => c.id === origen)
   const destinoCli = clientes.find(c => c.id === destino)
 
-  useEffect(() => { if (open) { setOrigen(''); setDestino(''); setSearchO(''); setSearchD('') } }, [open])
+  useEffect(() => {
+    setOrigen(''); setDestino(''); setSearchO(''); setSearchD('')
+  }, [])
 
   async function confirmar() {
     if (!origen || !destino) { toast('Seleccioná ambos clientes', 'err'); return }
@@ -161,41 +184,18 @@ function ModalMerge({ open, onClose, clientes, onMerge }) {
     finally { setSaving(false) }
   }
 
-  function ClienteSelect({ value, onChange, search, setSearch, label }) {
-    const list = search ? filtered(search) : []
-    return (
-      <Field label={label}>
-        <input type="text" value={search} onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar cliente..." style={{ marginBottom: 4 }} />
-        {value && <div style={{ padding: '6px 10px', background: 'var(--sf)', borderRadius: 6, fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-          {clientes.find(c => c.id === value)?.nombre || ''} {clientes.find(c => c.id === value)?.apellido || ''}
-        </div>}
-        {search && list.length > 0 && (
-          <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid var(--bd)', borderRadius: 6 }}>
-            {list.slice(0, 10).map(c => (
-              <div key={c.id} onClick={() => { onChange(c.id); setSearch('') }}
-                style={{ padding: '6px 10px', cursor: 'pointer', fontSize: 13, borderBottom: '1px solid var(--bd)' }}>
-                {c.nombre} {c.apellido || ''} {c.dni ? `· ${c.dni}` : ''}
-              </div>
-            ))}
-          </div>
-        )}
-      </Field>
-    )
-  }
-
   return (
     <Modal open={open} onClose={onClose} title="🔀 Fusionar clientes duplicados" size="md"
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-danger" onClick={confirmar} disabled={saving || !origen || !destino}>
+      footer={<><button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button type="button" className="btn btn-danger" onClick={confirmar} disabled={saving || !origen || !destino}>
           {saving ? 'Fusionando...' : '🔀 Fusionar'}
         </button></>}>
       <p style={{ fontSize: 13, color: 'var(--mu)', marginBottom: 14 }}>
         Todos los datos del cliente <strong>origen</strong> (ventas, ctacte, pedidos, puntos) pasarán al <strong>destino</strong>. El origen se dará de baja.
       </p>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-        <ClienteSelect value={origen} onChange={setOrigen} search={searchO} setSearch={setSearchO} label="📤 Cliente origen" />
-        <ClienteSelect value={destino} onChange={setDestino} search={searchD} setSearch={setSearchD} label="📥 Cliente destino" />
+        <ClienteSelect value={origen} onChange={setOrigen} search={searchO} setSearch={setSearchO} label="📤 Cliente origen" clientes={clientes} />
+        <ClienteSelect value={destino} onChange={setDestino} search={searchD} setSearch={setSearchD} label="📥 Cliente destino" clientes={clientes} />
       </div>
       {origenCli && destinoCli && (
         <div style={{ marginTop: 14, padding: 10, background: 'rgba(239,68,68,.06)', borderRadius: 8, fontSize: 12 }}>
@@ -424,10 +424,10 @@ export function Clientes() {
           <option value="ctacte">Con cta. corriente</option>
           <option value="deudor">Con deuda</option>
         </select>
-        <button className="btn btn-secondary btn-sm" onClick={exportar}>📊 Excel</button>
-        <button className="btn btn-secondary btn-sm" onClick={importar} disabled={importing}>📥 Importar</button>
-        {['admin','supervisor'].includes(me?.rol) && <button className="btn btn-secondary btn-sm" onClick={() => setModalMerge(true)}>🔀 Merge</button>}
-        <button className="btn btn-primary" onClick={openNew}>+ Nuevo cliente</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={exportar}>📊 Excel</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={importar} disabled={importing}>📥 Importar</button>
+        {['admin','supervisor'].includes(me?.rol) && <button type="button" className="btn btn-secondary btn-sm" onClick={() => setModalMerge(true)}>🔀 Merge</button>}
+        <button type="button" className="btn btn-primary" onClick={openNew}>+ Nuevo cliente</button>
       </PageHeader>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -466,9 +466,9 @@ export function Clientes() {
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-icon btn-sm" title="Ver ficha" onClick={() => openFicha(c)}>👁</button>
-                        <button className="btn btn-icon btn-sm" title="Historial ventas" onClick={() => navigate('/app/ventas?cli_id=' + c.id)}>📋</button>
-                        <button className="btn btn-icon btn-sm" title="Eliminar" onClick={() => setConfirm(c.id)}>🗑</button>
+                        <button type="button" className="btn btn-icon btn-sm" title="Ver ficha" onClick={() => openFicha(c)}>👁</button>
+                        <button type="button" className="btn btn-icon btn-sm" title="Historial ventas" onClick={() => navigate('/app/ventas?cli_id=' + c.id)}>📋</button>
+                        <button type="button" className="btn btn-icon btn-sm" title="Eliminar" onClick={() => setConfirm(c.id)}>🗑</button>
                       </div>
                     </td>
                   </tr>
@@ -488,8 +488,8 @@ export function Clientes() {
         title={modal === 'new' ? '+ Nuevo cliente' : `Editar: ${modal?.nombre} ${modal?.apellido || ''}`}
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-            <button className="btn btn-primary" onClick={save} disabled={saving}>
+            <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+            <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
               {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Guardando...</> : '💾 Guardar'}
             </button>
           </>
@@ -510,6 +510,7 @@ export function Clientes() {
 
       {/* Merge modal */}
       <ModalMerge
+        key={modalMerge ? 'merge-open' : 'merge-closed'}
         open={modalMerge}
         onClose={() => setModalMerge(false)}
         clientes={clientes}
@@ -518,6 +519,7 @@ export function Clientes() {
 
       {/* Ajuste puntos modal */}
       <ModalAjustePuntos
+        key={modalPuntos?.id || 'puntos-closed'}
         open={!!modalPuntos}
         onClose={() => setModalPuntos(null)}
         cliente={modalPuntos}
@@ -530,7 +532,7 @@ export function Clientes() {
           <div className="modal" style={{ maxWidth: 680 }}>
             <div className="modal-header">
               <h3>📋 {ficha.nombre} {ficha.apellido || ''}</h3>
-              <button onClick={() => setFicha(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--mu)' }}>×</button>
+              <button type="button" onClick={() => setFicha(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--mu)' }}>×</button>
             </div>
             <div className="modal-body">
               {fichaLoading ? <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}><div className="spinner" /></div> : fichaData && (
@@ -576,7 +578,7 @@ export function Clientes() {
                       ['seguimiento', '📝 Seguimiento'],
                       ['notas', '📋 Notas'],
                     ].map(([key, label]) => (
-                      <button key={key} className={`btn btn-sm ${fichaTab === key ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setFichaTab(key)}>{label}</button>
+                      <button type="button" key={key} className={`btn btn-sm ${fichaTab === key ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setFichaTab(key)}>{label}</button>
                     ))}
                   </div>
 
@@ -609,7 +611,7 @@ export function Clientes() {
                         <div style={{ fontSize: 13, color: 'var(--mu)' }}>
                           Saldo: <strong style={{ fontSize: 20, color: 'var(--warn)' }}>{ficha.puntos || fichaData.stats.puntos || 0} pts</strong>
                         </div>
-                        <button className="btn btn-sm" style={{ background: 'var(--warn)', color: '#fff', border: 'none' }}
+                        <button type="button" className="btn btn-sm" style={{ background: 'var(--warn)', color: '#fff', border: 'none' }}
                           onClick={() => setModalPuntos(ficha)}>
                           ⭐ Gestionar puntos
                         </button>
@@ -718,8 +720,8 @@ export function Clientes() {
               )}
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => openEdit(ficha)}>✏️ Editar</button>
-              <button className="btn btn-secondary" onClick={() => setFicha(null)}>Cerrar</button>
+              <button type="button" className="btn btn-secondary" onClick={() => openEdit(ficha)}>✏️ Editar</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setFicha(null)}>Cerrar</button>
             </div>
           </div>
         </div>
@@ -727,3 +729,4 @@ export function Clientes() {
     </div>
   )
 }
+

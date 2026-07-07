@@ -13,6 +13,8 @@ const PAGO_LABELS = {
   transferencia: '🏦 Transferencia', qr: '📱 QR / MP', ctacte: '📒 Cta. Cte.', otro: 'Otro'
 }
 
+const fmt = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })
+
 function VentaDetail({ venta, api, onRefresh, onClose, showAnularByDefault }) {
   const [items, setItems] = useState([])
   const [movs, setMovs] = useState([])
@@ -49,8 +51,6 @@ function VentaDetail({ venta, api, onRefresh, onClose, showAnularByDefault }) {
     }
     load()
   }, [venta.id])
-
-  const fmt = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })
 
   const montoDev = items.reduce((acc, it, i) => {
     if (anTipo === 'parcial' && anSeleccion[i]) return acc + it.precio * (parseInt(anQty[i]) || 0)
@@ -130,7 +130,7 @@ function VentaDetail({ venta, api, onRefresh, onClose, showAnularByDefault }) {
           { label: 'Método', value: PAGO_LABELS[venta.pago] || venta.pago },
         ].map(({ label, value }) => (
           <div key={label} style={{ background: 'var(--sf)', borderRadius: 8, padding: '10px 14px' }}>
-            <div style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 4 }}>{label}</div>
+            <div style={{ fontSize: 12, color: 'var(--mu)', marginBottom: 4 }}>{label}</div>
             <div style={{ fontWeight: 600, fontSize: 13 }}>{value}</div>
           </div>
         ))}
@@ -145,11 +145,11 @@ function VentaDetail({ venta, api, onRefresh, onClose, showAnularByDefault }) {
             {items.length === 0
               ? <tr><td colSpan={4} style={{ textAlign: 'center', padding: 16, color: 'var(--mu)' }}>Sin items</td></tr>
               : items.map((it, i) => (
-                <tr key={i}>
+                <tr key={it.id||it.nombre||'vi-'+i}>
                   <td>
                     <div>{it.nombre}</div>
-                    {it.talle && <div style={{ fontSize: 11, color: 'var(--mu)' }}>{it.talle}</div>}
-                    {(it.cantidad_devuelta || 0) > 0 && <span className="badge badge-red" style={{ fontSize: 9 }}>{it.cantidad_devuelta} dev.</span>}
+                    {it.talle && <div style={{ fontSize: 12, color: 'var(--mu)' }}>{it.talle}</div>}
+                    {(it.cantidad_devuelta || 0) > 0 && <span className="badge badge-red" style={{ fontSize: 12 }}>{it.cantidad_devuelta} dev.</span>}
                   </td>
                   <td style={{ textAlign: 'center' }}>{it.cantidad}</td>
                   <td style={{ textAlign: 'right' }}>{fmt(it.precio)}</td>
@@ -183,7 +183,7 @@ function VentaDetail({ venta, api, onRefresh, onClose, showAnularByDefault }) {
       {/* Anular / Devolver */}
       {!venta.anulada && (
         <div style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--bd)' }}>
-          <button className="btn btn-danger btn-sm" style={{ justifyContent: 'center' }} onClick={toggleAnularShow}>
+          <button type="button" className="btn btn-danger btn-sm" style={{ justifyContent: 'center' }} onClick={toggleAnularShow}>
             {showAnular ? '✕ Cancelar' : '🗑 Anular / Devolver'}
           </button>
 
@@ -208,22 +208,22 @@ function VentaDetail({ venta, api, onRefresh, onClose, showAnularByDefault }) {
               {/* Items para devolución parcial */}
               {anTipo === 'parcial' && (
                 <div style={{ marginBottom: 12 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 6 }}>Seleccioná los productos a devolver</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 6 }}>Seleccioná los productos a devolver</div>
                   <div style={{ border: '1px solid var(--bd)', borderRadius: 8, overflow: 'hidden' }}>
                     {items.map((it, i) => {
                       const disp = it.cantidad - (it.cantidad_devuelta || 0)
                       if (disp <= 0) return (
-                        <div key={i} style={{ padding: '8px 12px', fontSize: 11, color: 'var(--mu)', borderBottom: '1px solid var(--bd)' }}>
+                        <div key={it.id||it.nombre||'dv-'+i} style={{ padding: '8px 12px', fontSize: 12, color: 'var(--mu)', borderBottom: '1px solid var(--bd)' }}>
                           {it.nombre} — ya devuelto
                         </div>
                       )
                       return (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--bd)' }}>
+                        <div key={it.id||it.nombre||'ra-'+i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', borderBottom: '1px solid var(--bd)' }}>
                           <input type="checkbox" checked={!!anSeleccion[i]} onChange={() => setAnSeleccion(p => ({ ...p, [i]: !p[i] }))}
                             style={{ width: 15, height: 15, cursor: 'pointer' }} />
                           <div style={{ flex: 1, cursor: 'pointer', fontSize: 12 }} onClick={() => setAnSeleccion(p => ({ ...p, [i]: !p[i] }))}>
                             <div style={{ fontWeight: 700 }}>{it.nombre}{it.talle ? ` — Talle ${it.talle}` : ''}</div>
-                            <div style={{ fontSize: 10, color: 'var(--mu)' }}>{fmt(it.precio)} c/u · Disponible: {disp} uds</div>
+                            <div style={{ fontSize: 12, color: 'var(--mu)' }}>{fmt(it.precio)} c/u · Disponible: {disp} uds</div>
                           </div>
                           <input type="number" value={anQty[i] || disp} min={1} max={disp}
                             onChange={e => {
@@ -231,12 +231,12 @@ function VentaDetail({ venta, api, onRefresh, onClose, showAnularByDefault }) {
                               setAnQty(p => ({ ...p, [i]: v }))
                               setAnSeleccion(p => ({ ...p, [i]: true }))
                             }}
-                            style={{ width: 60, textAlign: 'center', padding: '5px 8px', border: '1.5px solid var(--bd)', borderRadius: 8, fontSize: 11 }} />
+                            style={{ width: 60, textAlign: 'center', padding: '5px 8px', border: '1.5px solid var(--bd)', borderRadius: 8, fontSize: 12 }} />
                         </div>
                       )
                     })}
                   </div>
-                  <div style={{ fontSize: 11, color: 'var(--mu)', marginTop: 5 }}>
+                  <div style={{ fontSize: 12, color: 'var(--mu)', marginTop: 5 }}>
                     Monto a devolver: <strong>{fmt(montoDev)}</strong>
                   </div>
                 </div>
@@ -244,28 +244,28 @@ function VentaDetail({ venta, api, onRefresh, onClose, showAnularByDefault }) {
 
               {/* Motivo */}
               <div style={{ marginBottom: 10 }}>
-                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 3 }}>Motivo</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 3 }}>Motivo</label>
                 <input value={anMotivo} onChange={e => setAnMotivo(e.target.value)} placeholder="Ej: Defecto de fábrica, cambio de talle..."
-                  style={{ width: '100%', padding: '5px 8px', border: '1.5px solid var(--bd)', borderRadius: 8, fontSize: 11, background: 'var(--bg)', color: 'var(--tx)' }} />
+                  style={{ width: '100%', padding: '5px 8px', border: '1.5px solid var(--bd)', borderRadius: 8, fontSize: 12, background: 'var(--bg)', color: 'var(--tx)' }} />
               </div>
 
               {/* Método de devolución */}
               <div style={{ marginBottom: 10 }}>
-                <label style={{ display: 'block', fontSize: 10, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 3 }}>Devolución en</label>
+                <label style={{ display: 'block', fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 3 }}>Devolución en</label>
                 <select value={anMetodo} onChange={e => setAnMetodo(e.target.value)}
-                  style={{ width: '100%', padding: '5px 8px', border: '1.5px solid var(--bd)', borderRadius: 8, fontSize: 11, background: 'var(--bg)', color: 'var(--tx)' }}>
+                  style={{ width: '100%', padding: '5px 8px', border: '1.5px solid var(--bd)', borderRadius: 8, fontSize: 12, background: 'var(--bg)', color: 'var(--tx)' }}>
                   <option value="mismo">Mismo método de pago original</option>
                   <option value="efectivo">Efectivo</option>
                 </select>
               </div>
 
               {(venta.cobrada !== false) && (
-                <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '9px 13px', fontSize: 11, color: '#92400E', marginBottom: 10 }}>
+                <div style={{ background: '#FFFBEB', border: '1px solid #FDE68A', borderRadius: 8, padding: '9px 13px', fontSize: 12, color: '#92400E', marginBottom: 10 }}>
                   ⚠️ Esta devolución generará un egreso en la caja del turno actual.
                 </div>
               )}
 
-              <button className="btn btn-danger" style={{ width: '100%', justifyContent: 'center' }} onClick={confirmarAnular} disabled={anSaving}>
+              <button type="button" className="btn btn-danger" style={{ width: '100%', justifyContent: 'center' }} onClick={confirmarAnular} disabled={anSaving}>
                 {anSaving ? '⏳ Procesando...' : '⚠️ Confirmar'}
               </button>
             </div>
@@ -320,14 +320,14 @@ export function Ventas() {
 
   useEffect(() => { load() }, [load])
 
-  function exportar() {
+  async function exportar() {
     const headers = ['N°', 'Fecha', 'Cliente', 'Vendedor', 'Sucursal', 'Pago', 'Estado', 'Total']
     const rows = filtered.map(v => [
       v.numero, new Date(v.fecha).toLocaleString('es-AR'), v.cli_nombre || 'Consumidor', v.vend_nombre || '', v.suc_nombre || '',
       v.pago || '', v.anulada ? 'Anulada' : (v.cobrada === false ? 'Pend. cobro' : (v.es_ctacte ? 'C/cte' : 'Cobrada')),
       v.total || 0
     ])
-    exportExcel('ventas', headers, rows, 'Ventas')
+    await exportExcel('ventas', headers, rows, 'Ventas')
     toast('📊 Excel exportado', 'ok')
   }
 
@@ -349,8 +349,6 @@ export function Ventas() {
     n: filtered.filter(v => !v.anulada).length,
     anuladas: filtered.filter(v => v.anulada).length,
   }), [filtered])
-
-  const fmt = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })
 
   if (loading) return <Loader />
 
@@ -379,7 +377,7 @@ export function Ventas() {
         {/* Date filter */}
         <div style={{ display: 'flex', gap: 4, background: 'var(--sf)', borderRadius: 8, padding: 4, border: '1px solid var(--bd)' }}>
           {[['hoy', 'Hoy'], ['semana', 'Semana'], ['mes', 'Mes'], ['custom', '📅']].map(([v, l]) => (
-            <button key={v} className={`btn btn-sm ${filtroFecha === v ? 'btn-primary' : ''}`} style={filtroFecha !== v ? { background: 'transparent', border: 'none' } : {}} onClick={() => { setFiltroFecha(v); setPage(1) }}>{l}</button>
+            <button type="button" key={v} className={`btn btn-sm ${filtroFecha === v ? 'btn-primary' : ''}`} style={filtroFecha !== v ? { background: 'transparent', border: 'none' } : {}} onClick={() => { setFiltroFecha(v); setPage(1) }}>{l}</button>
           ))}
         </div>
         {filtroFecha === 'custom' && (
@@ -393,7 +391,7 @@ export function Ventas() {
           {Object.entries(PAGO_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
         <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1) }} placeholder="Cliente, vendedor..." style={{ width: 200 }} />
-      <button className="btn btn-secondary btn-sm" onClick={exportar}>📊 Excel</button>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={exportar}>📊 Excel</button>
       </PageHeader>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -417,7 +415,7 @@ export function Ventas() {
                     <td style={{ fontSize: 12 }}>{PAGO_LABELS[v.pago] || v.pago}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700, color: v.anulada ? 'var(--mu)' : 'var(--ok)' }}>{fmt(v.total)}</td>
                     <td onClick={(e) => e.stopPropagation()}>
-                      {!v.anulada && <button className="btn btn-icon btn-sm" onClick={() => setDetail({ ...v, _showAnular: true })} title="Anular">🚫</button>}
+                      {!v.anulada && <button type="button" className="btn btn-icon btn-sm" onClick={() => setDetail({ ...v, _showAnular: true })} title="Anular">🚫</button>}
                     </td>
                   </tr>
                 ))}
@@ -436,3 +434,4 @@ export function Ventas() {
 }
 
 const selStyle = { padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--bd)', cursor: 'pointer', fontSize: 13, background: 'var(--bg)', color: 'var(--tx)' }
+

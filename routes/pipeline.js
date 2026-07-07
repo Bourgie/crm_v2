@@ -86,7 +86,11 @@ router.put('/oportunidades/:id', authMiddleware, (req, res) => {
   const db = _getDB(req);
   const old = db.findOne('pipeline_oportunidades', req.params.id);
   if (!old) return res.status(404).json({ error: 'No encontrada' });
-  const upd = { ...req.body };
+  const { nombre, etapa_id, cliente_id, cli_nombre, valor_estimado, probabilidad, fecha_cierre_estimada, fecha_cierre, vend_id, vend_nombre, usuario_id, usuario_nombre, estado, notas, motivo, contactado, contacto_fecha, contacto_notas, suc_id } = req.body;
+  const upd = {};
+  for (const [k, v] of Object.entries({ nombre, etapa_id, cliente_id, cli_nombre, valor_estimado, probabilidad, fecha_cierre_estimada, fecha_cierre, vend_id, vend_nombre, usuario_id, usuario_nombre, estado, notas, motivo, contactado, contacto_fecha, contacto_notas, suc_id })) {
+    if (v !== undefined) upd[k] = v;
+  }
   // Track stage changes in seguimiento
   if (upd.etapa_id && upd.etapa_id !== old.etapa_id) {
     const oldEtapa = db.findOne('pipeline_etapas', old.etapa_id);

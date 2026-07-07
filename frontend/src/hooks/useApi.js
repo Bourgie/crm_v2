@@ -16,15 +16,22 @@ function canQueue(method, path) {
   )
 }
 
+function getCookie(name) {
+  const m = document.cookie.match(new RegExp('(?:^|;\\s*)' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '=([^;]*)'))
+  return m ? m[1] : null
+}
+
 // Core fetch — used by the hook and standalone
 export async function apiFetch(method, path, body, token, onLogout) {
-  const opts = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: 'Bearer ' + token,
-    },
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: 'Bearer ' + token,
   }
+  if (method.toUpperCase() !== 'GET') {
+    const csrf = getCookie('csrf-token')
+    if (csrf) headers['x-csrf-token'] = csrf
+  }
+  const opts = { method, headers }
   if (body) opts.body = JSON.stringify(body)
 
   const r = await fetch('/api' + path, opts)

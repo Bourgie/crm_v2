@@ -220,7 +220,7 @@ export function Chat() {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
             <h3 style={{ margin: 0, fontSize: 18 }}>💬 Chats</h3>
             {esAdmin && (
-              <button onClick={toggleLock} title={isGeneralLocked ? 'Desbloquear chat general' : 'Restringir chat general'}
+              <button type="button" onClick={toggleLock} title={isGeneralLocked ? 'Desbloquear chat general' : 'Restringir chat general'}
                 style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, padding: 6, borderRadius: 6 }}
                 onMouseEnter={e => e.currentTarget.style.background = 'rgba(0,0,0,.05)'}
                 onMouseLeave={e => e.currentTarget.style.background = 'none'}>
@@ -291,7 +291,7 @@ export function Chat() {
           <>
             {/* Chat header */}
             <div style={{ padding: '10px 16px', background: '#f0f2f5', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button onClick={() => setShowSidebar(s => !s)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', display: 'none' }} className="chat-back-btn">←</button>
+              <button type="button" onClick={() => setShowSidebar(s => !s)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', display: 'none' }} className="chat-back-btn">←</button>
               <div style={{ width: 40, height: 40, borderRadius: '50%', background: activeId === 'all' ? '#25d366' : 'var(--ac)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 16, flexShrink: 0 }}>
                 {activeId === 'all' ? '📢' : (activeContact?.nombre || '?').charAt(0).toUpperCase()}
               </div>
@@ -379,8 +379,8 @@ export function Chat() {
                           {/* Actions on hover */}
                           {!m.eliminado && (
                             <div className="msg-actions" style={{ position: 'absolute', top: 4, right: 4, opacity: 0, transition: 'opacity .15s', display: 'flex', gap: 4 }}>
-                              <button onClick={() => setReply(m)} title="Responder" style={{ background: 'rgba(255,255,255,.9)', border: 'none', borderRadius: 4, cursor: 'pointer', padding: '2px 6px', fontSize: 11 }}>↩</button>
-                              {(isMe || esAdmin) && <button onClick={() => eliminarMensaje(m.id)} title="Eliminar" style={{ background: 'rgba(255,255,255,.9)', border: 'none', borderRadius: 4, cursor: 'pointer', padding: '2px 6px', fontSize: 11 }}>🗑</button>}
+                              <button type="button" onClick={() => setReply(m)} title="Responder" style={{ background: 'rgba(255,255,255,.9)', border: 'none', borderRadius: 4, cursor: 'pointer', padding: '2px 6px', fontSize: 11 }}>↩</button>
+                              {(isMe || esAdmin) && <button type="button" onClick={() => eliminarMensaje(m.id)} title="Eliminar" style={{ background: 'rgba(255,255,255,.9)', border: 'none', borderRadius: 4, cursor: 'pointer', padding: '2px 6px', fontSize: 11 }}>🗑</button>}
                             </div>
                           )}
                         </div>
@@ -398,7 +398,7 @@ export function Chat() {
                   <div style={{ fontSize: 12, color: '#06cf9c', fontWeight: 700 }}>Respondiendo a {reply.autor_nombre}</div>
                   <div style={{ fontSize: 12, color: '#667781' }}>{truncate(reply.texto, 80)}</div>
                 </div>
-                <button onClick={() => setReply(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#667781' }}>×</button>
+                <button type="button" onClick={() => setReply(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18, color: '#667781' }}>×</button>
               </div>
             )}
 
@@ -417,10 +417,9 @@ export function Chat() {
                   placeholder="Escribí un mensaje..."
                   rows={1}
                   style={{ flex: 1, padding: '10px 14px', borderRadius: 22, border: 'none', background: '#fff', fontSize: 14, resize: 'none', outline: 'none', maxHeight: 120, minHeight: 22, fontFamily: 'inherit' }}
-                  autoFocus
                 />
-                <button
-                  onClick={enviar}
+                <buttontype="button" 
+                  type="button" onClick={enviar}
                   disabled={!texto.trim() || enviando}
                   style={{ width: 42, height: 42, borderRadius: '50%', border: 'none', background: texto.trim() ? '#00a884' : '#8696a0', color: '#fff', cursor: texto.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}
                   title="Enviar (Enter)"
@@ -502,8 +501,8 @@ function ConvItem({ conv, active, onClick, onPin, isGroup, locked }) {
 
       {/* Pin button (only for contacts) */}
       {onPin && (
-        <button
-          className="pin-btn"
+        <buttontype="button" 
+          type="button" className="pin-btn"
           onClick={(e) => { e.stopPropagation(); onPin() }}
           title={conv.fijado ? 'Desfijar' : 'Fijar conversación'}
           style={{
@@ -520,3 +519,6 @@ function ConvItem({ conv, active, onClick, onPin, isGroup, locked }) {
     </div>
   )
 }
+
+
+

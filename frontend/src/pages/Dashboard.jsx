@@ -1,12 +1,14 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { useApi } from '../hooks/useApi'
 import { useAuth, useApp } from '../store'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
+const VentasBarChart = lazy(() => import('../components/VentasBarChart'))
+
 const fmt = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })
+const localDate = (d) => { const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+day; }
 
 function KpiCard({ label, value, sub, icon, color }) {
   return (
@@ -26,8 +28,7 @@ export function Dashboard() {
   const navigate = useNavigate()
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
-  const localDate = (d) => { const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+day; }
-  const [fechaTareas, setFechaTareas] = useState(localDate(new Date()))
+  const [fechaTareas, setFechaTareas] = useState(() => localDate(new Date()))
 
   const hour = new Date().getHours()
   const isToday = fechaTareas === localDate(new Date())
@@ -89,18 +90,18 @@ export function Dashboard() {
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <button className="btn btn-sm btn-secondary" onClick={() => {
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => {
             const d = new Date(fechaTareas + 'T12:00:00'); d.setDate(d.getDate() - 1);
             setFechaTareas(localDate(d));
           }}>◀</button>
           <input type="date" value={fechaTareas} onChange={e => setFechaTareas(e.target.value)}
             style={{ padding: '6px 10px', borderRadius: 6, border: '1.5px solid var(--bd)', fontSize: 12 }} />
-          <button className="btn btn-sm btn-secondary" onClick={() => {
+          <button type="button" className="btn btn-sm btn-secondary" onClick={() => {
             const d = new Date(fechaTareas + 'T12:00:00'); d.setDate(d.getDate() + 1);
             setFechaTareas(localDate(d));
           }}>▶</button>
           {!isToday && (
-            <button className="btn btn-sm btn-primary" onClick={() => setFechaTareas(localDate(new Date()))}>Hoy</button>
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => setFechaTareas(localDate(new Date()))}>Hoy</button>
           )}
         </div>
       </div>
@@ -120,19 +121,19 @@ export function Dashboard() {
           <div className="card-header">
             <h3>🎂 Próximos cumpleaños</h3>
             {cumpleanos.filter(c => c.hoy).length > 0 && (
-              <span style={{ background: '#f472b6', color: '#fff', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>
+              <span style={{ background: '#f472b6', color: '#fff', borderRadius: 10, fontSize: 12, fontWeight: 700, padding: '1px 7px' }}>
                 {cumpleanos.filter(c => c.hoy).length} hoy
               </span>
             )}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             {cumpleanos.slice(0, 10).map((c, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', fontSize: 13, cursor: 'pointer' }}
+              <div key={c.cliente_id||'bday-'+i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 0', fontSize: 13, cursor: 'pointer' }}
                 onClick={() => navigate('/app/clientes')}>
                 <span style={{ fontSize: 16 }}>{c.hoy ? '🎉' : c.dias <= 3 ? '🎈' : '🎂'}</span>
                 <div style={{ flex: 1 }}>
                   <span style={{ fontWeight: 600 }}>{c.nombre}</span>
-                  <span style={{ color: 'var(--mu)', marginLeft: 6, fontSize: 11 }}>
+                  <span style={{ color: 'var(--mu)', marginLeft: 6, fontSize: 12 }}>
                     {c.edad} años — {c.hoy ? '🎉 HOY' : `en ${c.dias} día${c.dias !== 1 ? 's' : ''}`}
                   </span>
                 </div>
@@ -148,12 +149,12 @@ export function Dashboard() {
           <h3>📋 Recordatorios — {format(new Date(fechaTareas), "d 'de' MMMM", { locale: es })}</h3>
           <div style={{ display: 'flex', gap: 4 }}>
             {tareasHoy.length > 0 && (
-              <span style={{ background: 'var(--ac2)', color: '#fff', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>
+              <span style={{ background: 'var(--ac2)', color: '#fff', borderRadius: 10, fontSize: 12, fontWeight: 700, padding: '1px 7px' }}>
                 {tareasHoy.length} tareas
               </span>
             )}
             {postventasPendientes.length > 0 && (
-              <span style={{ background: 'var(--warn)', color: '#fff', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px' }}>
+              <span style={{ background: 'var(--warn)', color: '#fff', borderRadius: 10, fontSize: 12, fontWeight: 700, padding: '1px 7px' }}>
                 {postventasPendientes.length} postventas
               </span>
             )}
@@ -178,7 +179,7 @@ export function Dashboard() {
                       <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {t.oportunidad_nombre || t.nota}
                       </div>
-                      <div style={{ fontSize: 11, color: 'var(--mu)' }}>
+                      <div style={{ fontSize: 12, color: 'var(--mu)' }}>
                         {t.accion === 'contacto_pendiente' ? '📞 Pendiente de contacto' :
                          t.accion === 'contacto' || t.accion === 'contactado' ? '📞 ' + t.accion :
                          t.accion === 'propuesta' ? '📄 Propuesta enviada' :
@@ -188,7 +189,7 @@ export function Dashboard() {
                         {t.usuario_nombre ? ' — ' + t.usuario_nombre : ''}
                       </div>
                     </div>
-                    <span style={{ fontSize: 11, color: 'var(--mu)', flexShrink: 0 }}>
+                    <span style={{ fontSize: 12, color: 'var(--mu)', flexShrink: 0 }}>
                       {t.fecha ? new Date(t.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : ''}
                     </span>
                   </div>
@@ -208,7 +209,7 @@ export function Dashboard() {
                     <span style={{ flex: 1, fontWeight: 600 }}>{t.descripcion}</span>
                     <span style={{ color: 'var(--mu)' }}>{t.creado_nombre}</span>
                     <span style={{
-                      fontSize: 10, padding: '1px 5px', borderRadius: 4,
+                      fontSize: 12, padding: '1px 5px', borderRadius: 4,
                       background: t.estado === 'en_curso' ? 'var(--ac2)' : t.estado === 'finalizado' ? 'var(--ok)' : 'var(--sf)',
                       color: t.estado === 'en_curso' || t.estado === 'finalizado' ? '#fff' : 'var(--mu)',
                       fontWeight: 600
@@ -242,7 +243,7 @@ export function Dashboard() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div>
               <span style={{ fontWeight: 700, fontSize: 13 }}>🎯 Objetivo del mes</span>
-              <span style={{ fontSize: 11, color: 'var(--mu)', marginLeft: 8 }}>
+              <span style={{ fontSize: 12, color: 'var(--mu)', marginLeft: 8 }}>
                 ({new Date().toLocaleString('es-AR', { month: 'long', year: 'numeric' })})
               </span>
             </div>
@@ -251,7 +252,7 @@ export function Dashboard() {
             </span>
           </div>
           <div style={{ background: 'var(--bd)', borderRadius: 8, height: 14, overflow: 'hidden', marginBottom: 10 }}>
-            <div style={{ height: '100%', width: `${Math.min(100, objetivo.porcentaje || 0)}%`, background: (objetivo.porcentaje || 0) >= 80 ? 'var(--ok)' : (objetivo.porcentaje || 0) >= 50 ? 'var(--warn)' : 'var(--bad)', borderRadius: 8, transition: 'width .5s' }} />
+            <div style={{ height: '100%', width: `${Math.min(100, objetivo.porcentaje || 0)}%`, background: (objetivo.porcentaje || 0) >= 80 ? 'var(--ok)' : (objetivo.porcentaje || 0) >= 50 ? 'var(--warn)' : 'var(--bad)', borderRadius: 8 }} />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 12, textAlign: 'center' }}>
             <div><div style={{ color: 'var(--mu)' }}>Vendido</div><div style={{ fontWeight: 700, color: 'var(--ac)' }}>{fmt(objetivo.ventas_mes)}</div></div>
@@ -264,7 +265,7 @@ export function Dashboard() {
         <div className="card" style={{ marginBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px' }}>
           <span style={{ color: 'var(--mu)', fontSize: 13 }}>📊 Sin objetivo definido para este mes</span>
           {['admin', 'supervisor'].includes(me?.rol) && (
-            <button className="btn btn-primary btn-sm" onClick={() => navigate('/app/config')}>Definir objetivo</button>
+            <button type="button" className="btn btn-primary btn-sm" onClick={() => navigate('/app/config')}>Definir objetivo</button>
           )}
         </div>
       )}
@@ -273,18 +274,9 @@ export function Dashboard() {
         {/* Ventas del mes */}
         <div className="card">
           <div className="card-header"><h3>📈 Ventas últimos días</h3></div>
-          {ventasMes.length > 0 ? (
-            <ResponsiveContainer width="100%" height={180}>
-              <BarChart data={ventasMes} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-                <XAxis dataKey="fecha" tick={{ fontSize: 10 }} tickFormatter={(v) => (v || '').substr(5)} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => '$' + ((v||0) / 1000).toFixed(0) + 'k'} width={40} />
-                <Tooltip formatter={(v) => fmt(v)} />
-                <Bar dataKey="total" fill="var(--ac)" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="empty-state"><div className="empty-icon">📊</div><p>Sin ventas registradas aún</p></div>
-          )}
+          <Suspense fallback={<div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>}>
+            <VentasBarChart data={ventasMes} fmt={fmt} />
+          </Suspense>
         </div>
 
         {/* Top productos */}
@@ -293,13 +285,13 @@ export function Dashboard() {
           {topProds.length > 0 ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {topProds.slice(0, 5).map((p, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--sf)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--mu)', flexShrink: 0 }}>
+                <div key={p.prod_id||p.nombre||'tp-'+i} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--sf)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: 'var(--mu)', flexShrink: 0 }}>
                     {i + 1}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.nombre}</div>
-                    <div style={{ fontSize: 11, color: 'var(--mu)' }}>{p.cantidad} vendidos</div>
+                    <div style={{ fontSize: 12, color: 'var(--mu)' }}>{p.cantidad} vendidos</div>
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--ok)', flexShrink: 0 }}>{fmt(p.total)}</div>
                 </div>
@@ -320,8 +312,8 @@ export function Dashboard() {
               <thead><tr><th>#</th><th>Fecha</th><th>Cliente</th><th>Vendedor</th><th>Método</th><th style={{ textAlign: 'right' }}>Total</th></tr></thead>
               <tbody>
                 {ultimasVentas.slice(0, 8).map((v, i) => (
-                  <tr key={i}>
-                    <td style={{ fontSize: 11, color: 'var(--mu)' }}>#{v.numero}</td>
+                  <tr key={v.id||'uv-'+i}>
+                    <td style={{ fontSize: 12, color: 'var(--mu)' }}>#{v.numero}</td>
                     <td style={{ fontSize: 12 }}>{new Date(v.fecha).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
                     <td style={{ fontSize: 13 }}>{v.cli_nombre || <span style={{ color: 'var(--mu)' }}>Consumidor</span>}</td>
                     <td style={{ fontSize: 12, color: 'var(--mu)' }}>{v.vend_nombre || '—'}</td>
@@ -347,7 +339,7 @@ export function Dashboard() {
             { label: '💸 Gastos', to: '/app/gastos' },
             { label: '📋 Ventas de hoy', to: '/app/ventas' },
           ].map((a) => (
-            <button key={a.to} className="btn btn-secondary" onClick={() => navigate(a.to)}>
+            <button type="button" key={a.to} className="btn btn-secondary" onClick={() => navigate(a.to)}>
               {a.label}
             </button>
           ))}
@@ -356,3 +348,4 @@ export function Dashboard() {
     </div>
   )
 }
+

@@ -1,47 +1,61 @@
-// Helper común para exportar/importar Excel desde cualquier módulo
-import * as XLSX from 'xlsx'
+import ExcelJS from 'exceljs'
 
-/**
- * Exporta rows a Excel (xlsx).
- * @param {string} filename - sin extensión
- * @param {Array} headers - ['Col1', 'Col2', ...]
- * @param {Array<Array>} rows - matriz de filas
- * @param {string} [sheetName='Hoja1']
- */
-export function exportExcel(filename, headers, rows, sheetName = 'Hoja1') {
-  const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
-  const wb = XLSX.utils.book_new()
-  XLSX.utils.book_append_sheet(wb, ws, sheetName)
-  const today = new Date().toISOString().substr(0, 10)
-  XLSX.writeFile(wb, `${filename}_${today}.xlsx`)
-}
+export async function exportExcel(filename, headers, rows, sheetName = 'Hoja1') {
+  if (Array.isArray(headers) && headers.length > 0 && Array.isArray(headers[0])) {
+    if (typeof rows === 'string') sheetName = rows
+    rows = headers.slice(1)
+    headers = headers[0]
+  }
+  if (!Array.isArray(rows)) rows = []
 
-/**
- * Lee un archivo .xlsx/.xls/.csv y devuelve array de objetos
- * usando la primera fila como cabecera.
- * @param {File} file
- * @returns {Promise<Array<Object>>}
- */
-export function importExcel(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = (e) => {
-      try {
-        const data = new Uint8Array(e.target.result)
-        const wb = XLSX.read(data, { type: 'array' })
-        const ws = wb.Sheets[wb.SheetNames[0]]
-        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' })
-        resolve(rows)
-      } catch (err) { reject(err) }
-    }
-    reader.onerror = () => reject(new Error('Error leyendo archivo'))
-    reader.readAsArrayBuffer(file)
+  const workbook = new ExcelJS.Workbook()
+  const worksheet = workbook.addWorksheet(sheetName)
+
+  worksheet.addRow(headers)
+  rows.forEach(row => worksheet.addRow(Array.isArray(row) ? row : [row]))
+
+  worksheet.columns = headers.map(h => ({
+    width: Math.max(String(h).length + 4, 12)
+  }))
+
+  const buffer = await workbook.xlsx.writeBuffer()
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  const today = new Date().toISOString().substr(0, 10)
+  a.href = url
+  a.download = `${filename}_${today}.xlsx`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
-/**
- * Dispara un selector de archivo y devuelve el File seleccionado
- */
+export async function importExcel(file) {
+  const workbook = new ExcelJS.Workbook()
+  const arrayBuffer = await file.arrayBuffer()
+  await workbook.xlsx.load(arrayBuffer)
+  const worksheet = workbook.worksheets[0]
+  if (!worksheet) throw new Error('El archivo no contiene hojas')
+
+  const headers = []
+  const headerRow = worksheet.getRow(1)
+  headerRow.eachCell((cell) => {
+    headers.push(cell.value ?? '')
+  })
+
+  const rows = []
+  worksheet.eachRow((row, rowNumber) => {
+    if (rowNumber === 1) return
+    const obj = {}
+    row.eachCell((cell, colNumber) => {
+      obj[headers[colNumber - 1] || `col_${colNumber}`] = cell.value ?? ''
+    })
+    rows.push(obj)
+  })
+  return rows
+}
+
 export function pickFile(accept = '.xlsx,.xls,.csv') {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input')

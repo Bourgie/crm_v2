@@ -376,16 +376,16 @@ export function Productos() {
           <option value="">Todas las categorías</option>
           {categorias.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
-        <button className="btn btn-icon btn-sm" onClick={() => { setCatForm({nombre:'', icono:'📦'}); setCatEdit(null); setCatModal(true) }} title="Gestionar categorías">⚙️</button>
+        <button type="button" className="btn btn-icon btn-sm" onClick={() => { setCatForm({nombre:'', icono:'📦'}); setCatEdit(null); setCatModal(true) }} title="Gestionar categorías">⚙️</button>
         <select style={selStyle} value={filtroStock} onChange={(e) => { setFiltroStock(e.target.value); setPage(1) }}>
           <option value="">Todo el stock</option>
           <option value="bajo">Stock bajo</option>
           <option value="sin">Sin stock</option>
         </select>
-        <button className="btn btn-secondary btn-sm" onClick={() => setBulkPriceModal(true)} title="Actualizar precios masivos">📈 Precios</button>
-        <button className="btn btn-secondary btn-sm" onClick={exportar}>📊 Excel</button>
-        <button className="btn btn-secondary btn-sm" onClick={importar} disabled={importing}>📥 Importar</button>
-        <button className="btn btn-primary" onClick={openNew}>+ Nuevo</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setBulkPriceModal(true)} title="Actualizar precios masivos">📈 Precios</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={exportar}>📊 Excel</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={importar} disabled={importing}>📥 Importar</button>
+        <button type="button" className="btn btn-primary" onClick={openNew}>+ Nuevo</button>
       </PageHeader>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -419,8 +419,8 @@ export function Productos() {
                     <td style={{ fontSize: 12 }}>{p.categoria || '—'}</td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(p.precio_l1)}</td>
                     <td style={{ textAlign: 'center' }}>
-                      <button
-                        className="btn btn-sm"
+                      <buttontype="button" 
+                        type="button" className="btn btn-sm"
                         style={{ fontWeight: 700, color: stockColor(p), background: 'transparent', border: `1.5px solid ${stockColor(p)}`, minWidth: 50 }}
                         onClick={(e) => { e.stopPropagation(); setStockModal({ prod: p, suc_id: sucSesion, actual: getStock(p) }); setStockDelta('') }}
                         title="Ajustar stock"
@@ -445,8 +445,8 @@ export function Productos() {
                     </td>
                     <td onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        <button className="btn btn-icon btn-sm" title={p.activo === false ? 'Activar' : 'Desactivar'} onClick={() => toggleActivo(p)}>{p.activo === false ? '✅' : '🚫'}</button>
-                        <button className="btn btn-icon btn-sm" title="Eliminar" onClick={() => setConfirm(p.id)}>🗑</button>
+                        <button type="button" className="btn btn-icon btn-sm" title={p.activo === false ? 'Activar' : 'Desactivar'} onClick={() => toggleActivo(p)}>{p.activo === false ? '✅' : '🚫'}</button>
+                        <button type="button" className="btn btn-icon btn-sm" title="Eliminar" onClick={() => setConfirm(p.id)}>🗑</button>
                       </div>
                     </td>
                   </tr>
@@ -461,8 +461,8 @@ export function Productos() {
       <Modal open={!!modal} onClose={() => setModal(null)} size="lg"
         title={modal === 'new' ? '+ Nuevo producto' : `Editar: ${modal?.nombre}`}
         footer={<>
-          <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}>
+          <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
             {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Guardando...</> : '💾 Guardar'}
           </button>
         </>}
@@ -470,7 +470,7 @@ export function Productos() {
         {/* Tabs inside modal */}
         <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '2px solid var(--bd)', paddingBottom: 8 }}>
           {[['datos', '📋 Datos'], ['precios', '💰 Precios'], ['variantes', '🔀 Variantes'], ['stock', '📦 Stock'], ['movs', '📊 Movimientos']].map(([key, label]) => (
-            <button key={key} className={`btn btn-sm ${tab === key ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab(key)}>{label}</button>
+            <button type="button" key={key} className={`btn btn-sm ${tab === key ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab(key)}>{label}</button>
           ))}
         </div>
 
@@ -531,7 +531,7 @@ export function Productos() {
               <div style={{ fontSize: 13, color: 'var(--mu)' }}>
                 {variants.length} variante(s) — cada una puede tener talle, color y precio propio
               </div>
-              <button className="btn btn-primary btn-sm" onClick={openVariantNew}>+ Variante</button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={openVariantNew}>+ Variante</button>
             </div>
             {variants.length === 0 ? (
               <div style={{ textAlign: 'center', padding: 24, color: 'var(--mu)' }}>
@@ -565,8 +565,8 @@ export function Productos() {
                           </div>
                         )}
                       </div>
-                      <button className="btn btn-icon btn-sm" title="Editar" onClick={() => openVariantEdit(v)}>✏️</button>
-                      <button className="btn btn-icon btn-sm" title="Eliminar" onClick={() => deleteVariant(v.id)}>🗑</button>
+                      <button type="button" className="btn btn-icon btn-sm" title="Editar" onClick={() => openVariantEdit(v)}>✏️</button>
+                      <button type="button" className="btn btn-icon btn-sm" title="Eliminar" onClick={() => deleteVariant(v.id)}>🗑</button>
                     </div>
                   )
                 })}
@@ -611,8 +611,8 @@ export function Productos() {
       <Modal open={!!stockModal} onClose={() => setStockModal(null)} size="sm"
         title={`Ajustar stock — ${stockModal?.prod?.nombre}`}
         footer={<>
-          <button className="btn btn-secondary" onClick={() => setStockModal(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={ajustarStock}>✅ Aplicar</button>
+          <button type="button" className="btn btn-secondary" onClick={() => setStockModal(null)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={ajustarStock}>✅ Aplicar</button>
         </>}
       >
         {stockModal && (
@@ -622,7 +622,7 @@ export function Productos() {
               <div style={{ fontSize: 32, fontWeight: 800 }}>{stockModal.actual}</div>
             </div>
             <Field label="Ajuste (+ para agregar, - para restar)">
-              <input type="number" value={stockDelta} onChange={(e) => setStockDelta(e.target.value)} placeholder="Ej: +10 o -3" autoFocus style={{ textAlign: 'center', fontSize: 18, fontWeight: 700 }} />
+              <input type="number" value={stockDelta} onChange={(e) => setStockDelta(e.target.value)} placeholder="Ej: +10 o -3" style={{ textAlign: 'center', fontSize: 18, fontWeight: 700 }} />
             </Field>
             {stockDelta && !isNaN(parseInt(stockDelta)) && (
               <div style={{ textAlign: 'center', fontSize: 14, color: 'var(--mu)', marginTop: 8 }}>
@@ -642,8 +642,8 @@ export function Productos() {
       <Modal open={!!variantModal} onClose={() => setVariantModal(null)} size="md"
         title={variantModal === 'new' ? '➕ Nueva variante' : `Editar: ${variantModal?.nombre}`}
         footer={<>
-          <button className="btn btn-secondary" onClick={() => setVariantModal(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={saveVariant} disabled={varSaving}>
+          <button type="button" className="btn btn-secondary" onClick={() => setVariantModal(null)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={saveVariant} disabled={varSaving}>
             {varSaving ? 'Guardando...' : '💾 Guardar'}
           </button>
         </>}
@@ -680,7 +680,7 @@ export function Productos() {
                 style={{ flex: 1, fontSize: 12 }}
               />
               {varAttrKeys.length > 1 && (
-                <button className="btn btn-icon btn-sm" onClick={() => {
+                <button type="button" className="btn btn-icon btn-sm" onClick={() => {
                   const keys = varAttrKeys.filter((_, idx) => idx !== i)
                   setVarAttrKeys(keys)
                   let attrs = {}
@@ -691,7 +691,7 @@ export function Productos() {
               )}
             </div>
           ))}
-          <button className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setVarAttrKeys([...varAttrKeys, ''])}>
+          <button type="button" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }} onClick={() => setVarAttrKeys([...varAttrKeys, ''])}>
             + Atributo
           </button>
         </div>
@@ -727,8 +727,8 @@ export function Productos() {
       <Modal open={catModal} onClose={() => setCatModal(false)} size="sm"
         title={catEdit ? 'Editar categoría' : '➕ Nueva categoría'}
         footer={<>
-          <button className="btn btn-secondary" onClick={() => setCatModal(false)}>Cerrar</button>
-          <button className="btn btn-primary" onClick={saveCat} disabled={catSaving}>
+          <button type="button" className="btn btn-secondary" onClick={() => setCatModal(false)}>Cerrar</button>
+          <button type="button" className="btn btn-primary" onClick={saveCat} disabled={catSaving}>
             {catSaving ? 'Guardando...' : catEdit ? '💾 Guardar' : '➕ Crear'}
           </button>
         </>}
@@ -742,12 +742,12 @@ export function Productos() {
               {categorias.map(c => (
                 <div key={c} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 8px', background: 'var(--sf)', borderRadius: 6, fontSize: 13 }}>
                   <span style={{ flex: 1 }}>{c}</span>
-                  <button className="btn btn-icon btn-sm" title="Editar" onClick={async () => {
+                  <button type="button" className="btn btn-icon btn-sm" title="Editar" onClick={async () => {
                     const cats = await api('GET', '/productos/categorias/list').catch(() => [])
                     const found = Array.isArray(cats) ? cats.find(x => x.nombre === c) : null
                     if (found) { setCatEdit(found); setCatForm({ nombre: found.nombre, icono: found.icono || '📦' }) }
                   }}>✏️</button>
-                  <button className="btn btn-icon btn-sm" title="Eliminar" onClick={() => deleteCat(c)}>🗑</button>
+                  <button type="button" className="btn btn-icon btn-sm" title="Eliminar" onClick={() => deleteCat(c)}>🗑</button>
                 </div>
               ))}
             </div>
@@ -814,7 +814,7 @@ function BulkPriceModal({ categorias, prods, allSucs, sucSesion, api, toast, onC
       <div className="modal" style={{ maxWidth: 600 }}>
         <div className="modal-header">
           <h3>📈 Actualizar precios masivamente</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--mu)' }}>×</button>
+          <button type="button" onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--mu)' }}>×</button>
         </div>
         <div className="modal-body">
           <div style={{ background: 'rgba(99,102,241,.06)', border: '1px solid rgba(99,102,241,.2)', borderRadius: 8, padding: '10px 14px', fontSize: 12, marginBottom: 14 }}>
@@ -886,9 +886,9 @@ function BulkPriceModal({ categorias, prods, allSucs, sucSesion, api, toast, onC
           )}
         </div>
         <div className="modal-footer">
-          <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className="btn btn-secondary" onClick={() => setShowPreview(true)}>👁 Vista previa</button>
-          <button className="btn btn-primary" onClick={aplicar} disabled={saving}>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="button" className="btn btn-secondary" onClick={() => setShowPreview(true)}>👁 Vista previa</button>
+          <button type="button" className="btn btn-primary" onClick={aplicar} disabled={saving}>
             {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Aplicando...</> : `✅ Aplicar (${afectados.length})`}
           </button>
         </div>
@@ -898,3 +898,6 @@ function BulkPriceModal({ categorias, prods, allSucs, sucSesion, api, toast, onC
 }
 
 const selStyle = { padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--bd)', cursor: 'pointer', fontSize: 13, background: 'var(--bg)', color: 'var(--tx)' }
+
+
+

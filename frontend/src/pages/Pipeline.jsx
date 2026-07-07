@@ -64,8 +64,7 @@ function InlineEdit({ value, type, onSave, children, style }) {
       <input ref={ref} type={type} value={editVal}
         onChange={e => setEditVal(e.target.value)} onBlur={save} onKeyDown={onKeyDown}
         onClick={e => e.stopPropagation()}
-        style={{ width: '100%', padding: '2px 4px', borderRadius: 4, border: '1.5px solid var(--ac)', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit', background: 'var(--bg)', boxSizing: 'border-box', ...style }}
-        autoFocus />
+        style={{ width: '100%', padding: '2px 4px', borderRadius: 4, border: '1.5px solid var(--ac)', fontSize: 'inherit', fontWeight: 'inherit', color: 'inherit', background: 'var(--bg)', boxSizing: 'border-box', ...style }} />
     )
   }
 
@@ -477,10 +476,10 @@ export function Pipeline() {
           <option value="">📍 Todas las sucursales</option>
           {allSucs.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
         </select>
-        <button className="btn btn-secondary btn-sm" onClick={() => setModalAdmin(true)}>⚙️ Etapas</button>
-        <button className={`btn btn-sm ${showReports ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowReports(p => !p)}>📊 Reportes</button>
-        <button className={`btn btn-sm ${showCalendar ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowCalendar(p => !p)}>📅 Contactos</button>
-        {isSupervisor && <button className="btn btn-primary btn-sm" onClick={() => setModalNuevaTarea(true)}>➕ Nueva tarea</button>}
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setModalAdmin(true)}>⚙️ Etapas</button>
+        <button type="button" className={`btn btn-sm ${showReports ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowReports(p => !p)}>📊 Reportes</button>
+        <button type="button" className={`btn btn-sm ${showCalendar ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setShowCalendar(p => !p)}>📅 Contactos</button>
+        {isSupervisor && <button type="button" className="btn btn-primary btn-sm" onClick={() => setModalNuevaTarea(true)}>➕ Nueva tarea</button>}
       </div>
 
       {/* Filters */}
@@ -507,7 +506,7 @@ export function Pipeline() {
           <option value="probabilidad">📊 Probabilidad</option>
           <option value="fecha_cierre_estimada">🎯 Cierre estimado</option>
         </select>
-        <button className="btn btn-sm btn-secondary" onClick={() => setSortDesc(p => !p)}
+        <button type="button" className="btn btn-sm btn-secondary" onClick={() => setSortDesc(p => !p)}
           style={{ padding: '6px 10px', fontSize: 12 }}>
           {sortDesc ? '↓ Desc' : '↑ Asc'}
         </button>
@@ -585,7 +584,7 @@ export function Pipeline() {
                               style={{ cursor: 'pointer', transform: 'scale(.85)' }} />
                           )}
                           <div style={{ fontWeight: 600, fontSize: 12, flex: 1, textDecoration: estado === 'finalizado' ? 'line-through' : 'none' }}>{t.descripcion}</div>
-                          {isSupervisor && <button className="btn btn-sm" style={{ padding: '1px 3px', fontSize: 9, color: 'var(--mu)' }} onClick={() => { if (window.confirm('¿Eliminar tarea?')) eliminarTarea(t.id) }}>🗑️</button>}
+                          {isSupervisor && <button type="button" className="btn btn-sm" style={{ padding: '1px 3px', fontSize: 9, color: 'var(--mu)' }} onClick={() => { if (window.confirm('¿Eliminar tarea?')) eliminarTarea(t.id) }}>🗑️</button>}
                         </div>
                         <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', alignItems: 'center', fontSize: 9, color: 'var(--mu)', marginBottom: 2 }}>
                           {t.fecha_fin && <span style={{ color: estado !== 'finalizado' && new Date(t.fecha_fin) < new Date() ? 'var(--bad)' : 'var(--mu)' }}>📅 {new Date(t.fecha_fin).toLocaleDateString('es-AR')}</span>}
@@ -595,15 +594,15 @@ export function Pipeline() {
                           tareaEditId === t.id ? (
                             <div onClick={e => e.stopPropagation()}>
                               <div style={{ display: 'flex', gap: 3, alignItems: 'center', marginTop: 2 }}>
-                                <button className={`btn btn-sm ${estado === 'en_curso' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '1px 5px', fontSize: 9 }} onClick={() => editarTarea(t.id, { estado: 'en_curso' })}>▶</button>
-                                <button className="btn btn-sm btn-secondary" style={{ padding: '1px 5px', fontSize: 9 }} onClick={() => { setTareaEditId(null); editarTarea(t.id, { estado: 'finalizado' }) }}>✓</button>
+                                <button type="button" className={`btn btn-sm ${estado === 'en_curso' ? 'btn-primary' : 'btn-secondary'}`} style={{ padding: '1px 5px', fontSize: 9 }} onClick={() => editarTarea(t.id, { estado: 'en_curso' })}>▶</button>
+                                <button type="button" className="btn btn-sm btn-secondary" style={{ padding: '1px 5px', fontSize: 9 }} onClick={() => { setTareaEditId(null); editarTarea(t.id, { estado: 'finalizado' }) }}>✓</button>
                               </div>
                               <textarea value={t.observacion || ''} onChange={e => editarTarea(t.id, { observacion: e.target.value })}
                                 placeholder="Obs..." rows={1}
                                 style={{ width: '100%', marginTop: 2, padding: '2px 4px', borderRadius: 4, border: '1px solid var(--bd)', fontSize: 10, resize: 'vertical', boxSizing: 'border-box' }} />
                             </div>
                           ) : (
-                            <button className="btn btn-sm" style={{ padding: '1px 4px', fontSize: 9 }} onClick={() => setTareaEditId(t.id)}>
+                            <button type="button" className="btn btn-sm" style={{ padding: '1px 4px', fontSize: 9 }} onClick={() => setTareaEditId(t.id)}>
                               {t.observacion ? '💬 ' + t.observacion.substr(0, 20) + (t.observacion.length > 20 ? '…' : '') : '✏️ obs.'}
                             </button>
                           )
@@ -629,8 +628,8 @@ export function Pipeline() {
       </DndContext>
 
       {/* Modals */}
-      <ModalAdminEtapas open={modalAdmin} onClose={() => setModalAdmin(false)} onUpdate={load} />
-      {isSupervisor && <ModalNuevaTarea open={modalNuevaTarea} onClose={() => setModalNuevaTarea(false)} allUsers={allUsers} allSucs={allSucs} me={me} onSave={crearTarea} />}
+      <ModalAdminEtapas key={modalAdmin ? 'admin-open' : 'admin-closed'} open={modalAdmin} onClose={() => setModalAdmin(false)} onUpdate={load} />
+      {isSupervisor && <ModalNuevaTarea key={modalNuevaTarea ? 'tarea-open' : 'tarea-closed'} open={modalNuevaTarea} onClose={() => setModalNuevaTarea(false)} allUsers={allUsers} allSucs={allSucs} me={me} onSave={crearTarea} />}
       {detalle && (
         <ModalDetalleOportunidad open={!!detalle} onClose={() => setDetalle(null)} oportunidad={detalle}
           etapas={etapas} allClis={allClis} onEdit={editarOp} onDelete={eliminarOp}
@@ -649,8 +648,8 @@ function ModalAdminEtapas({ open, onClose, onUpdate }) {
   const [newColor, setNewColor] = useState('#6366f1')
 
   useEffect(() => {
-    if (open) api('GET', '/pipeline/etapas').then(setItems).catch(() => {})
-  }, [open])
+    api('GET', '/pipeline/etapas').then(setItems).catch(() => {})
+  }, [])
 
   async function crear() {
     if (!newNombre.trim()) { toast('Nombre requerido', 'err'); return }
@@ -697,9 +696,9 @@ function ModalAdminEtapas({ open, onClose, onUpdate }) {
               style={{ width: 28, height: 28, padding: 0, border: 'none', cursor: 'pointer', borderRadius: 4 }} />
             <input value={e.nombre} onChange={e2 => editar(e.id, { nombre: e2.target.value })}
               style={{ flex: 1, padding: '4px 8px', borderRadius: 6, border: '1px solid var(--bd)', fontSize: 13 }} />
-            <button className="btn btn-sm" disabled={i === 0} onClick={() => mover(e.id, -1)} title="Subir">↑</button>
-            <button className="btn btn-sm" disabled={i === items.length - 1} onClick={() => mover(e.id, 1)} title="Bajar">↓</button>
-            <button className="btn btn-sm btn-danger" onClick={() => eliminar(e.id)} title="Eliminar">🗑️</button>
+            <button type="button" className="btn btn-sm" disabled={i === 0} onClick={() => mover(e.id, -1)} title="Subir">↑</button>
+            <button type="button" className="btn btn-sm" disabled={i === items.length - 1} onClick={() => mover(e.id, 1)} title="Bajar">↓</button>
+            <button type="button" className="btn btn-sm btn-danger" onClick={() => eliminar(e.id)} title="Eliminar">🗑️</button>
           </div>
         ))}
       </div>
@@ -711,7 +710,7 @@ function ModalAdminEtapas({ open, onClose, onUpdate }) {
           <input value={newNombre} onChange={e => setNewNombre(e.target.value)} placeholder="Nombre de la nueva etapa..."
             style={{ flex: 1, padding: '6px 10px', borderRadius: 6, border: '1px solid var(--bd)', fontSize: 13 }}
             onKeyDown={e => { if (e.key === 'Enter') crear() }} />
-          <button className="btn btn-primary btn-sm" onClick={crear}>➕ Crear</button>
+          <button type="button" className="btn btn-primary btn-sm" onClick={crear}>➕ Crear</button>
         </div>
       </div>
     </Modal>
@@ -805,19 +804,19 @@ function ModalDetalleOportunidad({ open, onClose, oportunidad, etapas, allClis, 
   return (
     <Modal open={open} onClose={onClose} title={oportunidad.nombre} size="lg"
       footer={<>
-        {!editMode && !isArchived && <button className="btn btn-secondary" onClick={() => setEditMode(true)}>✏️ Editar</button>}
+        {!editMode && !isArchived && <button type="button" className="btn btn-secondary" onClick={() => setEditMode(true)}>✏️ Editar</button>}
         {isArchived ? (
-          <button className="btn btn-primary" onClick={() => onUnarchive(oportunidad.id)}>📦 Restaurar</button>
+          <button type="button" className="btn btn-primary" onClick={() => onUnarchive(oportunidad.id)}>📦 Restaurar</button>
         ) : (
-          <button className="btn btn-secondary" style={{ borderColor: 'var(--mu)' }} onClick={() => onArchive(oportunidad.id)}>📦 Archivar</button>
+          <button type="button" className="btn btn-secondary" style={{ borderColor: 'var(--mu)' }} onClick={() => onArchive(oportunidad.id)}>📦 Archivar</button>
         )}
-        <button className="btn btn-danger" onClick={() => onDelete(oportunidad.id)}>🗑️ Eliminar</button>
-        <button className="btn btn-secondary" onClick={onClose}>Cerrar</button>
+        <button type="button" className="btn btn-danger" onClick={() => onDelete(oportunidad.id)}>🗑️ Eliminar</button>
+        <button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
       </>}>
       {/* Tabs */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 12, borderBottom: '2px solid var(--bd)', paddingBottom: 8 }}>
         {[['detalle', '📋 Detalle'], ['seguimiento', `📝 Seguimiento (${seguimiento.length})`], ['email', '📧 Email']].map(([k, l]) => (
-          <button key={k} className={`btn btn-sm ${tab === k ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab(k)}>{l}</button>
+          <button type="button" key={k} className={`btn btn-sm ${tab === k ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab(k)}>{l}</button>
         ))}
       </div>
 
@@ -861,7 +860,7 @@ function ModalDetalleOportunidad({ open, onClose, oportunidad, etapas, allClis, 
                 </select>
               </Field>
             )}
-            <button className="btn btn-primary" onClick={guardarEdit}>💾 Guardar cambios</button>
+            <button type="button" className="btn btn-primary" onClick={guardarEdit}>💾 Guardar cambios</button>
           </div>
         ) : (
           <div>
@@ -945,7 +944,7 @@ function ModalDetalleOportunidad({ open, onClose, oportunidad, etapas, allClis, 
                 <option value="nota">📝 Nota</option>
               </select>
               <input value={nuevaNota} onChange={e => setNuevaNota(e.target.value)} placeholder="Agregar nota..." style={{ flex: 1, padding: '6px 10px', borderRadius: 6, border: '1.5px solid var(--bd)', fontSize: 12 }} />
-              <button className="btn btn-primary btn-sm" onClick={agregarSeguimiento}>➕</button>
+              <button type="button" className="btn btn-primary btn-sm" onClick={agregarSeguimiento}>➕</button>
             </div>
           </div>
           <div style={{ maxHeight: 300, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -969,13 +968,13 @@ function ModalDetalleOportunidad({ open, onClose, oportunidad, etapas, allClis, 
             <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 12 }}>📧 Enviar email</div>
             <Field label="Email destinatario *">
               <input value={emailPara} onChange={e => setEmailPara(e.target.value)}
-                placeholder={cli?.email || 'cliente@ejemplo.com'} autoFocus />
+                placeholder={cli?.email || 'cliente@ejemplo.com'} />
             </Field>
             <Field label="Mensaje adicional">
               <textarea value={emailMsg} onChange={e => setEmailMsg(e.target.value)}
                 rows={4} placeholder="Escribí un mensaje personalizado..." />
             </Field>
-            <button className="btn btn-primary" onClick={enviarEmail} disabled={sendingEmail}>
+            <button type="button" className="btn btn-primary" onClick={enviarEmail} disabled={sendingEmail}>
               {sendingEmail ? 'Enviando...' : '📤 Enviar email'}
             </button>
           </div>
@@ -987,23 +986,13 @@ function ModalDetalleOportunidad({ open, onClose, oportunidad, etapas, allClis, 
 
 // ── Modal Nueva Tarea ──
 function ModalNuevaTarea({ open, onClose, allUsers, allSucs, me, onSave }) {
-  const [sucId, setSucId] = useState('')
+  const [sucId, setSucId] = useState(me?.suc_id || '')
   const [descripcion, setDescripcion] = useState('')
   const [fechaFin, setFechaFin] = useState('')
   const [selectedUsers, setSelectedUsers] = useState([])
   const [userSearch, setUserSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const { toast } = useToast()
-
-  useEffect(() => {
-    if (open) {
-      setSucId(me?.suc_id || '')
-      setDescripcion('')
-      setFechaFin('')
-      setSelectedUsers([])
-      setUserSearch('')
-    }
-  }, [open])
 
   const usersFiltered = allUsers.filter(u => {
     if (u.id === me?.id) return false
@@ -1027,12 +1016,12 @@ function ModalNuevaTarea({ open, onClose, allUsers, allSucs, me, onSave }) {
 
   return (
     <Modal open={open} onClose={onClose} title="➕ Nueva tarea" size="md"
-      footer={<><button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-        <button className="btn btn-primary" onClick={guardar} disabled={saving}>
+      footer={<><button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+        <button type="button" className="btn btn-primary" onClick={guardar} disabled={saving}>
           {saving ? 'Guardando...' : '✅ Crear tarea'}
         </button></>}>
       <Field label="Descripción *">
-        <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} rows={2} placeholder="Ej: Llamar a cliente para seguimiento..." autoFocus />
+        <textarea value={descripcion} onChange={e => setDescripcion(e.target.value)} rows={2} placeholder="Ej: Llamar a cliente para seguimiento..." />
       </Field>
       <Field label="Fecha finalización">
         <input type="date" value={fechaFin} onChange={e => setFechaFin(e.target.value)} />
@@ -1103,9 +1092,9 @@ function CalendarPanel({ oportunidades }) {
   return (
     <div style={{ background: 'var(--sf)', borderRadius: 12, border: '1px solid var(--bd)', padding: 16, marginBottom: 16 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <button className="btn btn-sm btn-secondary" onClick={() => cambiarMes(-1)}>‹ Mes ant.</button>
+        <button type="button" className="btn btn-sm btn-secondary" onClick={() => cambiarMes(-1)}>‹ Mes ant.</button>
         <span style={{ fontWeight: 700, fontSize: 14 }}>{mesNombre} {anio}</span>
-        <button className="btn btn-sm btn-secondary" onClick={() => cambiarMes(1)}>Mes sig. ›</button>
+        <button type="button" className="btn btn-sm btn-secondary" onClick={() => cambiarMes(1)}>Mes sig. ›</button>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 2, marginBottom: 12 }}>
         {['Do','Lu','Ma','Mi','Ju','Vi','Sa'].map(n => (
@@ -1148,3 +1137,5 @@ function CalendarPanel({ oportunidades }) {
     </div>
   )
 }
+
+

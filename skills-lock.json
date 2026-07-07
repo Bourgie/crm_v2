@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "react-doctor": {
+      "source": "posthog/posthog",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/react-doctor/SKILL.md",
+      "computedHash": "da6bd59e1a1679402bee81837c4fc3cf855607871db07a55b6a5d6016ba17ae6"
+    }
+  }
+}

@@ -44,12 +44,12 @@ function CartItem({ item, onQty, onRemove }) {
         <div style={{ fontSize: 11, color: 'var(--mu)' }}>{item.talle ? `T: ${item.talle}` : ''} {fmt(item.precio)} c/u{item.lista > 1 ? ` · L${item.lista}` : ''}</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-        <button onClick={() => onQty(item.prod_id, item.talle, -1)} style={btnQty}>−</button>
+        <button type="button" onClick={() => onQty(item.prod_id, item.talle, -1)} style={btnQty}>−</button>
         <span style={{ minWidth: 26, textAlign: 'center', fontWeight: 700, fontSize: 14 }}>{item.cantidad}</span>
-        <button onClick={() => onQty(item.prod_id, item.talle, +1)} style={btnQty}>+</button>
+        <button type="button" onClick={() => onQty(item.prod_id, item.talle, +1)} style={btnQty}>+</button>
       </div>
       <div style={{ width: 68, textAlign: 'right', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{fmt(item.precio * item.cantidad)}</div>
-      <button onClick={() => onRemove(item.prod_id, item.talle)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mu)', fontSize: 16, padding: '0 2px' }}>✕</button>
+      <button type="button" onClick={() => onRemove(item.prod_id, item.talle)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mu)', fontSize: 16, padding: '0 2px' }}>✕</button>
     </div>
   )
 }
@@ -202,7 +202,7 @@ export function POS() {
                 <div style={{ fontWeight: 700, fontSize: 13 }}>{cliente.nombre} {cliente.apellido || ''}</div>
                 <div style={{ fontSize: 11, color: 'var(--mu)' }}>{cliente.tel || ''}{cliente.lista > 1 ? ` · ${LISTA_LABELS[cliente.lista]}` : ''}{cliente.es_ctacte ? ' · 📒 Cta. Cte.' : ''}{cliente.saldo_ctacte > 0 ? ` · Debe ${fmt(cliente.saldo_ctacte)}` : ''}</div>
               </div>
-              <button onClick={() => { setCliente(null); setBuscadorCli('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mu)', fontSize: 18 }}>✕</button>
+              <button type="button" onClick={() => { setCliente(null); setBuscadorCli('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mu)', fontSize: 18 }}>✕</button>
             </div>
           ) : (
             <div style={{ position: 'relative' }}>
@@ -258,28 +258,28 @@ export function POS() {
           </div>
 
           {/* Botón registrar venta */}
-          <button onClick={pasarACaja} disabled={cart.length === 0 || procesando}
+          <button type="button" onClick={pasarACaja} disabled={cart.length === 0 || procesando}
             style={{ width: '100%', padding: '13px', borderRadius: 10, border: 'none', background: cart.length > 0 ? 'var(--ac)' : 'var(--bd)', color: cart.length > 0 ? '#fff' : 'var(--mu)', fontWeight: 800, fontSize: 15, cursor: cart.length > 0 ? 'pointer' : 'not-allowed', marginBottom: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             {procesando ? <><span className="spinner" style={{ width: 16, height: 16, borderTopColor: '#fff' }} /> Registrando...</> : <><span>🧾</span> Registrar venta</>}
           </button>
 
           {/* Cuenta corriente */}
           {cliente?.es_ctacte && (
-            <button onClick={registrarCtacte} disabled={cart.length === 0 || procesando}
+            <button type="button" onClick={registrarCtacte} disabled={cart.length === 0 || procesando}
               style={{ width: '100%', padding: '9px', borderRadius: 10, border: '1.5px solid var(--ac2)', background: 'transparent', color: 'var(--ac2)', fontWeight: 700, fontSize: 13, cursor: 'pointer', marginBottom: 6 }}>
               📒 Cargar en cuenta corriente
             </button>
           )}
 
           {/* Ir a caja */}
-          <button onClick={() => navigate('/app/caja')}
+          <button type="button" onClick={() => navigate('/app/caja')}
             style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1.5px solid var(--bd)', background: 'transparent', color: 'var(--mu)', fontSize: 12, cursor: 'pointer', marginBottom: 4 }}>
             💰 Ir a Caja
           </button>
 
           {/* Limpiar */}
           {cart.length > 0 && (
-            <button onClick={limpiar} style={{ width: '100%', padding: '6px', borderRadius: 8, border: 'none', background: 'transparent', color: 'var(--mu)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
+            <button type="button" onClick={limpiar} style={{ width: '100%', padding: '6px', borderRadius: 8, border: 'none', background: 'transparent', color: 'var(--mu)', fontSize: 11, cursor: 'pointer', textDecoration: 'underline' }}>
               🗑 Limpiar
             </button>
           )}

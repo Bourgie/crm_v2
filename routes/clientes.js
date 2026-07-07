@@ -3,9 +3,10 @@ const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
 const { authMiddleware, requireRol } = require('../middleware/auth');
+const { validate, clienteSchema } = require('../middleware/validate');
 router.use(authMiddleware);
 
-function calcScore(cli_id) {
+function calcScore(cli_id, db) {
   const ventas = db.where('ventas', v => v.cliente_id === cli_id && !v.anulada);
   if (!ventas.length) return { score: 0, clase: 'Nuevo', color: '#71717A' };
   const total = ventas.reduce((a,v) => a+v.total, 0);
@@ -44,7 +45,7 @@ router.get('/', (req, res) => {
   rows = rows.map(c => {
     const cv = ventas.filter(v=>v.cliente_id===c.id&&!v.anulada);
     const saldoCtacte = ctacte.filter(m=>m.cliente_id===c.id&&!m.cancelado).reduce((a,m)=>a+(m.tipo==='deuda'?m.monto:m.tipo==='pago'?-m.monto:0),0);
-    return { ...c, compras: cv.length, total_gastado: cv.reduce((a,v)=>a+v.total,0), saldo_ctacte: saldoCtacte, ...calcScore(c.id) };
+    return { ...c, compras: cv.length, total_gastado: cv.reduce((a,v)=>a+v.total,0), saldo_ctacte: saldoCtacte, ...calcScore(c.id, db) };
   });
   if (req.query.sort === 'score') rows.sort((a,b)=>b.score-a.score);
   res.json(rows);
@@ -68,13 +69,14 @@ router.get('/:id', (req,res) => {
     .map(v=>({...v, suc_nombre:(sucs.find(s=>s.id===v.suc_id)||{}).nombre||'—', vend_nombre:(()=>{const vd=vends.find(x=>x.id===v.vend_id);return vd?vd.nombre+' '+vd.apellido:'—';})()}));
   const ctacte = db.where('ctacte_movimientos',m=>m.cliente_id===req.params.id).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
   const pendientes = db.where('pendientes',p=>p.cliente_id===req.params.id&&p.estado!=='entregado');
-  res.json({...c, ventas, ctacte, pendientes, ...calcScore(req.params.id)});
+  res.json({...c, ventas, ctacte, pendientes, ...calcScore(req.params.id, db)});
 });
 
-router.post('/', (req,res) => {
+router.post('/', validate(clienteSchema), (req,res) => {
   const db = _getDB(req);
   if(!req.body.nombre) return res.status(400).json({error:'Nombre obligatorio'});
-  const r = db.insert('clientes',{id:'c'+uid(),lista:1,limite_credito:20000,activo:true,creado:new Date().toISOString(),...req.body});
+  const { nombre, apellido, dni, tel, email, ciudad, bebe_nac, notas, lista, limite_credito, suc_origen, direccion, provincia, cp, fecha_nac, genero, categoria, vend_id, tipo_doc, web_id, puntos } = req.body;
+  const r = db.insert('clientes',{id:'c'+uid(),lista:lista??1,limite_credito:limite_credito??20000,activo:true,creado:new Date().toISOString(),nombre,apellido,dni,tel,email,ciudad,bebe_nac,notas,suc_origen,direccion,provincia,cp,fecha_nac,genero,categoria,vend_id,tipo_doc,web_id,puntos});
   try { const { dispararWebhooks } = require('./webhooks'); dispararWebhooks(db, 'cliente.creado', { cliente_id: r.id, nombre: r.nombre, tel: r.tel, email: r.email }); } catch(e) {}
   res.json(r);
 });

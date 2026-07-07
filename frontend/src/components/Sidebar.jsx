@@ -1,7 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useApp, useAuth } from '../store'
-import { useChatUnread } from '../pages/Chat'
-import { usePipelineVencidas, useTareasVencidas, usePipelineActivity } from '../pages/Pipeline'
+import { useChatUnread, usePipelineVencidas, useTareasVencidas, usePipelineActivity } from '../hooks/badges'
 
 const NAV = [
   { section: 'Principal' },
@@ -81,7 +80,7 @@ export function Sidebar({ mobile, onClose }) {
 
       {/* Biz name */}
       {cfg?.nombre && (
-        <div style={{ padding: '0 16px 6px', fontSize: 11, color: 'rgba(255,255,255,.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>
+        <div style={{ padding: '0 16px 6px', fontSize: 12, color: 'rgba(255,255,255,.4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>
           {cfg.nombre}
         </div>
       )}
@@ -89,7 +88,7 @@ export function Sidebar({ mobile, onClose }) {
       {/* Sucursal actual + selector */}
       {sucPermitidas.length > 0 && (
         <div style={{ padding: '0 16px 12px' }}>
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>📍 Sucursal</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,.4)', marginBottom: 4, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '.5px' }}>📍 Sucursal</div>
           {sucPermitidas.length > 1 ? (
             <select value={sucSesion || ''} onChange={cambiarSucursal}
               style={{ width: '100%', padding: '6px 10px', borderRadius: 6, background: 'rgba(255,255,255,.08)', color: '#fff', border: '1px solid rgba(255,255,255,.15)', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
@@ -106,7 +105,7 @@ export function Sidebar({ mobile, onClose }) {
         {items.map((item, i) => {
           if (item.section) {
             return (
-              <div key={i} className="nav-section">{item.section}</div>
+              <div key={"sec-"+item.section} className="nav-section">{item.section}</div>
             )
           }
           return (
@@ -119,24 +118,24 @@ export function Sidebar({ mobile, onClose }) {
               <span className="nav-icon">{item.icon}</span>
               <span>{item.label}</span>
               {(item.badge === 'chat' && chatUnread > 0) && (
-                <span style={{ marginLeft: 'auto', background: 'var(--bad, #ef4444)', color: '#fff', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px', minWidth: 18, textAlign: 'center' }}>
+                <span style={{ marginLeft: 'auto', background: 'var(--bad, #ef4444)', color: '#fff', borderRadius: 10, fontSize: 12, fontWeight: 700, padding: '1px 7px', minWidth: 18, textAlign: 'center' }}>
                   {chatUnread > 9 ? '9+' : chatUnread}
                 </span>
               )}
               {(item.badge === 'pipeline' && (pipelineBadge > 0 || tareasBadge > 0 || activityBadge > 0)) && (
                 <span style={{ marginLeft: 'auto', display: 'flex', gap: 3 }}>
                   {activityBadge > 0 && (
-                    <span style={{ background: 'var(--ac, #6366f1)', color: '#fff', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px', minWidth: 18, textAlign: 'center' }}>
+                    <span style={{ background: 'var(--ac, #6366f1)', color: '#fff', borderRadius: 10, fontSize: 12, fontWeight: 700, padding: '1px 7px', minWidth: 18, textAlign: 'center' }}>
                       {activityBadge > 9 ? '9+' : activityBadge}
                     </span>
                   )}
                   {pipelineBadge > 0 && (
-                    <span style={{ background: 'var(--warn, #f59e0b)', color: '#fff', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px', minWidth: 18, textAlign: 'center' }}>
+                    <span style={{ background: 'var(--warn, #f59e0b)', color: '#fff', borderRadius: 10, fontSize: 12, fontWeight: 700, padding: '1px 7px', minWidth: 18, textAlign: 'center' }}>
                       {pipelineBadge > 9 ? '9+' : pipelineBadge}
                     </span>
                   )}
                   {tareasBadge > 0 && (
-                    <span style={{ background: 'var(--bad, #ef4444)', color: '#fff', borderRadius: 10, fontSize: 10, fontWeight: 700, padding: '1px 7px', minWidth: 18, textAlign: 'center' }}>
+                    <span style={{ background: 'var(--bad, #ef4444)', color: '#fff', borderRadius: 10, fontSize: 12, fontWeight: 700, padding: '1px 7px', minWidth: 18, textAlign: 'center' }}>
                       {tareasBadge > 9 ? '9+' : tareasBadge}
                     </span>
                   )}
@@ -155,13 +154,14 @@ export function Sidebar({ mobile, onClose }) {
           </div>
           <div>
             <div style={{ fontSize: 12, fontWeight: 600, color: '#fff' }}>{me?.nombre}</div>
-            <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)' }}>{me?.rol}</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,255,255,.4)' }}>{me?.rol}</div>
           </div>
         </div>
-        <button className="btn btn-secondary btn-sm" style={{ width: '100%', justifyContent: 'center' }} onClick={handleLogout}>
+        <button type="button" className="btn btn-secondary btn-sm" style={{ width: '100%', justifyContent: 'center' }} onClick={handleLogout}>
           Cerrar sesión
         </button>
       </div>
     </nav>
   )
 }
+

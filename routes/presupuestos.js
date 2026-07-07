@@ -6,7 +6,7 @@ const _getDB = req => (req && req.db) || db;
 const { authMiddleware, requireRol } = require('../middleware/auth');
 router.use(authMiddleware);
 
-function enrichPres(p) {
+function enrichPres(p, db) {
   const sucs=db.all('sucursales'),clis=db.all('clientes'),vends=db.all('vendedores');
   const c=clis.find(x=>x.id===p.cliente_id);
   const vd=vends.find(x=>x.id===p.vend_id);
@@ -136,7 +136,7 @@ router.get('/', (req,res) => {
   if(cli_id) rows=rows.filter(p=>p.cliente_id===cli_id);
   if(desde) rows=rows.filter(p=>p.fecha.substr(0,10)>=desde);
   if(hasta) rows=rows.filter(p=>p.fecha.substr(0,10)<=hasta);
-  res.json(rows.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(enrichPres));
+  res.json(rows.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(p => enrichPres(p, db)));
 });
 
 // ── PDF ──
@@ -146,7 +146,7 @@ router.get('/:id/pdf', (req, res) => {
   if (!p) return res.status(404).json({ error: 'No encontrado' });
   const items = db.where('presupuesto_items', i => i.presupuesto_id === req.params.id);
   const cfg = db.getConfig();
-  buildPDF({ ...enrichPres(p), items }, cfg, res);
+  buildPDF({ ...enrichPres(p, db), items }, cfg, res);
 });
 
 router.get('/:id', (req,res) => {
@@ -154,7 +154,7 @@ router.get('/:id', (req,res) => {
   const p=db.findOne('presupuestos',req.params.id);
   if(!p) return res.status(404).json({error:'No encontrado'});
   const items=db.where('presupuesto_items',i=>i.presupuesto_id===req.params.id);
-  res.json({...enrichPres(p),items});
+  res.json({...enrichPres(p, db),items});
 });
 
 router.post('/', (req,res) => {
@@ -294,15 +294,27 @@ router.post('/:id/convertir', authMiddleware, requireRol('admin','supervisor','v
     recargo_pago: 0, envio_monto: 0, envio_detalle: ''
   });
 
-  const { updateSucStock } = require('./stock_helpers');
+  const { updateSucStock, updateVariantStock } = require('./stock_helpers');
   items.forEach(it => {
     db.insert('venta_items', {
       id: uid(), venta_id: id, prod_id: it.prod_id || null,
+      variante_id: it.variante_id || null,
       nombre: it.nombre, talle: it.talle || '',
       precio: parseFloat(it.precio) || 0, cantidad: parseInt(it.cantidad) || 1,
       subtotal: (parseFloat(it.precio) || 0) * (parseInt(it.cantidad) || 1), costo: 0
     });
-    if (it.prod_id) {
+    if (it.variante_id) {
+      const vRes = updateVariantStock(db, it.variante_id, pres.suc_id, -parseInt(it.cantidad));
+      if (vRes) {
+        db.insert('stock_movimientos', {
+          id: uid(), prod_id: it.prod_id, nombre_prod: it.nombre,
+          tipo: 'salida', cantidad: -parseInt(it.cantidad),
+          stock_antes: vRes.before, stock_despues: vRes.after,
+          motivo: 'Venta #' + numero + ' (desde presupuesto, variante)',
+          usuario_id: req.user.id, usuario: req.user.nombre, fecha, suc_id: pres.suc_id
+        });
+      }
+    } else if (it.prod_id) {
       const p = db.findOne('productos', it.prod_id);
       if (p) {
         const sucRes = updateSucStock(db, it.prod_id, pres.suc_id, -parseInt(it.cantidad));
@@ -344,7 +356,7 @@ router.post('/:id/enviar-email', authMiddleware, async (req, res) => {
   try {
     const items = db.where('presupuesto_items', i => i.presupuesto_id === req.params.id);
     const cfg = db.getConfig();
-    const pdfBuf = await pdfBuffer({ ...enrichPres(p), items }, cfg);
+    const pdfBuf = await pdfBuffer({ ...enrichPres(p, db), items }, cfg);
 
     // Check SMTP config
     if (!cfg.smtp_host || !cfg.smtp_user || !cfg.smtp_pass) {

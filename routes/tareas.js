@@ -68,7 +68,11 @@ router.put('/:id', (req, res) => {
   const db = _getDB(req);
   const old = db.findOne('tareas', req.params.id);
   if (!old) return res.status(404).json({ error: 'No encontrada' });
-  const upd = { ...req.body };
+  const { descripcion, fecha_fin, asignado_a, suc_id, estado, observacion } = req.body;
+  const upd = {};
+  for (const [k, v] of Object.entries({ descripcion, fecha_fin, asignado_a, suc_id, estado, observacion })) {
+    if (v !== undefined) upd[k] = v;
+  }
   const ids = Array.isArray(old.asignado_a) ? old.asignado_a : [];
   const isAssignee = ids.includes(req.user.id) || old.creado_por === req.user.id;
   const isAdminSup = req.user.rol === 'admin' || req.user.rol === 'supervisor';

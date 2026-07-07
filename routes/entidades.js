@@ -26,7 +26,8 @@ sucRouter.post('/', requireRol('admin'), (req,res) => {
       }
     }
   } catch(e) { /* master db check failed, allow creation */ }
-  res.json(db.insert('sucursales',{id:'s'+uid(),activo:true,...req.body}));
+  const { nombre, dir, ciudad, tel, email, responsable } = req.body;
+  res.json(db.insert('sucursales',{id:'s'+uid(),activo:true,nombre,dir,ciudad,tel,email,responsable}));
 });
 sucRouter.put('/:id', requireRol('admin','supervisor'), (req,res) => {
   const db = _getDB(req);
@@ -49,7 +50,8 @@ vendRouter.get('/:id', (req,res) => {
 vendRouter.post('/', requireRol('admin','supervisor'), (req,res) => {
   const db = _getDB(req);
   if(!req.body.nombre) return res.status(400).json({error:'Nombre obligatorio'});
-  res.json(db.insert('vendedores',{id:'v'+uid(),activo:true,comision:0,...req.body}));
+  const { nombre, apellido, dni, tel, email, rol, suc_id, suc_nombre, comision } = req.body;
+  res.json(db.insert('vendedores',{id:'v'+uid(),activo:true,comision:comision??0,nombre,apellido,dni,tel,email,rol,suc_id,suc_nombre}));
 });
 vendRouter.put('/:id', requireRol('admin','supervisor'), (req,res) => {
   const db = _getDB(req);
@@ -71,24 +73,22 @@ provRouter.get('/:id/ordenes', authMiddleware, (req,res) => {
   const pid = req.params.id;
   // Formal OCs (prov_oc table)
   const formalOCs = db.all('prov_oc')
-    .filter(o => o.prov_id === pid && o.estado !== 'cancelada')
-    .map(o => ({
+    .flatMap(o => o.prov_id === pid && o.estado !== 'cancelada' ? [{
       id: o.id,
       label: 'OC #' + (o.numero||o.id.substr(-4)) + (o.notas?' — '+o.notas.substr(0,30):''),
       monto: o.total||0,
       fecha: o.fecha,
       tipo: 'oc'
-    }));
+    }] : []);
   // Simple purchase orders (prov_ordenes table)
   const simpleOCs = db.all('prov_ordenes')
-    .filter(o => o.prov_id === pid && !o.eliminada && !o.cancelada)
-    .map(o => ({
+    .flatMap(o => o.prov_id === pid && !o.eliminada && !o.cancelada ? [{
       id: o.id,
       label: (o.concepto||'Compra') + (o.nro_factura?' Nro '+o.nro_factura:'') + ' — ' + fmt(o.monto),
       monto: o.monto||0,
       fecha: o.fecha,
       tipo: 'orden'
-    }));
+    }] : []);
   const all = [...formalOCs, ...simpleOCs].sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
   res.json(all);
 
@@ -97,7 +97,8 @@ provRouter.get('/:id/ordenes', authMiddleware, (req,res) => {
 provRouter.post('/', requireRol('admin','supervisor'), (req,res) => {
   const db = _getDB(req);
   if(!req.body.nombre) return res.status(400).json({error:'Nombre obligatorio'});
-  res.json(db.insert('proveedores',{id:'pr'+uid(),activo:true,...req.body}));
+  const { nombre, apellido, tel, email, direccion, ciudad, notas, cuit, razon_social, condicion_iva } = req.body;
+  res.json(db.insert('proveedores',{id:'pr'+uid(),activo:true,nombre,apellido,tel,email,direccion,ciudad,notas,cuit,razon_social,condicion_iva}));
 });
 provRouter.put('/:id', requireRol('admin','supervisor'), (req,res) => {
   const db = _getDB(req); db.update('proveedores',req.params.id,req.body); res.json({ok:true}); });

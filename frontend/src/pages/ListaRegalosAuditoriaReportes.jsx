@@ -1,12 +1,15 @@
 // ═══════════════════════════════════════════════════════════════
 // LISTA DE REGALOS
 // ═══════════════════════════════════════════════════════════════
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, lazy, Suspense } from 'react'
 import { useApi } from '../hooks/useApi'
 import { useApp, useToast } from '../store'
 import { Modal } from '../components/Modal'
 import { SearchBar, PageHeader, Field, EmptyRow, Loader, Pagination, ConfirmDialog } from '../components/UI'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend, LineChart, Line } from 'recharts'
+import { exportExcel } from '../utils/excel'
+
+const VentasBarChart = lazy(() => import('../components/VentasBarChart'))
+const PagoPieChart = lazy(() => import('../components/PagoPieChart'))
 
 const PER_PAGE = 20
 const fmtM = (n) => '$' + (Number(n)||0).toLocaleString('es-AR',{maximumFractionDigits:0})
@@ -69,7 +72,7 @@ export function ListaRegalos() {
     <div>
       <PageHeader title={`🎁 Listas de Regalos (${filtered.length})`}>
         <SearchBar value={search} onChange={(v)=>{setSearch(v);setPage(1)}} placeholder="Buscar..." style={{width:200}}/>
-        <button className="btn btn-primary" onClick={()=>{setForm({mama:'',papa:'',evento:'',fecha_evento:'',tel:'',email:'',notas:''});setModal('new')}}>+ Nueva lista</button>
+        <button type="button" className="btn btn-primary" onClick={()=>{setForm({mama:'',papa:'',evento:'',fecha_evento:'',tel:'',email:'',notas:''});setModal('new')}}>+ Nueva lista</button>
       </PageHeader>
 
       <div className="card" style={{padding:0}}>
@@ -81,15 +84,15 @@ export function ListaRegalos() {
                 ? <EmptyRow cols={6} icon="🎁" text="Sin listas aún"/>
                 : filtered.slice((page-1)*PER_PAGE,page*PER_PAGE).map((l) => (
                   <tr key={l.id} style={{cursor:'pointer'}} onClick={()=>{setDetailId(l.id);loadDetail(l.id)}}>
-                    <td><div style={{fontWeight:600}}>{l.mama}</div>{l.papa&&<div style={{fontSize:11,color:'var(--mu)'}}>{l.papa}</div>}</td>
+                    <td><div style={{fontWeight:600}}>{l.mama}</div>{l.papa&&<div style={{fontSize: 12,color:'var(--mu)'}}>{l.papa}</div>}</td>
                     <td style={{fontSize:12}}>{l.evento||'—'}</td>
                     <td style={{fontSize:12}}>{l.fecha_evento?new Date(l.fecha_evento).toLocaleDateString('es-AR'):'—'}</td>
                     <td style={{fontSize:12}}>{l.tel||'—'}</td>
                     <td style={{fontSize:12,color:'var(--mu)'}}>{l.n_items||0} ítem(s)</td>
                     <td onClick={(e)=>e.stopPropagation()}>
                       <div style={{display:'flex',gap:4}}>
-                        <button className="btn btn-icon btn-sm" onClick={()=>{setForm({mama:l.mama,papa:l.papa||'',evento:l.evento||'',fecha_evento:(l.fecha_evento||'').substr(0,10),tel:l.tel||'',email:l.email||'',notas:l.notas||''});setModal(l)}}>✏️</button>
-                        <button className="btn btn-icon btn-sm" onClick={()=>setConfirm(l.id)}>🗑</button>
+                        <button type="button" className="btn btn-icon btn-sm" onClick={()=>{setForm({mama:l.mama,papa:l.papa||'',evento:l.evento||'',fecha_evento:(l.fecha_evento||'').substr(0,10),tel:l.tel||'',email:l.email||'',notas:l.notas||''});setModal(l)}}>✏️</button>
+                        <button type="button" className="btn btn-icon btn-sm" onClick={()=>setConfirm(l.id)}>🗑</button>
                       </div>
                     </td>
                   </tr>
@@ -101,7 +104,7 @@ export function ListaRegalos() {
       </div>
 
       <Modal open={!!modal} onClose={()=>setModal(null)} title={modal==='new'?'+ Nueva lista':'Editar lista'}
-        footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner" style={{width:14,height:14}}/> Guardando...</>:'💾 Guardar'}</button></>}>
+        footer={<><button type="button" className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button><button type="button" className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner" style={{width:14,height:14}}/> Guardando...</>:'💾 Guardar'}</button></>}>
         <div className="fr"><Field label="Titular / Mamá *"><input value={form.mama} onChange={set('mama')} placeholder="Nombre"/></Field><Field label="Papá / Pareja"><input value={form.papa} onChange={set('papa')} placeholder="Nombre (opcional)"/></Field></div>
         <div className="fr"><Field label="Tipo de evento"><input value={form.evento} onChange={set('evento')} placeholder="Ej: Baby shower, Casamiento..."/></Field><Field label="Fecha del evento"><input type="date" value={form.fecha_evento} onChange={set('fecha_evento')}/></Field></div>
         <div className="fr"><Field label="Teléfono"><input value={form.tel} onChange={set('tel')} placeholder="Contacto"/></Field><Field label="Email"><input type="email" value={form.email} onChange={set('email')} placeholder="email@..."/></Field></div>
@@ -113,15 +116,15 @@ export function ListaRegalos() {
           : detail && (
             <div>
               <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
-                {detail.papa&&<div style={{background:'var(--sf)',borderRadius:8,padding:'8px 14px'}}><div style={{fontSize:11,color:'var(--mu)'}}>Pareja</div><div style={{fontWeight:600}}>{detail.papa}</div></div>}
-                {detail.fecha_evento&&<div style={{background:'var(--sf)',borderRadius:8,padding:'8px 14px'}}><div style={{fontSize:11,color:'var(--mu)'}}>Fecha evento</div><div style={{fontWeight:600}}>{new Date(detail.fecha_evento).toLocaleDateString('es-AR')}</div></div>}
+                {detail.papa&&<div style={{background:'var(--sf)',borderRadius:8,padding:'8px 14px'}}><div style={{fontSize: 12,color:'var(--mu)'}}>Pareja</div><div style={{fontWeight:600}}>{detail.papa}</div></div>}
+                {detail.fecha_evento&&<div style={{background:'var(--sf)',borderRadius:8,padding:'8px 14px'}}><div style={{fontSize: 12,color:'var(--mu)'}}>Fecha evento</div><div style={{fontWeight:600}}>{new Date(detail.fecha_evento).toLocaleDateString('es-AR')}</div></div>}
               </div>
               <div className="table-wrap">
                 <table><thead><tr><th>Producto</th><th style={{textAlign:'center'}}>Cant.</th><th>Comprado por</th><th>Estado</th></tr></thead>
                 <tbody>
                   {(detail.items||[]).length===0?<tr><td colSpan={4} style={{textAlign:'center',padding:24,color:'var(--mu)'}}>Sin ítems</td></tr>
                     :(detail.items||[]).map((it,i)=>(
-                      <tr key={i}><td>{it.nombre||it.prod_nombre||'—'}</td><td style={{textAlign:'center'}}>{it.cantidad}</td><td style={{fontSize:12}}>{it.comprador||'—'}</td>
+                      <tr key={it.id||it.nombre||'item-'+i}><td>{it.nombre||it.prod_nombre||'—'}</td><td style={{textAlign:'center'}}>{it.cantidad}</td><td style={{fontSize:12}}>{it.comprador||'—'}</td>
                       <td><span className={`badge ${it.comprado?'badge-green':'badge-gray'}`}>{it.comprado?'Comprado':'Pendiente'}</span></td></tr>
                     ))}
                 </tbody></table>
@@ -140,6 +143,9 @@ export function ListaRegalos() {
 // ═══════════════════════════════════════════════════════════════
 // AUDITORÍA
 // ═══════════════════════════════════════════════════════════════
+const fmtDate = (d) => d ? new Date(d).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—'
+const MODS = ['ventas', 'caja', 'clientes', 'productos', 'presupuestos', 'pendientes', 'ctacte', 'gastos', 'transferencias', 'config', 'usuarios', 'sync']
+
 export function Auditoria() {
   const { api } = useApi()
   const { toast } = useToast()
@@ -153,7 +159,7 @@ export function Auditoria() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const qs = Object.entries(filtros).filter(([,v])=>v).map(([k,v])=>`${k}=${encodeURIComponent(v)}`).join('&')
+      const qs = Object.entries(filtros).flatMap(([k,v]) => v ? [`${k}=${encodeURIComponent(v)}`] : []).join('&')
       const d = await api('GET', '/auditoria?' + qs + '&limit=200')
       setRows(Array.isArray(d)?d:[])
     } catch { toast('Error cargando auditoría','err') }
@@ -163,8 +169,6 @@ export function Auditoria() {
   useEffect(() => { load() }, [load])
 
   const setF = (f) => (e) => { setFiltros((p)=>({...p,[f]:e.target.value})); setPage(1) }
-  const fmtDate = (d) => d?new Date(d).toLocaleString('es-AR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'—'
-  const MODS = ['ventas','caja','clientes','productos','presupuestos','pendientes','ctacte','gastos','transferencias','config','usuarios','sync']
 
   if (loading) return <Loader/>
 
@@ -175,7 +179,7 @@ export function Auditoria() {
         <select style={sel} value={filtros.suc_id} onChange={setF('suc_id')}><option value="">Todas las sucursales</option>{allSucs.map((s)=><option key={s.id} value={s.id}>{s.nombre}</option>)}</select>
         <input type="date" value={filtros.desde} onChange={setF('desde')} style={{...sel,cursor:'default'}} placeholder="Desde"/>
         <input type="date" value={filtros.hasta} onChange={setF('hasta')} style={{...sel,cursor:'default'}} placeholder="Hasta"/>
-        <button className="btn btn-secondary btn-sm" onClick={()=>{setFiltros({modulo:'',suc_id:'',desde:'',hasta:''});setPage(1)}}>Limpiar</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={()=>{setFiltros({modulo:'',suc_id:'',desde:'',hasta:''});setPage(1)}}>Limpiar</button>
         <span style={{marginLeft:'auto',fontSize:12,color:'var(--mu)'}}>{rows.length} registros</span>
       </div>
 
@@ -188,10 +192,10 @@ export function Auditoria() {
                 ? <EmptyRow cols={5} icon="🔍" text="Sin registros para los filtros seleccionados"/>
                 : rows.slice((page-1)*PER,page*PER).map((r) => (
                   <tr key={r.id}>
-                    <td style={{fontSize:11,whiteSpace:'nowrap'}}>{fmtDate(r.fecha)}</td>
+                    <td style={{fontSize: 12,whiteSpace:'nowrap'}}>{fmtDate(r.fecha)}</td>
                     <td style={{fontSize:12,fontWeight:600}}>{r.usuario_nombre||'—'}</td>
-                    <td><span className="badge badge-blue" style={{fontSize:10}}>{r.modulo}</span></td>
-                    <td><span className="badge badge-gray" style={{fontSize:10}}>{r.accion}</span></td>
+                    <td><span className="badge badge-blue" style={{fontSize: 12}}>{r.modulo}</span></td>
+                    <td><span className="badge badge-gray" style={{fontSize: 12}}>{r.accion}</span></td>
                     <td style={{fontSize:12,maxWidth:300,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.descripcion||'—'}</td>
                   </tr>
                 ))}
@@ -208,6 +212,7 @@ export function Auditoria() {
 // REPORTES
 // ═══════════════════════════════════════════════════════════════
 const COLORS = ['#6366f1','#f97316','#22c55e','#f59e0b','#ef4444','#8b5cf6','#06b6d4','#ec4899']
+const fmtV = (v) => '$'+((v||0)/1000).toFixed(0)+'k'
 
 export function Reportes() {
   const { api } = useApi()
@@ -217,15 +222,14 @@ export function Reportes() {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [desde, setDesde] = useState(() => { const d = new Date(); d.setDate(1); return d.toISOString().substr(0,10) })
-  const [hasta, setHasta] = useState(new Date().toISOString().substr(0,10))
+  const [hasta, setHasta] = useState(() => new Date().toISOString().substr(0,10))
   const [suc, setSuc] = useState(sucSesion||'')
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      // No existe /api/reportes — todo viene del dashboard con rango de fechas
-      const dash = await api('GET', `/dashboard?suc_id=${suc}&desde=${desde}&hasta=${hasta}`)
-      setData({ dash, rep: null })
+      const r = await api('GET', `/dashboard/reporte?desde=${desde}&hasta=${hasta}&suc_id=${suc}`)
+      setData(r)
     } catch { toast('Error cargando reportes','err') }
     finally { setLoading(false) }
   }, [suc, desde, hasta])
@@ -233,13 +237,11 @@ export function Reportes() {
   useEffect(() => { load() }, [load])
 
   if (loading) return <Loader text="Generando reporte..."/>
-  const kpis = data?.dash?.kpis || {}
-  const ventasMes = data?.dash?.ventas_mes || []
-  const topProds = data?.dash?.top_productos || []
-  const topClis = data?.dash?.top_clientes || []
-  const porPago = data?.rep?.por_metodo_pago || []
-
-  const fmtV = (v) => '$'+((v||0)/1000).toFixed(0)+'k'
+  const kpis = data?.kpis || {}
+  const ventasMes = data?.ventas_diarias || []
+  const topProds = (data?.top_productos || []).map(p => ({ ...p, cantidad: p.qty }))
+  const topClis = data?.top_clientes || []
+  const porPago = (data?.by_pago || []).map(p => ({ metodo: p.pago, total: p.tot }))
 
   return (
     <div>
@@ -253,17 +255,38 @@ export function Reportes() {
           <option value="">Todas las sucursales</option>
           {allSucs.map((s)=><option key={s.id} value={s.id}>{s.nombre}</option>)}
         </select>
-        <button className="btn btn-primary btn-sm" onClick={load}>Actualizar</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={load}>Actualizar</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={async () => {
+          if (!data) return
+          const sheet = [
+            ['Fecha','Cliente','Método','Total'],
+            ...([].concat(...(data.ventas_diarias?.length ? [['VENTAS DIARIAS'], ...data.ventas_diarias.map(v => [v.fecha, v.n+' ventas', '', v.total])] : []))),
+            ['','','',''],
+            ['RESUMEN POR VENDEDOR'],
+            ...((data.by_vendedor||[]).map(v => [v.nombre, v.n+' ventas', '', v.tot, 'Comisión: '+v.comision])),
+            ['','','',''],
+            ['RESUMEN POR MÉTODO DE PAGO'],
+            ...((data.by_pago||[]).map(p => ['', p.pago, p.n+' ventas', p.tot])),
+            ['','','',''],
+            ['TOP PRODUCTOS'],
+            ...((data.top_productos||[]).map(p => [p.nombre, p.qty+' u.', '', p.tot])),
+            ['','','',''],
+            ['TOP CLIENTES'],
+            ...((data.top_clientes||[]).map(c => [c.nombre, c.n_compras+' compras', '', c.total])),
+          ]
+          await exportExcel('reporte-ventas', sheet)
+          toast('📊 Excel exportado', 'ok')
+        }}>📊 Excel</button>
       </div>
 
       {/* KPI row */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:20}}>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:16}}>
         {[
-          {label:'Ventas totales',value:fmtM(kpis.ventas_mes?.t??0),color:'var(--ok)',icon:'💰'},
-          {label:'Transacciones',value:kpis.ventas_mes?.n??0,icon:'🧾'},
-          {label:'Ticket promedio',value:(kpis.ventas_mes?.n??0)>0?fmtM((kpis.ventas_mes?.t??0)/(kpis.ventas_mes?.n??1)):'—',icon:'📊'},
-          {label:'Clientes nuevos',value:kpis.clientes_nuevos_mes||0,icon:'👥'},
-          {label:'Productos vendidos',value:kpis.productos_vendidos||0,icon:'👕'},
+          {label:'Ventas totales',value:fmtM(kpis.total||0),color:'var(--ok)',icon:'💰'},
+          {label:'Transacciones',value:kpis.ventas||0,icon:'🧾'},
+          {label:'Ticket promedio',value:fmtM(kpis.ticket_promedio||0),icon:'📊'},
+          {label:'Margen',value:fmtM(kpis.margen||0)+' ('+(kpis.margen_pct||0).toFixed(1)+'%)',color:'var(--ac2)',icon:'📈'},
+          {label:'Items vendidos',value:kpis.items||0,icon:'👕'},
         ].map((k)=>(
           <div key={k.label} className="kpi-card" style={{borderLeft:`3px solid ${k.color||'var(--ac)'}`}}>
             <div className="kpi-label">{k.label}</div>
@@ -277,44 +300,30 @@ export function Reportes() {
         {/* Ventas chart */}
         <div className="card">
           <div className="card-header"><h3>📈 Evolución de ventas</h3></div>
-          {ventasMes.length>0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <BarChart data={ventasMes} margin={{top:4,right:0,left:0,bottom:0}}>
-                <XAxis dataKey="fecha" tick={{fontSize:10}} tickFormatter={(v)=>v.substr(5)}/>
-                <YAxis tick={{fontSize:10}} tickFormatter={fmtV} width={40}/>
-                <Tooltip formatter={(v)=>fmtM(v)} labelFormatter={(l)=>l}/>
-                <Bar dataKey="total" fill="var(--ac)" radius={[4,4,0,0]}/>
-              </BarChart>
-            </ResponsiveContainer>
-          ) : <div className="empty-state" style={{padding:32}}><p>Sin datos para este período</p></div>}
+          <Suspense fallback={<div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>}>
+            <VentasBarChart data={ventasMes} height={200} fmt={fmtM} emptyText="Sin datos para este período" />
+          </Suspense>
         </div>
 
         {/* Por método de pago */}
         <div className="card">
           <div className="card-header"><h3>💳 Por método</h3></div>
-          {porPago.length>0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <PieChart>
-                <Pie data={porPago} dataKey="total" nameKey="metodo" cx="50%" cy="50%" outerRadius={70} label={({metodo,percent})=>`${metodo} ${(percent*100).toFixed(0)}%`} labelLine={false} style={{fontSize:10}}>
-                  {porPago.map((_,i)=><Cell key={i} fill={COLORS[i%COLORS.length]}/>)}
-                </Pie>
-                <Tooltip formatter={(v)=>fmtM(v)}/>
-              </PieChart>
-            </ResponsiveContainer>
-          ) : <div className="empty-state" style={{padding:32}}><p>Sin datos</p></div>}
+          <Suspense fallback={<div style={{ height: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>}>
+            <PagoPieChart data={porPago} fmt={fmtM} />
+          </Suspense>
         </div>
       </div>
 
       {/* Comisiones por vendedor */}
-      {data?.dash?.by_vendedor?.length > 0 && (
+      {data?.by_vendedor?.length > 0 && (
         <div className="card" style={{marginBottom:16}}>
           <div className="card-header"><h3>💰 Comisiones por vendedor</h3></div>
           <div className="table-wrap">
             <table>
               <thead><tr><th>Vendedor</th><th style={{textAlign:'right'}}>Ventas</th><th style={{textAlign:'right'}}>Total vendido</th><th style={{textAlign:'right'}}>Comisión</th></tr></thead>
               <tbody>
-                {data.dash.by_vendedor.map((v,i)=>(
-                  <tr key={i}>
+                {data.by_vendedor.map((v,i)=>(
+                  <tr key={v.id||v.nombre||'v-'+i}>
                     <td style={{fontWeight:600}}>{v.nombre}</td>
                     <td style={{textAlign:'right'}}>{v.n}</td>
                     <td style={{textAlign:'right',fontWeight:700,color:'var(--ok)'}}>{fmtM(v.tot)}</td>
@@ -334,8 +343,8 @@ export function Reportes() {
           {topProds.length===0 ? <div className="empty-state"><p>Sin datos</p></div>
             : <div style={{display:'flex',flexDirection:'column',gap:8}}>
                 {topProds.slice(0,8).map((p,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
-                    <div style={{width:22,height:22,borderRadius:'50%',background:'var(--sf)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:'var(--mu)',flexShrink:0}}>{i+1}</div>
+                  <div key={p.nombre||'tp-'+i} style={{display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{width:22,height:22,borderRadius:'50%',background:'var(--sf)',display:'flex',alignItems:'center',justifyContent:'center',fontSize: 12,fontWeight:700,color:'var(--mu)',flexShrink:0}}>{i+1}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{p.nombre}</div>
                       <div style={{height:4,background:'var(--bd)',borderRadius:2,marginTop:4}}><div style={{height:4,background:'var(--ac)',borderRadius:2,width:`${Math.min(100,(p.cantidad/topProds[0].cantidad)*100)}%`}}/></div>
@@ -353,11 +362,11 @@ export function Reportes() {
           {topClis.length===0 ? <div className="empty-state"><p>Sin datos</p></div>
             : <div style={{display:'flex',flexDirection:'column',gap:8}}>
                 {topClis.slice(0,8).map((c,i)=>(
-                  <div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
-                    <div style={{width:22,height:22,borderRadius:'50%',background:'var(--sf)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,color:'var(--mu)',flexShrink:0}}>{i+1}</div>
+                  <div key={c.cliente_id||c.nombre||'tc-'+i} style={{display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{width:22,height:22,borderRadius:'50%',background:'var(--sf)',display:'flex',alignItems:'center',justifyContent:'center',fontSize: 12,fontWeight:700,color:'var(--mu)',flexShrink:0}}>{i+1}</div>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.nombre}</div>
-                      <div style={{fontSize:11,color:'var(--mu)'}}>{c.n_compras} compras</div>
+                      <div style={{fontSize: 12,color:'var(--mu)'}}>{c.n_compras} compras</div>
                     </div>
                     <div style={{fontWeight:700,color:'var(--ok)',fontSize:13,flexShrink:0}}>{fmtM(c.total)}</div>
                   </div>
@@ -370,3 +379,4 @@ export function Reportes() {
 }
 
 const sel = {padding:'9px 12px',borderRadius:8,border:'1.5px solid var(--bd)',cursor:'pointer',fontSize:13,background:'var(--bg)',color:'var(--tx)'}
+

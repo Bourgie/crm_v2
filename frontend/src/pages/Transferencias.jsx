@@ -153,7 +153,7 @@ export function Transferencias() {
           <option value="">Todos los estados</option>
           {Object.entries(EST_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
         </select>
-        <button className="btn btn-primary" onClick={openNew}>+ Nueva</button>
+        <button type="button" className="btn btn-primary" onClick={openNew}>+ Nueva</button>
       </PageHeader>
 
       <div className="card" style={{ padding: 0 }}>
@@ -171,9 +171,9 @@ export function Transferencias() {
                     <td><span className={`badge ${ESTADOS[t.estado] || 'badge-gray'}`}>{EST_LABELS[t.estado] || t.estado}</span></td>
                     <td onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 4 }}>
-                        {t.estado === 'borrador' && <button className="btn btn-sm" style={{ background: '#dbeafe', color: '#1d4ed8', border: 'none', fontSize: 12 }} onClick={() => accion(t.id, 'enviar')}>📤 Enviar</button>}
-                        {t.estado === 'enviada' && t.suc_destino === sucSesion && <button className="btn btn-sm" style={{ background: '#dcfce7', color: '#15803d', border: 'none', fontSize: 12 }} onClick={() => accion(t.id, 'recibir')}>✅ Recibir</button>}
-                        {t.estado === 'borrador' && <button className="btn btn-icon btn-sm" onClick={() => setConfirm(t.id)}>🗑</button>}
+                        {t.estado === 'borrador' && <button type="button" className="btn btn-sm" style={{ background: '#dbeafe', color: '#1d4ed8', border: 'none', fontSize: 12 }} onClick={() => accion(t.id, 'enviar')}>📤 Enviar</button>}
+                        {t.estado === 'enviada' && t.suc_destino === sucSesion && <button type="button" className="btn btn-sm" style={{ background: '#dcfce7', color: '#15803d', border: 'none', fontSize: 12 }} onClick={() => accion(t.id, 'recibir')}>✅ Recibir</button>}
+                        {t.estado === 'borrador' && <button type="button" className="btn btn-icon btn-sm" onClick={() => setConfirm(t.id)}>🗑</button>}
                       </div>
                     </td>
                   </tr>
@@ -186,8 +186,8 @@ export function Transferencias() {
 
       {/* New transfer modal */}
       <Modal open={modal} onClose={() => setModal(false)} title="+ Nueva transferencia" size="lg"
-        footer={<><button className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}>
+        footer={<><button type="button" className="btn btn-secondary" onClick={() => setModal(false)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
             {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Guardando...</> : '💾 Guardar borrador'}
           </button></>}>
         <div className="fr">
@@ -261,11 +261,11 @@ export function Transferencias() {
                     onChange={e => setLine(i, 'cantidad', parseInt(e.target.value) || 1)}
                     min="1" max={line.stock_origen || 999} style={{ textAlign: 'center' }} />
                 </div>
-                <button onClick={() => removeLine(i)} style={{ background: 'none', border: 'none', color: 'var(--mu)', cursor: 'pointer', fontSize: 18, paddingBottom: 2 }}>✕</button>
+                <button type="button" onClick={() => removeLine(i)} style={{ background: 'none', border: 'none', color: 'var(--mu)', cursor: 'pointer', fontSize: 18, paddingBottom: 2 }}>✕</button>
               </div>
             )
           })}
-          <button className="btn btn-secondary btn-sm" onClick={addLine} disabled={!fOrigen}>+ Agregar producto</button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={addLine} disabled={!fOrigen}>+ Agregar producto</button>
         </div>
         <div className="fg"><label>Notas</label><input value={fNota} onChange={e => setFNota(e.target.value)} placeholder="Observaciones..." /></div>
       </Modal>
@@ -289,8 +289,8 @@ export function Transferencias() {
               </table>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--bd)' }}>
-              {detail.estado === 'borrador' && <button className="btn btn-primary" onClick={() => { accion(detail.id, 'enviar'); setDetail(null) }}>📤 Enviar transferencia</button>}
-              {detail.estado === 'enviada' && detail.suc_destino === sucSesion && <button className="btn btn-primary" style={{ background: 'var(--ok)' }} onClick={() => { accion(detail.id, 'recibir'); setDetail(null) }}>✅ Confirmar recepción</button>}
+              {detail.estado === 'borrador' && <button type="button" className="btn btn-primary" onClick={() => { accion(detail.id, 'enviar'); setDetail(null) }}>📤 Enviar transferencia</button>}
+              {detail.estado === 'enviada' && detail.suc_destino === sucSesion && <button type="button" className="btn btn-primary" style={{ background: 'var(--ok)' }} onClick={() => { accion(detail.id, 'recibir'); setDetail(null) }}>✅ Confirmar recepción</button>}
             </div>
           </>
         )}
@@ -302,3 +302,4 @@ export function Transferencias() {
     </div>
   )
 }
+

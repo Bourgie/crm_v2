@@ -16,6 +16,7 @@ const ROLES_ALL = [
 ]
 const ROLE_COLORS = { admin:'badge-red', supervisor:'badge-blue', cajero:'badge-yellow', vendedor:'badge-gray', readonly:'badge-gray' }
 const EMPTY_USR = { nombre:'', usuario:'', email:'', password:'', roles:['vendedor'], suc_sesiones_permitidas:[] }
+const EMP_FIELDS = { emp_apellido:'Apellido', emp_dni:'DNI', emp_cuil:'CUIL', emp_tel:'Teléfono', emp_fecha_ingreso:'Fecha ingreso', emp_puesto:'Puesto', emp_salario:'Salario ($)', emp_obra_social:'Obra social' }
 
 export function Usuarios() {
   const { api } = useApi()
@@ -29,6 +30,7 @@ export function Usuarios() {
   const [form, setForm] = useState(EMPTY_USR)
   const [saving, setSaving] = useState(false)
   const [confirm, setConfirm] = useState(null)
+  const [resetModal, setResetModal] = useState(null) // { user, tempPassword }
 
   const [localSucs, setLocalSucs] = useState(allSucs)
   // setSucs helper - updates both local state and global store
@@ -84,6 +86,10 @@ export function Usuarios() {
       const ORDER = ['admin','supervisor','cajero','vendedor','readonly']
       const rolPrincipal = ORDER.find(r => form.roles.includes(r)) || form.roles[0] || 'vendedor'
       const body = {...form, rol: rolPrincipal, roles: form.roles}
+      if (!body.crear_empleado) {
+        Object.keys(EMP_FIELDS).forEach(k => delete body[k])
+        delete body.crear_empleado
+      }
       if (!body.password) delete body.password
       if (modal==='new') { await api('POST','/auth/usuarios',body); toast('Usuario creado','ok') }
       else { await api('PUT','/auth/usuarios/'+modal.id,body); toast('Usuario actualizado','ok') }
@@ -97,12 +103,20 @@ export function Usuarios() {
     catch(e) { toast(e.message,'err') }
   }
 
+  async function resetPassword(u) {
+    try {
+      const r = await api('POST','/auth/usuarios/'+u.id+'/reset-password', {})
+      setResetModal({ user: u, tempPassword: r.temp_password })
+      toast('Contraseña restablecida','ok')
+    } catch(e) { toast(e.message,'err') }
+  }
+
   if (loading) return <Loader/>
 
   return (
     <div>
       <PageHeader title={`👤 Usuarios (${users.filter(u=>u.activo!==false).length} activos)`}>
-        <button className="btn btn-primary" onClick={openNew}>+ Nuevo usuario</button>
+        <button type="button" className="btn btn-primary" onClick={openNew}>+ Nuevo usuario</button>
       </PageHeader>
 
       <div className="card" style={{padding:0}}>
@@ -129,8 +143,11 @@ export function Usuarios() {
                     <td><span className={`badge ${u.activo!==false?'badge-green':'badge-gray'}`}>{u.activo!==false?'Activo':'Inactivo'}</span></td>
                     <td>
                       <div style={{display:'flex',gap:4}}>
-                        <button className="btn btn-icon btn-sm" onClick={()=>openEdit(u)}>✏️</button>
-                        {u.id!==me?.id && <button className="btn btn-icon btn-sm" onClick={()=>toggleActivo(u)}>{u.activo!==false?'🚫':'✅'}</button>}
+                        <button type="button" className="btn btn-icon btn-sm" onClick={()=>openEdit(u)}>✏️</button>
+                        {u.id!==me?.id && <>
+                          <button type="button" className="btn btn-icon btn-sm" onClick={()=>resetPassword(u)} title="Resetear contraseña">🔒</button>
+                          <button type="button" className="btn btn-icon btn-sm" onClick={()=>toggleActivo(u)}>{u.activo!==false?'🚫':'✅'}</button>
+                        </>}
                       </div>
                     </td>
                   </tr>
@@ -141,7 +158,7 @@ export function Usuarios() {
       </div>
 
       <Modal open={!!modal} onClose={()=>setModal(null)} title={modal==='new'?'+ Nuevo usuario':`Editar: ${modal?.nombre}`}
-        footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner" style={{width:14,height:14}}/> Guardando...</>:'💾 Guardar'}</button></>}>
+        footer={<><button type="button" className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button><button type="button" className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner" style={{width:14,height:14}}/> Guardando...</>:'💾 Guardar'}</button></>}>
         <div className="fr"><Field label="Nombre *"><input value={form.nombre} onChange={set('nombre')} placeholder="Nombre completo"/></Field><Field label="Usuario *"><input value={form.usuario} onChange={set('usuario')} placeholder="Nombre de usuario" style={{fontFamily:'monospace'}}/></Field></div>
         <div className="fr"><Field label="Email"><input type="email" value={form.email} onChange={set('email')} placeholder="correo@..."/></Field><Field label={modal==='new'?'Contraseña *':'Nueva contraseña (vacío = sin cambio)'}><input type="password" value={form.password} onChange={set('password')} placeholder={modal==='new'?'Contraseña':'Dejar vacío para no cambiar'}/></Field></div>
         <div>
@@ -169,7 +186,59 @@ export function Usuarios() {
           </div>
           <div style={{fontSize:11,color:'var(--mu)',marginTop:4}}>Sin seleccionar = acceso a todas las sucursales</div>
         </div>
+        {modal==='new' && <>
+          <div style={{borderTop:'1px solid var(--bd)',paddingTop:12,marginTop:8}}>
+            <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',padding:'6px 10px',borderRadius:6,background:form.crear_empleado?'rgba(249,115,22,.08)':'transparent'}}>
+              <input type="checkbox" checked={!!form.crear_empleado} onChange={e=>setForm(p=>({...p,crear_empleado:e.target.checked}))} style={{width:16,height:16}}/>
+              🔄 También crear ficha de empleado
+            </label>
+          </div>
+          {form.crear_empleado && (
+            <div style={{marginTop:8,padding:10,background:'var(--sf)',borderRadius:8,border:'1px solid var(--bd)'}}>
+              <div className="fr">
+                {Object.entries(EMP_FIELDS).slice(0,2).map(([k,l])=>(
+                  <Field key={k} label={l}><input value={form[k]||''} onChange={set(k)} placeholder={l}/></Field>
+                ))}
+              </div>
+              <div className="fr">
+                {Object.entries(EMP_FIELDS).slice(2,4).map(([k,l])=>(
+                  <Field key={k} label={l}><input value={form[k]||''} onChange={set(k)} placeholder={l}/></Field>
+                ))}
+              </div>
+              <div className="fr">
+                {Object.entries(EMP_FIELDS).slice(4,6).map(([k,l])=>(
+                  <Field key={k} label={l}><input value={form[k]||''} onChange={set(k)} placeholder={l}/></Field>
+                ))}
+              </div>
+              <div className="fr">
+                {Object.entries(EMP_FIELDS).slice(6,8).map(([k,l])=>(
+                  <Field key={k} label={l}><input value={form[k]||''} onChange={set(k)} placeholder={l}/></Field>
+                ))}
+              </div>
+            </div>
+          )}
+        </>}
       </Modal>
+
+      {/* Reset password modal */}
+      {resetModal && (
+        <div className="modal-overlay" onClick={()=>setResetModal(null)}>
+          <div className="modal" onClick={e=>e.stopPropagation()} style={{maxWidth:400}}>
+            <div className="modal-header"><h3>🔒 Resetear contraseña</h3><button type="button" onClick={()=>setResetModal(null)} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--mu)'}}>×</button></div>
+            <div className="modal-body">
+              <p style={{fontSize:13,marginBottom:12,color:'var(--mu)'}}>Se reseteó la contraseña de <strong>{resetModal.user.nombre}</strong>. La contraseña temporal es:</p>
+              <div style={{background:'var(--sf)',border:'1px solid var(--bd)',borderRadius:8,padding:'14px 16px',textAlign:'center',marginBottom:12}}>
+                <div style={{fontSize:22,fontWeight:700,fontFamily:'monospace',letterSpacing:2}}>{resetModal.tempPassword}</div>
+              </div>
+              <p style={{fontSize:12,color:'var(--mu)'}}>El usuario deberá cambiarla al próximo inicio de sesión.</p>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-primary" onClick={()=>{navigator.clipboard.writeText(resetModal.tempPassword); toast('Copiado','ok')}}>📋 Copiar</button>
+              <button type="button" className="btn btn-secondary" onClick={()=>setResetModal(null)}>Cerrar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -181,6 +250,7 @@ export function Config() {
   const { api } = useApi()
   const { toast } = useToast()
   const { cfg, setCfg, setTheme, theme, allSucs } = useApp()
+  const { me } = useAuth()
 
   const [form, setForm] = useState({
     nombre:'', cuit:'', dir:'', tel:'', email:'', slogan:'',
@@ -201,6 +271,9 @@ export function Config() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [tab, setTab] = useState('general')
+  const [soporteForm, setSoporteForm] = useState({ asunto: '', descripcion: '' })
+  const [soporteSending, setSoporteSending] = useState(false)
+  const [soporteSent, setSoporteSent] = useState(false)
 
   useEffect(() => {
     api('GET', '/config').then((d) => {
@@ -221,15 +294,27 @@ export function Config() {
     finally { setSaving(false) }
   }
 
+  async function sendSoporte() {
+    if (!soporteForm.asunto.trim() || !soporteForm.descripcion.trim()) { toast('Completá asunto y mensaje','err'); return }
+    setSoporteSending(true)
+    try {
+      await api('POST', '/config/solicitud', { asunto: soporteForm.asunto, descripcion: soporteForm.descripcion })
+      setSoporteSent(true)
+      setSoporteForm({ asunto: '', descripcion: '' })
+      toast('Solicitud enviada. Te responderemos pronto.','ok')
+    } catch(e) { toast(e.message,'err') }
+    finally { setSoporteSending(false) }
+  }
+
   if (loading) return <Loader/>
 
-  const TABS = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['webhooks','🔗 Webhooks'],['arca','📄 ARCA'],['tienda','🛒 Tienda'],['plan','📦 Plan'],['micuenta','👤 Mi Cuenta'],['backups','💾 Backups']]
+  const TABS = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['webhooks','🔗 Webhooks'],['arca','📄 ARCA'],['tienda','🛒 Tienda'],['plan','📦 Plan'],['micuenta','👤 Mi Cuenta'],['backups','💾 Backups'],['ayuda','🆘 Ayuda']]
 
   return (
     <div>
       <div style={{display:'flex',gap:4,marginBottom:16,borderBottom:'2px solid var(--bd)',paddingBottom:8,flexWrap:'wrap'}}>
         {TABS.map(([key,label])=>(
-          <button key={key} className={`btn btn-sm ${tab===key?'btn-primary':'btn-secondary'}`} onClick={()=>setTab(key)}>{label}</button>
+          <button type="button" key={key} className={`btn btn-sm ${tab===key?'btn-primary':'btn-secondary'}`} onClick={()=>setTab(key)}>{label}</button>
         ))}
       </div>
 
@@ -268,8 +353,8 @@ export function Config() {
             <Field label="Cabecera del ticket"><textarea value={form.ticket_cabecera} onChange={set('ticket_cabecera')} rows={2} style={{resize:'vertical'}} placeholder="Texto que aparece en la parte superior del ticket..."/></Field>
             <Field label="Pie del ticket"><textarea value={form.ticket_pie} onChange={set('ticket_pie')} rows={2} style={{resize:'vertical'}} placeholder="Texto que aparece al pie del ticket..."/></Field>
             <div style={{display:'flex',gap:8,marginTop:8}}>
-              <button className={`btn btn-sm ${theme==='light'?'btn-primary':'btn-secondary'}`} onClick={()=>setTheme('light')}>☀️ Claro</button>
-              <button className={`btn btn-sm ${theme==='dark'?'btn-primary':'btn-secondary'}`} onClick={()=>setTheme('dark')}>🌙 Oscuro</button>
+              <button type="button" className={`btn btn-sm ${theme==='light'?'btn-primary':'btn-secondary'}`} onClick={()=>setTheme('light')}>☀️ Claro</button>
+              <button type="button" className={`btn btn-sm ${theme==='dark'?'btn-primary':'btn-secondary'}`} onClick={()=>setTheme('dark')}>🌙 Oscuro</button>
             </div>
           </>
         )}
@@ -406,9 +491,101 @@ export function Config() {
           <TiendaTab api={api} toast={toast} form={form} set={set} allSucs={allSucs} cfg={cfg} setForm={setForm} />
         )}
 
-        {tab!=='micuenta' && tab!=='backups' && (
+        {tab==='ayuda' && (
+          <div style={{fontSize:14}}>
+            <div style={{background:'linear-gradient(135deg, var(--ac), #a855f7)', borderRadius:12, padding:'20px 24px', color:'#fff', marginBottom:20}}>
+              <div style={{fontSize:22, fontWeight:800, marginBottom:4}}>🆘 Centro de Ayuda</div>
+              <div style={{fontSize:13, opacity:.9}}>Todo lo que necesitás saber para usar FlexCRM al máximo</div>
+            </div>
+
+            <details style={{marginBottom:12,border:'1px solid var(--bd)',borderRadius:8,padding:'12px 16px',background:'var(--sf)'}}>
+              <summary style={{fontWeight:600,cursor:'pointer',fontSize:14}}>🚀 Primeros pasos</summary>
+              <div style={{marginTop:10,fontSize:13,color:'var(--mu)',lineHeight:1.7}}>
+                <p>1. <strong>Configurá tu negocio</strong> en esta sección: nombre, logo, colores y datos fiscales.</p>
+                <p>2. <strong>Creá sucursales</strong> si tenés más de un local desde Sucursales en el menú.</p>
+                <p>3. <strong>Cargá productos</strong> desde la sección Productos o importalos por Excel.</p>
+                <p>4. <strong>Empezá a vender</strong> desde el POS o la sección Ventas.</p>
+              </div>
+            </details>
+
+            <details style={{marginBottom:12,border:'1px solid var(--bd)',borderRadius:8,padding:'12px 16px',background:'var(--sf)'}}>
+              <summary style={{fontWeight:600,cursor:'pointer',fontSize:14}}>⌨️ Atajos de teclado</summary>
+              <div style={{marginTop:10,fontSize:13,color:'var(--mu)',lineHeight:1.7}}>
+                <table style={{width:'100%',borderCollapse:'collapse'}}>
+                  <tbody>
+                    <tr><td style={{padding:'4px 8px',fontWeight:600}}><kbd style={{background:'var(--bd)',padding:'2px 6px',borderRadius:4}}>Ctrl+B</kbd></td><td style={{padding:'4px 8px'}}>Buscar cliente / producto</td></tr>
+                    <tr><td style={{padding:'4px 8px',fontWeight:600}}><kbd style={{background:'var(--bd)',padding:'2px 6px',borderRadius:4}}>Ctrl+N</kbd></td><td style={{padding:'4px 8px'}}>Nueva venta rápida</td></tr>
+                    <tr><td style={{padding:'4px 8px',fontWeight:600}}><kbd style={{background:'var(--bd)',padding:'2px 6px',borderRadius:4}}>Ctrl+P</kbd></td><td style={{padding:'4px 8px'}}>Abrir POS</td></tr>
+                    <tr><td style={{padding:'4px 8px',fontWeight:600}}><kbd style={{background:'var(--bd)',padding:'2px 6px',borderRadius:4}}>Ctrl+D</kbd></td><td style={{padding:'4px 8px'}}>Ir al Dashboard</td></tr>
+                    <tr><td style={{padding:'4px 8px',fontWeight:600}}><kbd style={{background:'var(--bd)',padding:'2px 6px',borderRadius:4}}>Ctrl+K</kbd></td><td style={{padding:'4px 8px'}}>Comando rápido</td></tr>
+                    <tr><td style={{padding:'4px 8px',fontWeight:600}}><kbd style={{background:'var(--bd)',padding:'2px 6px',borderRadius:4}}>Esc</kbd></td><td style={{padding:'4px 8px'}}>Cerrar modal / Cancelar</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </details>
+
+            <details style={{marginBottom:12,border:'1px solid var(--bd)',borderRadius:8,padding:'12px 16px',background:'var(--sf)'}}>
+              <summary style={{fontWeight:600,cursor:'pointer',fontSize:14}}>💰 Caja y métodos de pago</summary>
+              <div style={{marginTop:10,fontSize:13,color:'var(--mu)',lineHeight:1.7}}>
+                <p>Configurá tus métodos de pago en la pestaña <strong>Métodos de pago</strong>. Podés habilitar: efectivo, débito, crédito, transferencia, QR y cuenta corriente.</p>
+                <p>La sección <strong>Caja</strong> del menú te permite ver movimientos diarios, abrir/cerrar caja y conciliar.</p>
+              </div>
+            </details>
+
+            <details style={{marginBottom:12,border:'1px solid var(--bd)',borderRadius:8,padding:'12px 16px',background:'var(--sf)'}}>
+              <summary style={{fontWeight:600,cursor:'pointer',fontSize:14}}>👥 Usuarios y permisos</summary>
+              <div style={{marginTop:10,fontSize:13,color:'var(--mu)',lineHeight:1.7}}>
+                <p>Creá usuarios desde la sección <strong>Usuarios</strong> del menú. Cada usuario puede tener un rol:</p>
+                <ul style={{paddingLeft:20}}>
+                  <li><strong>Admin:</strong> acceso completo a todo</li>
+                  <li><strong>Vendedor:</strong> acceso a ventas, POS y clientes</li>
+                  <li><strong>Reportes:</strong> solo lectura de reportes y dashboard</li>
+                </ul>
+              </div>
+            </details>
+
+            <details style={{marginBottom:12,border:'1px solid var(--bd)',borderRadius:8,padding:'12px 16px',background:'var(--sf)'}}>
+              <summary style={{fontWeight:600,cursor:'pointer',fontSize:14}}>🔗 Integraciones</summary>
+              <div style={{marginTop:10,fontSize:13,color:'var(--mu)',lineHeight:1.7}}>
+                <p><strong>Tienda online:</strong> Conectá con WooCommerce, Tiendanube o Mercado Libre desde la pestaña Tienda.</p>
+                <p><strong>ARCA (AFIP):</strong> Facturación electrónica desde la pestaña ARCA.</p>
+                <p><strong>Webhooks:</strong> Notificá sistemas externos en cada venta desde la pestaña Webhooks.</p>
+              </div>
+            </details>
+
+            <details style={{marginBottom:12,border:'1px solid var(--bd)',borderRadius:8,padding:'12px 16px',background:'var(--sf)'}}>
+              <summary style={{fontWeight:600,cursor:'pointer',fontSize:14}}>📧 Enviar consulta a soporte</summary>
+              <div style={{marginTop:10,fontSize:13,lineHeight:1.7}}>
+                {me?.rol === 'admin' ? (
+                  soporteSent ? (
+                    <div style={{background:'#16a34a15',border:'1px solid #16a34a33',borderRadius:8,padding:'14px 18px',textAlign:'center'}}>
+                      <div style={{fontSize:20,marginBottom:4}}>✅</div>
+                      <div style={{fontWeight:600,color:'#16a34a'}}>¡Consulta enviada!</div>
+                      <div style={{color:'var(--mu)',fontSize:12}}>Te responderemos a la brevedad.</div>
+                      <button type="button" className="btn btn-secondary btn-sm" style={{marginTop:8}} onClick={()=>setSoporteSent(false)}>Enviar otra consulta</button>
+                    </div>
+                  ) : (
+                    <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                      <div><label style={{display:'block',fontSize:11,fontWeight:600,textTransform:'uppercase',color:'var(--mu)',marginBottom:4}}>Asunto</label><input value={soporteForm.asunto} onChange={e=>setSoporteForm(p=>({...p,asunto:e.target.value}))} placeholder="Ej: No puedo cargar productos" style={{width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid var(--bd)',background:'var(--bg)',color:'var(--tx)',fontSize:13,outline:'none'}} /></div>
+                      <div><label style={{display:'block',fontSize:11,fontWeight:600,textTransform:'uppercase',color:'var(--mu)',marginBottom:4}}>Mensaje</label><textarea value={soporteForm.descripcion} onChange={e=>setSoporteForm(p=>({...p,descripcion:e.target.value}))} rows={4} placeholder="Describí tu problema o consulta..." style={{width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid var(--bd)',background:'var(--bg)',color:'var(--tx)',fontSize:13,outline:'none',resize:'vertical'}} /></div>
+                      <button type="button" className="btn btn-primary" onClick={sendSoporte} disabled={soporteSending} style={{alignSelf:'flex-start'}}>{soporteSending?'Enviando...':'📤 Enviar consulta'}</button>
+                    </div>
+                  )
+                ) : (
+                  <div style={{background:'var(--info)',border:'1px solid var(--bd)',borderRadius:8,padding:'14px 18px',textAlign:'center'}}>
+                    <div style={{fontSize:24,marginBottom:8}}>👤</div>
+                    <p style={{fontWeight:600,marginBottom:6}}>¿Olvidaste tu contraseña?</p>
+                    <p style={{color:'var(--mu)',fontSize:12,marginBottom:10}}>Usá la opción <strong>"Olvidé mi contraseña"</strong> en la pantalla de inicio de sesión. Si no podés acceder a tu correo, contactá a tu administrador para que restablezca tu contraseña desde la sección Usuarios.</p>
+                  </div>
+                )}
+              </div>
+            </details>
+          </div>
+        )}
+
+        {tab!=='micuenta' && tab!=='backups' && tab!=='ayuda' && (
           <div style={{marginTop:20,paddingTop:16,borderTop:'1px solid var(--bd)'}}>
-            <button className="btn btn-primary" onClick={save} disabled={saving}>
+            <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
               {saving?<><span className="spinner" style={{width:14,height:14}}/> Guardando...</>:'💾 Guardar configuración'}
             </button>
           </div>
@@ -475,7 +652,7 @@ function PagosTab({ cfg, api, toast, onReload }) {
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
         <div style={{fontSize:12,color:'var(--mu)'}}>Métodos disponibles en Caja y POS</div>
-        <button className="btn btn-primary btn-sm" onClick={()=>{setFPago({id:'',nombre:'',icono:'💵',recargo:'0',activo:true});setModal('new')}}>+ Nuevo método</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={()=>{setFPago({id:'',nombre:'',icono:'💵',recargo:'0',activo:true});setModal('new')}}>+ Nuevo método</button>
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:8}}>
         {pagos.map((p) => (
@@ -485,8 +662,8 @@ function PagosTab({ cfg, api, toast, onReload }) {
               <div style={{fontWeight:700,fontSize:13}}>{p.nombre}</div>
               <div style={{fontSize:11,color:'var(--mu)'}}>Recargo: {p.recargo||0}% · <span className={`badge ${p.activo!==false?'badge-green':'badge-gray'}`}>{p.activo!==false?'Activo':'Inactivo'}</span></div>
             </div>
-            <button className="btn btn-icon btn-sm" onClick={()=>{setFPago({...p,recargo:String(p.recargo||0)});setModal(p.id)}}>✏️</button>
-            <button className="btn btn-icon btn-sm" onClick={()=>toggleActivo(p.id)}>{p.activo!==false?'🚫':'✅'}</button>
+            <button type="button" className="btn btn-icon btn-sm" onClick={()=>{setFPago({...p,recargo:String(p.recargo||0)});setModal(p.id)}}>✏️</button>
+            <button type="button" className="btn btn-icon btn-sm" onClick={()=>toggleActivo(p.id)}>{p.activo!==false?'🚫':'✅'}</button>
           </div>
         ))}
       </div>
@@ -494,7 +671,7 @@ function PagosTab({ cfg, api, toast, onReload }) {
       {modal && (
         <div className="modal-overlay" onClick={(e)=>{if(e.target===e.currentTarget)setModal(null)}}>
           <div className="modal" style={{maxWidth:400}}>
-            <div className="modal-header"><h3>{modal==='new'?'+ Nuevo método':'Editar método'}</h3><button onClick={()=>setModal(null)} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--mu)'}}>×</button></div>
+            <div className="modal-header"><h3>{modal==='new'?'+ Nuevo método':'Editar método'}</h3><button type="button" onClick={()=>setModal(null)} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--mu)'}}>×</button></div>
             <div className="modal-body">
               <div className="fr">
                 <div className="fg"><label>Icono</label><input value={fPago.icono} onChange={sp('icono')} style={{fontSize:20,textAlign:'center'}} maxLength={2}/></div>
@@ -507,8 +684,8 @@ function PagosTab({ cfg, api, toast, onReload }) {
               </label>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={savePago} disabled={saving}>💾 Guardar</button>
+              <button type="button" className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={savePago} disabled={saving}>💾 Guardar</button>
             </div>
           </div>
         </div>
@@ -558,7 +735,7 @@ function DescuentosTab({ api, toast }) {
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
         <div style={{fontSize:13,color:'var(--mu)'}}>{list.length} código{list.length!==1?'s':''} de descuento</div>
-        <button className="btn btn-primary btn-sm" onClick={openNew}>+ Nuevo código</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>+ Nuevo código</button>
       </div>
       {list.length === 0 ? <div style={{fontSize:13,color:'var(--mu)',padding:20,textAlign:'center'}}>Sin códigos de descuento todavía</div> : (
         <div style={{display:'flex',flexDirection:'column',gap:6}}>
@@ -574,8 +751,8 @@ function DescuentosTab({ api, toast }) {
                 </div>
               </div>
               <span className={`badge ${c.activo?'badge-green':'badge-gray'}`} style={{fontSize:10}}>{c.activo?'Activo':'Inactivo'}</span>
-              <button className="btn btn-secondary btn-sm" onClick={() => openEdit(c)} style={{padding:'3px 8px',fontSize:11}}>✏️</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => eliminar(c.codigo)} style={{padding:'3px 8px',fontSize:11}}>🗑️</button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(c)} style={{padding:'3px 8px',fontSize:11}}>✏️</button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => eliminar(c.codigo)} style={{padding:'3px 8px',fontSize:11}}>🗑️</button>
             </div>
           ))}
         </div>
@@ -586,7 +763,7 @@ function DescuentosTab({ api, toast }) {
           <div className="modal" onClick={(e)=>e.stopPropagation()} style={{maxWidth:420}}>
             <div className="modal-header">
               <h3>{modal==='new'?'Nuevo código de descuento':'Editar código'}</h3>
-              <button className="modal-close" onClick={()=>setModal(null)}>✕</button>
+              <button type="button" className="modal-close" onClick={()=>setModal(null)}>✕</button>
             </div>
             <div className="modal-body" style={{display:'flex',flexDirection:'column',gap:10}}>
               <Field label="Código">
@@ -621,8 +798,8 @@ function DescuentosTab({ api, toast }) {
               </Field>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={save} disabled={saving}>{saving?'⏳ Guardando...':'💾 Guardar'}</button>
+              <button type="button" className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>{saving?'⏳ Guardando...':'💾 Guardar'}</button>
             </div>
           </div>
         </div>
@@ -692,7 +869,7 @@ function WebhooksTab({ api, toast }) {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div style={{ fontSize: 13, color: 'var(--mu)' }}>{list.length} webhook{list.length !== 1 ? 's' : ''}</div>
-        <button className="btn btn-primary btn-sm" onClick={openNew}>+ Nuevo webhook</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>+ Nuevo webhook</button>
       </div>
 
       {list.length === 0 ? <div style={{ fontSize: 13, color: 'var(--mu)', padding: 20, textAlign: 'center' }}>Sin webhooks configurados</div> : (
@@ -706,13 +883,13 @@ function WebhooksTab({ api, toast }) {
                 </div>
                 <div style={{ fontSize: 10, color: 'var(--mu)', marginTop: 2, fontFamily: 'monospace' }}>
                   Token: {showToken === w.id ? w.token : w.token ? w.token.slice(0, 12) + '···' : '—'}
-                  {w.token && <button onClick={() => setShowToken(showToken === w.id ? null : w.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--ac)', marginLeft: 4 }}>{showToken === w.id ? '👁️ Ocultar' : '👁️ Mostrar'}</button>}
+                  {w.token && <button type="button" onClick={() => setShowToken(showToken === w.id ? null : w.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 10, color: 'var(--ac)', marginLeft: 4 }}>{showToken === w.id ? '👁️ Ocultar' : '👁️ Mostrar'}</button>}
                 </div>
               </div>
               <span className={`badge ${w.activo ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 10 }}>{w.activo ? 'Activo' : 'Inactivo'}</span>
-              <button className="btn btn-secondary btn-sm" disabled={testeando === w.id} onClick={() => testear(w)} style={{ padding: '3px 8px', fontSize: 11 }}>{testeando === w.id ? '⏳' : '▶️ Probar'}</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => openEdit(w)} style={{ padding: '3px 8px', fontSize: 11 }}>✏️</button>
-              <button className="btn btn-secondary btn-sm" onClick={() => eliminar(w)} style={{ padding: '3px 8px', fontSize: 11 }}>🗑️</button>
+              <button type="button" className="btn btn-secondary btn-sm" disabled={testeando === w.id} onClick={() => testear(w)} style={{ padding: '3px 8px', fontSize: 11 }}>{testeando === w.id ? '⏳' : '▶️ Probar'}</button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEdit(w)} style={{ padding: '3px 8px', fontSize: 11 }}>✏️</button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={() => eliminar(w)} style={{ padding: '3px 8px', fontSize: 11 }}>🗑️</button>
             </div>
           ))}
         </div>
@@ -723,7 +900,7 @@ function WebhooksTab({ api, toast }) {
           <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 420 }}>
             <div className="modal-header">
               <h3>{modal === 'new' ? 'Nuevo webhook' : 'Editar webhook'}</h3>
-              <button className="modal-close" onClick={() => setModal(null)}>✕</button>
+              <button type="button" className="modal-close" onClick={() => setModal(null)}>✕</button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <Field label="URL del webhook (ej: n8n)">
@@ -746,8 +923,8 @@ function WebhooksTab({ api, toast }) {
               )}
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? '⏳ Guardando...' : '💾 Guardar'}</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>{saving ? '⏳ Guardando...' : '💾 Guardar'}</button>
             </div>
           </div>
         </div>
@@ -859,7 +1036,7 @@ Monto a pagar ahora: $${prate.monto_neto}
                   </div>
                 )}
                 {!esCurrent && !solPendiente && (
-                  <button className={`btn btn-sm ${esUpgrade?'btn-primary':''}`}
+                  <button type="button" className={`btn btn-sm ${esUpgrade?'btn-primary':''}`}
                     style={esUpgrade?{}:{border:'1px solid var(--bd)'}}
                     onClick={() => solicitarPlan(p.id, p.nombre, esUpgrade)}
                     disabled={solicitando===p.id}>
@@ -921,7 +1098,7 @@ function MiCuentaTab({ api, toast }) {
         <Field label="Repetir nueva contraseña">
           <input type="password" value={form.password_repetir} onChange={e => setForm(p=>({...p,password_repetir:e.target.value}))} placeholder="Confirmar"/>
         </Field>
-        <button className="btn btn-primary" onClick={cambiarPass} disabled={saving} style={{marginTop:8}}>
+        <button type="button" className="btn btn-primary" onClick={cambiarPass} disabled={saving} style={{marginTop:8}}>
           {saving ? '⏳ Cambiando...' : '🔑 Cambiar contraseña'}
         </button>
       </div>
@@ -971,7 +1148,7 @@ function BackupsTab({ api, toast }) {
   return (
     <div>
       <div style={{display:'flex',gap:10,marginBottom:16,alignItems:'center'}}>
-        <button className="btn btn-primary" onClick={hacerBackup} disabled={saving}>
+        <button type="button" className="btn btn-primary" onClick={hacerBackup} disabled={saving}>
           {saving ? '⏳ Creando...' : '💾 Hacer backup ahora'}
         </button>
         <span style={{fontSize:12,color:'var(--mu)'}}>{backups.length} backup(s) guardados</span>
@@ -989,7 +1166,7 @@ function BackupsTab({ api, toast }) {
                       <td style={{fontSize:12}}>{fmtDate(b.fecha)}</td>
                       <td style={{fontSize:12}}>{b.tamaño}</td>
                       <td>
-                        <button className="btn btn-icon btn-sm" style={{color:'var(--bad)'}}
+                        <button type="button" className="btn btn-icon btn-sm" style={{color:'var(--bad)'}}
                           onClick={()=>restaurar(b.nombre)} disabled={restoring===b.nombre}
                           title="Restaurar este backup">
                           {restoring===b.nombre ? '⏳' : '🔄'}
@@ -1001,6 +1178,29 @@ function BackupsTab({ api, toast }) {
           </table>
         </div>
       </div>
+    </div>
+  )
+}
+
+function TiendaSection({ id, icon, label, fields, configurado, openSection, setOpenSection, syncing, doPush, doPull }) {
+  const isOpen = openSection === id
+  return (
+    <div style={{border:'1px solid var(--bd)',borderRadius:10,marginBottom:10,overflow:'hidden'}}>
+      <div onClick={() => setOpenSection(isOpen ? null : id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',background:'var(--sf)',userSelect:'none',borderBottom: isOpen ? '1px solid var(--bd)' : 'none'}}>
+        <span style={{fontSize:12,opacity:.6}}>{isOpen ? '▼' : '▶'}</span>
+        <span style={{fontSize:18}}>{icon}</span>
+        <span style={{fontWeight:600,fontSize:13,flex:1}}>{label}</span>
+        <span style={{fontSize:11,color: configurado ? 'var(--ok)' : 'var(--mu)'}}>{configurado ? '✅ Configurado' : '❌ Sin configurar'}</span>
+      </div>
+      {isOpen && (
+        <div style={{padding:'10px 14px'}}>
+          {fields}
+          <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}>
+            <button type="button" className="btn btn-primary btn-sm" disabled={syncing} onClick={() => doPush(id)}>📤 Push stock</button>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={syncing} onClick={() => doPull(id)}>📥 Pull pedidos</button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1038,40 +1238,18 @@ function TiendaTab({ api, toast, form, set, allSucs, setForm }) {
     setSyncing(false)
   }
 
-  function Section({ id, icon, label, fields, configurado }) {
-    const isOpen = openSection === id
-    return (
-      <div style={{border:'1px solid var(--bd)',borderRadius:10,marginBottom:10,overflow:'hidden'}}>
-        <div onClick={() => setOpenSection(isOpen ? null : id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',background:'var(--sf)',userSelect:'none',borderBottom: isOpen ? '1px solid var(--bd)' : 'none'}}>
-          <span style={{fontSize:12,opacity:.6}}>{isOpen ? '▼' : '▶'}</span>
-          <span style={{fontSize:18}}>{icon}</span>
-          <span style={{fontWeight:600,fontSize:13,flex:1}}>{label}</span>
-          <span style={{fontSize:11,color: configurado ? 'var(--ok)' : 'var(--mu)'}}>{configurado ? '✅ Configurado' : '❌ Sin configurar'}</span>
-        </div>
-        {isOpen && (
-          <div style={{padding:'10px 14px'}}>
-            {fields}
-            <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}>
-              <button className="btn btn-primary btn-sm" disabled={syncing} onClick={() => doPush(id)}>📤 Push stock</button>
-              <button className="btn btn-secondary btn-sm" disabled={syncing} onClick={() => doPull(id)}>📥 Pull pedidos</button>
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
   return (
     <>
       <div style={{background:'rgba(37,99,235,.06)',border:'1px solid rgba(37,99,235,.2)',borderRadius:8,padding:'10px 14px',fontSize:13,marginBottom:14}}>
         🛒 Sincronización multiplataforma. Configurá una o más tiendas. El stock se toma de la sucursal <strong>Tienda Online</strong> (creada automáticamente) — transferí stock desde la sucursal física usando <strong>Transferencias</strong>.
       </div>
 
-      <Section
+      <TiendaSection
         id="woocommerce"
         icon="🟣"
         label="WooCommerce"
         configurado={!!(form.tienda_woo_url && form.tienda_woo_key && form.tienda_woo_secret)}
+        openSection={openSection} setOpenSection={setOpenSection} syncing={syncing} doPush={doPush} doPull={doPull}
         fields={<>
           <Field label="URL de la tienda">
             <input value={form.tienda_woo_url} onChange={set('tienda_woo_url')} placeholder="https://tutienda.com" style={{fontFamily:'monospace',fontSize:12}}/>
@@ -1087,11 +1265,12 @@ function TiendaTab({ api, toast, form, set, allSucs, setForm }) {
         </>}
       />
 
-      <Section
+      <TiendaSection
         id="tiendanube"
         icon="🔵"
         label="Tienda Nube"
         configurado={!!(form.tienda_tn_store_id && form.tienda_tn_access_token)}
+        openSection={openSection} setOpenSection={setOpenSection} syncing={syncing} doPush={doPush} doPull={doPull}
         fields={<>
           <div className="fr">
             <Field label="Store ID">
@@ -1104,11 +1283,12 @@ function TiendaTab({ api, toast, form, set, allSucs, setForm }) {
         </>}
       />
 
-      <Section
+      <TiendaSection
         id="mercadolibre"
         icon="🟡"
         label="MercadoLibre"
         configurado={!!(form.tienda_meli_access_token && form.tienda_meli_seller_id)}
+        openSection={openSection} setOpenSection={setOpenSection} syncing={syncing} doPush={doPush} doPull={doPull}
         fields={<>
           <div style={{fontSize:11,color:'var(--mu)',marginBottom:10}}>Necesitás crear una aplicación en <a href="https://developers.mercadolibre.com" target="_blank" rel="noopener" style={{color:'var(--ac)'}}>developers.mercadolibre.com</a> para obtener APP ID y Client Secret.</div>
           <div className="fr">
@@ -1137,14 +1317,14 @@ function TiendaTab({ api, toast, form, set, allSucs, setForm }) {
             <div style={{fontSize:11,color:'var(--mu)',marginTop:4}}>Expira: {new Date(form.tienda_meli_expires_at).toLocaleString('es-AR')}</div>
           )}
           <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
-            <button className="btn btn-secondary btn-sm" onClick={async () => {
+            <button type="button" className="btn btn-secondary btn-sm" onClick={async () => {
               const empresa = (await api('GET', '/config')).empresa || 'default'
               try {
                 const r = await api('GET', `/sync-tienda/meli/auth-url?empresa=${encodeURIComponent(empresa)}`)
                 window.open(r.url, '_blank', 'width=600,height=700')
               } catch (e) { toast('⚠️ ' + e.message, 'err') }
             }}>🔗 Obtener token ML</button>
-            <button className="btn btn-secondary btn-sm" onClick={async () => {
+            <button type="button" className="btn btn-secondary btn-sm" onClick={async () => {
               try {
                 await api('POST', '/sync-tienda/meli/refresh')
                 toast('✅ Token refrescado', 'ok')
@@ -1162,9 +1342,10 @@ function TiendaTab({ api, toast, form, set, allSucs, setForm }) {
         </div>
       )}
       <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-        <button className="btn btn-primary" disabled={syncing} onClick={() => doPush(null)}>🔄 Sincronizar TODO</button>
-        <button className="btn btn-secondary" disabled={syncing} onClick={() => doPull(null)}>📥 Importar TODO</button>
+        <button type="button" className="btn btn-primary" disabled={syncing} onClick={() => doPush(null)}>🔄 Sincronizar TODO</button>
+        <button type="button" className="btn btn-secondary" disabled={syncing} onClick={() => doPull(null)}>📥 Importar TODO</button>
       </div>
     </>
   )
 }
+

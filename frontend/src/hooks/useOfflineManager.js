@@ -17,9 +17,7 @@ export function useOfflineManager() {
       const failed = (r.results || []).filter((res) => !res.ok)
 
       if (failed.length > 0) {
-        const failedOps = batch
-          .filter((op) => failed.some((f) => f.id === op.id))
-          .filter((op) => (op.intentos || 0) < 3)
+        const failedOps = batch.filter((op) => failed.some((f) => f.id === op.id) && (op.intentos || 0) < 3)
         if (failedOps.length) requeueFailed(failedOps)
       }
 

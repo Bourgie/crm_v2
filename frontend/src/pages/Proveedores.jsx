@@ -9,6 +9,7 @@ const fmt = (n) => '$' + (Number(n)||0).toLocaleString('es-AR', { maximumFractio
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('es-AR') : '—'
 const METODOS = ['efectivo','transferencia','cheque','tarjeta','otro']
 const EMPTY_PROV = { nombre:'', cuit:'', tel:'', email:'', dir:'', contacto:'', notas:'' }
+const PROV_TABS = [['proveedores','📦 Proveedores'],['deudas','💰 Deudas']]
 
 // ── Supplier detail panel (orders + payments + balance) ────────
 function ProveedorDetail({ prov, onClose, api, toast }) {
@@ -81,14 +82,14 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
 
       {/* Actions */}
       <div style={{display:'flex',gap:8,marginBottom:16}}>
-        <button className="btn btn-primary" onClick={()=>{setFC({concepto:'',monto:'',nro_factura:'',fecha:new Date().toISOString().substr(0,10),vto:'',notas:'',pagado_al_recibir:'',forma_pago_inicial:'pendiente'});setModalCompra(true)}}>📦 Nueva compra</button>
-        <button className="btn" style={{background:'#dcfce7',color:'#15803d',border:'none'}} onClick={()=>{setFP({monto:String(Math.max(0,saldo)),metodo:'efectivo',concepto:'Pago proveedor',fecha:new Date().toISOString().substr(0,10),nro_comprobante:''});setModalPago(true)}}>💵 Registrar pago</button>
+        <button type="button" className="btn btn-primary" onClick={()=>{setFC({concepto:'',monto:'',nro_factura:'',fecha:new Date().toISOString().substr(0,10),vto:'',notas:'',pagado_al_recibir:'',forma_pago_inicial:'pendiente'});setModalCompra(true)}}>📦 Nueva compra</button>
+        <button type="button" className="btn" style={{background:'#dcfce7',color:'#15803d',border:'none'}} onClick={()=>{setFP({monto:String(Math.max(0,saldo)),metodo:'efectivo',concepto:'Pago proveedor',fecha:new Date().toISOString().substr(0,10),nro_comprobante:''});setModalPago(true)}}>💵 Registrar pago</button>
       </div>
 
       {/* Tabs */}
       <div style={{display:'flex',gap:4,marginBottom:10,borderBottom:'2px solid var(--bd)',paddingBottom:8}}>
         {[['ordenes',`📦 Compras (${ordenes.length})`],['pagos',`💵 Pagos (${pagos.length})`]].map(([k,l])=>(
-          <button key={k} className={`btn btn-sm ${tab===k?'btn-primary':'btn-secondary'}`} onClick={()=>setTab(k)}>{l}</button>
+          <button type="button" key={k} className={`btn btn-sm ${tab===k?'btn-primary':'btn-secondary'}`} onClick={()=>setTab(k)}>{l}</button>
         ))}
       </div>
 
@@ -135,7 +136,7 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
 
       {/* Nueva compra modal */}
       <Modal open={modalCompra} onClose={()=>setModalCompra(false)} title="📦 Registrar compra" size="md"
-        footer={<><button className="btn btn-secondary" onClick={()=>setModalCompra(false)}>Cancelar</button><button className="btn btn-primary" onClick={saveCompra} disabled={saving}>{saving?<><span className="spinner" style={{width:14,height:14}}/> Guardando...</>:'💾 Guardar'}</button></>}>
+        footer={<><button type="button" className="btn btn-secondary" onClick={()=>setModalCompra(false)}>Cancelar</button><button type="button" className="btn btn-primary" onClick={saveCompra} disabled={saving}>{saving?<><span className="spinner" style={{width:14,height:14}}/> Guardando...</>:'💾 Guardar'}</button></>}>
         <div className="fr">
           <Field label="Concepto"><input value={fCompra.concepto} onChange={setC('concepto')} placeholder="Ej: Mercadería, Insumos..."/></Field>
           <Field label="Monto total *"><input type="number" value={fCompra.monto} onChange={setC('monto')} min="0" step="0.01" placeholder="0.00"/></Field>
@@ -161,9 +162,9 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
 
       {/* Pago modal */}
       <Modal open={modalPago} onClose={()=>setModalPago(false)} title="💵 Registrar pago" size="sm"
-        footer={<><button className="btn btn-secondary" onClick={()=>setModalPago(false)}>Cancelar</button><button className="btn btn-primary" style={{background:'var(--ok)'}} onClick={savePago} disabled={saving}>{saving?<><span className="spinner" style={{width:14,height:14}}/> Guardando...</>:'✅ Registrar'}</button></>}>
+        footer={<><button type="button" className="btn btn-secondary" onClick={()=>setModalPago(false)}>Cancelar</button><button type="button" className="btn btn-primary" style={{background:'var(--ok)'}} onClick={savePago} disabled={saving}>{saving?<><span className="spinner" style={{width:14,height:14}}/> Guardando...</>:'✅ Registrar'}</button></>}>
         {saldo>0 && <div style={{textAlign:'center',marginBottom:16,padding:'10px 14px',background:'rgba(239,68,68,.08)',borderRadius:8}}><div style={{fontSize:12,color:'var(--mu)'}}>Deuda actual</div><div style={{fontSize:22,fontWeight:800,color:'var(--bad)'}}>{fmt(saldo)}</div></div>}
-        <Field label="Monto *"><input type="number" value={fPago.monto} onChange={setP('monto')} min="0" step="0.01" style={{fontSize:18,fontWeight:700,textAlign:'center'}} autoFocus/></Field>
+        <Field label="Monto *"><input type="number" value={fPago.monto} onChange={setP('monto')} min="0" step="0.01" style={{fontSize:18,fontWeight:700,textAlign:'center'}}/></Field>
         <div className="fr">
           <Field label="Método"><select value={fPago.metodo} onChange={setP('metodo')}>{METODOS.map((m)=><option key={m} value={m}>{m.charAt(0).toUpperCase()+m.slice(1)}</option>)}</select></Field>
           <Field label="Fecha"><input type="date" value={fPago.fecha} onChange={setP('fecha')}/></Field>
@@ -214,7 +215,7 @@ function DeudasTab({ api, toast, onVerProveedor }) {
 
       <div style={{display:'flex',gap:8,marginBottom:12}}>
         {[['todas','Todas'],['con_deuda','Con deuda'],['sin_deuda','Al día']].map(([v,l])=>(
-          <button key={v} className={`btn btn-sm ${filtro===v?'btn-primary':'btn-secondary'}`} onClick={()=>setFiltro(v)}>{l}</button>
+          <button type="button" key={v} className={`btn btn-sm ${filtro===v?'btn-primary':'btn-secondary'}`} onClick={()=>setFiltro(v)}>{l}</button>
         ))}
       </div>
 
@@ -227,7 +228,7 @@ function DeudasTab({ api, toast, onVerProveedor }) {
                 ? <EmptyRow cols={6} icon="💰" text="Sin resultados"/>
                 : filtrados.map((p)=>(
                     <tr key={p.id}>
-                      <td><div style={{fontWeight:600}}>{p.nombre}</div><div style={{fontSize:11,color:'var(--mu)'}}>{p.cant_ordenes} órdenes · {p.cant_pagos} pagos</div></td>
+                      <td><div style={{fontWeight:600}}>{p.nombre}</div><div style={{fontSize: 12,color:'var(--mu)'}}>{p.cant_ordenes} órdenes · {p.cant_pagos} pagos</div></td>
                       <td style={{fontSize:12,fontFamily:'monospace'}}>{p.cuit||'—'}</td>
                       <td style={{textAlign:'right',fontSize:13}}>{fmt(p.total_ordenes)}</td>
                       <td style={{textAlign:'right',fontSize:13,color:'var(--ok)'}}>{fmt(p.total_pagos)}</td>
@@ -235,7 +236,7 @@ function DeudasTab({ api, toast, onVerProveedor }) {
                         {p.tiene_deuda ? fmt(p.saldo) : 'Al día'}
                       </td>
                       <td>
-                        <button className="btn btn-sm" style={{background:'#dbeafe',color:'#1d4ed8',border:'none'}}
+                        <button type="button" className="btn btn-sm" style={{background:'#dbeafe',color:'#1d4ed8',border:'none'}}
                           onClick={() => onVerProveedor(p)}>📋</button>
                       </td>
                     </tr>
@@ -296,13 +297,11 @@ export function Proveedores() {
 
   if (loading) return <Loader/>
 
-  const TABS = [['proveedores','📦 Proveedores'],['deudas','💰 Deudas']]
-
   return (
     <div>
       <div style={{display:'flex',gap:4,marginBottom:16,borderBottom:'2px solid var(--bd)',paddingBottom:8,flexWrap:'wrap'}}>
-        {TABS.map(([k,l])=>(
-          <button key={k} className={`btn btn-sm ${tab===k?'btn-primary':'btn-secondary'}`} onClick={()=>setTab(k)}>{l}</button>
+        {PROV_TABS.map(([k,l])=>(
+          <button type="button" key={k} className={`btn btn-sm ${tab===k?'btn-primary':'btn-secondary'}`} onClick={()=>setTab(k)}>{l}</button>
         ))}
       </div>
 
@@ -321,7 +320,7 @@ export function Proveedores() {
 
           <PageHeader title={`📦 Proveedores (${filtered.length})`}>
             <SearchBar value={search} onChange={(v)=>{setSearch(v);setPage(1)}} placeholder="Nombre, CUIT..." style={{width:220}}/>
-            <button className="btn btn-primary" onClick={openNew}>+ Nuevo proveedor</button>
+            <button type="button" className="btn btn-primary" onClick={openNew}>+ Nuevo proveedor</button>
           </PageHeader>
 
           <div className="card" style={{padding:0}}>
@@ -333,15 +332,15 @@ export function Proveedores() {
                     ? <EmptyRow cols={5} icon="📦" text="Sin proveedores. Creá el primero."/>
                     : filtered.slice((page-1)*PER,page*PER).map((p)=>(
                       <tr key={p.id}>
-                        <td><div style={{fontWeight:600}}>{p.nombre}</div>{p.notas&&<div style={{fontSize:11,color:'var(--mu)'}}>{p.notas.substr(0,50)}</div>}</td>
+                        <td><div style={{fontWeight:600}}>{p.nombre}</div>{p.notas&&<div style={{fontSize: 12,color:'var(--mu)'}}>{p.notas.substr(0,50)}</div>}</td>
                         <td style={{fontSize:12,fontFamily:'monospace'}}>{p.cuit||'—'}</td>
                         <td style={{fontSize:12}}>{p.contacto||p.email||'—'}</td>
                         <td style={{fontSize:12}}>{p.tel||'—'}</td>
                         <td>
                           <div style={{display:'flex',gap:4}}>
-                            <button className="btn btn-sm" style={{background:'#dbeafe',color:'#1d4ed8',border:'none'}} onClick={()=>setDetail(p)}>📋 Ver</button>
-                            <button className="btn btn-icon btn-sm" onClick={()=>openEdit(p)}>✏️</button>
-                            <button className="btn btn-icon btn-sm" onClick={()=>setConfirm(p.id)}>🗑</button>
+                            <button type="button" className="btn btn-sm" style={{background:'#dbeafe',color:'#1d4ed8',border:'none'}} onClick={()=>setDetail(p)}>📋 Ver</button>
+                            <button type="button" className="btn btn-icon btn-sm" onClick={()=>openEdit(p)}>✏️</button>
+                            <button type="button" className="btn btn-icon btn-sm" onClick={()=>setConfirm(p.id)}>🗑</button>
                           </div>
                         </td>
                       </tr>
@@ -354,7 +353,7 @@ export function Proveedores() {
 
           {/* Create/edit modal */}
           <Modal open={!!modal} onClose={()=>setModal(null)} title={modal==='new'?'+ Nuevo proveedor':`Editar: ${modal?.nombre}`}
-            footer={<><button className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button><button className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner" style={{width:14,height:14}}/> Guardando...</>:'💾 Guardar'}</button></>}>
+            footer={<><button type="button" className="btn btn-secondary" onClick={()=>setModal(null)}>Cancelar</button><button type="button" className="btn btn-primary" onClick={save} disabled={saving}>{saving?<><span className="spinner" style={{width:14,height:14}}/> Guardando...</>:'💾 Guardar'}</button></>}>
             <div className="fr">
               <Field label="Nombre *"><input value={form.nombre} onChange={set('nombre')} placeholder="Nombre del proveedor"/></Field>
               <Field label="CUIT"><input value={form.cuit} onChange={set('cuit')} placeholder="20-12345678-9" style={{fontFamily:'monospace'}}/></Field>
@@ -383,3 +382,5 @@ export function Proveedores() {
     </div>
   )
 }
+
+

@@ -10,9 +10,11 @@ const EMPTY_GASTO = { nombre: '', monto: '', fecha: new Date().toISOString().sub
 const METODOS = ['efectivo', 'transferencia', 'debito_cuenta', 'tarjeta_corp', 'cheque', 'otro']
 const METODO_LABELS = { efectivo: 'Efectivo', transferencia: 'Transferencia', debito_cuenta: 'Débito', tarjeta_corp: 'Tarjeta corp.', cheque: 'Cheque', otro: 'Otro' }
 
+const ESTADO_BADGE_MAP = { pagado: 'badge-green', pendiente: 'badge-yellow', vencido: 'badge-red' }
+const fmtGasto = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })
+
 function EstadoBadge({ estado }) {
-  const map = { pagado: 'badge-green', pendiente: 'badge-yellow', vencido: 'badge-red' }
-  return <span className={`badge ${map[estado] || 'badge-gray'}`}>{estado}</span>
+  return <span className={`badge ${ESTADO_BADGE_MAP[estado] || 'badge-gray'}`}>{estado}</span>
 }
 
 export function Gastos() {
@@ -25,7 +27,7 @@ export function Gastos() {
   const [resumen, setResumen] = useState(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
-  const [mes, setMes] = useState(new Date().toISOString().substr(0, 7))
+  const [mes, setMes] = useState(() => new Date().toISOString().substr(0, 7))
   const [filtroCat, setFiltroCat] = useState('')
   const [filtroEstado, setFiltroEstado] = useState('')
   const [page, setPage] = useState(1)
@@ -64,7 +66,7 @@ export function Gastos() {
 
   useEffect(() => { load() }, [load])
 
-  function exportar() {
+  async function exportar() {
     const headers = ['Fecha', 'Concepto', 'Categoría', 'Sucursal', 'Estado', 'Método pago', 'Monto']
     const rows = filtered.map(g => [
       g.fecha ? new Date(g.fecha).toLocaleDateString('es-AR') : '',
@@ -72,7 +74,7 @@ export function Gastos() {
       (allSucs.find(s => s.id === g.suc_id) || {}).nombre || '',
       g.estado || '', g.metodo_pago || '', g.monto || 0
     ])
-    exportExcel('gastos', headers, rows, 'Gastos')
+    await exportExcel('gastos', headers, rows, 'Gastos')
     toast('📊 Excel exportado', 'ok')
   }
 
@@ -87,7 +89,7 @@ export function Gastos() {
 
   const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE)
   const totalFiltrado = filtered.reduce((a, g) => a + (g.monto || 0), 0)
-  const fmt = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })
+  const fmt = fmtGasto
 
   function openNew() { setForm({ ...EMPTY_GASTO, fecha: new Date().toISOString().substr(0, 10) }); setModal('new') }
   function openEdit(g) {
@@ -159,8 +161,8 @@ export function Gastos() {
           <option value="vencido">Vencido</option>
         </select>
         <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1) }} placeholder="Buscar..." style={{ width: 200 }} />
-        <button className="btn btn-secondary btn-sm" onClick={exportar}>📊 Excel</button>
-        <button className="btn btn-primary" onClick={openNew}>+ Nuevo gasto</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={exportar}>📊 Excel</button>
+        <button type="button" className="btn btn-primary" onClick={openNew}>+ Nuevo gasto</button>
       </PageHeader>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
@@ -177,15 +179,15 @@ export function Gastos() {
                     <td style={{ fontSize: 12, color: 'var(--mu)' }}>{(g.fecha || '').substr(0, 10)}</td>
                     <td>
                       <div style={{ fontWeight: 600 }}>{g.nombre}</div>
-                      {g.notas && <div style={{ fontSize: 11, color: 'var(--mu)' }}>{g.notas}</div>}
-                      {g.pagado_por && <div style={{ fontSize: 11, color: 'var(--mu)' }}>Pagó: {g.pagado_por}</div>}
+                      {g.notas && <div style={{ fontSize: 12, color: 'var(--mu)' }}>{g.notas}</div>}
+                      {g.pagado_por && <div style={{ fontSize: 12, color: 'var(--mu)' }}>Pagó: {g.pagado_por}</div>}
                     </td>
                     <td style={{ fontSize: 12 }}>{g.categoria_nombre || '—'}</td>
                     <td style={{ fontSize: 12 }}>{METODO_LABELS[g.metodo_pago] || g.metodo_pago || '—'}</td>
                     <td><EstadoBadge estado={g.estado} /></td>
                     <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--bad)' }}>{fmt(g.monto)}</td>
                     <td onClick={(e) => e.stopPropagation()}>
-                      <button className="btn btn-icon btn-sm" onClick={() => setConfirm(g.id)}>🗑</button>
+                      <button type="button" className="btn btn-icon btn-sm" onClick={() => setConfirm(g.id)}>🗑</button>
                     </td>
                   </tr>
                 ))}
@@ -200,8 +202,8 @@ export function Gastos() {
       {/* Modal */}
       <Modal open={!!modal} onClose={() => setModal(null)} title={modal === 'new' ? '+ Nuevo gasto' : 'Editar gasto'}
         footer={<>
-          <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}>
+          <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
             {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Guardando...</> : '💾 Guardar'}
           </button>
         </>}
@@ -246,3 +248,4 @@ export function Gastos() {
 
 // useAuth re-import for Gastos standalone
 import { useAuth } from '../store'
+

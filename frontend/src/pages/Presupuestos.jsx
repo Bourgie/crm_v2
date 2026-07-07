@@ -200,8 +200,8 @@ export function Presupuestos() {
           <option value="">Todos los estados</option>
           {Object.keys(ESTADOS).map((e) => <option key={e} value={e}>{e}</option>)}
         </select>
-        <button className="btn btn-secondary btn-sm" onClick={exportar}>📊 Excel</button>
-        <button className="btn btn-primary" onClick={openNew}>+ Nuevo</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={exportar}>📊 Excel</button>
+        <button type="button" className="btn btn-primary" onClick={openNew}>+ Nuevo</button>
       </PageHeader>
 
       <div className="card" style={{ padding: 0 }}>
@@ -224,15 +224,15 @@ export function Presupuestos() {
                         <td style={{ fontSize: 12, color: vencido ? 'var(--bad)' : 'var(--mu)' }}>{vto ? vto.toLocaleDateString('es-AR') : '—'}</td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
-                            <button className="btn btn-icon btn-sm" title="Editar" onClick={() => openEdit(p)}>✏️</button>
-                            {p.estado === 'borrador' && <button className="btn btn-sm" style={{ background: '#dbeafe', color: '#1d4ed8', ...btnSm }} onClick={() => cambiarEstado(p.id, 'enviado')}>📤 Enviar</button>}
-                            {p.estado === 'enviado' && <button className="btn btn-sm" style={{ background: '#dcfce7', color: '#15803d', ...btnSm }} onClick={() => cambiarEstado(p.id, 'aceptado')}>✅ Aprobar</button>}
-                            {p.estado === 'enviado' && <button className="btn btn-sm" style={{ background: '#fee2e2', color: '#dc2626', ...btnSm }} onClick={() => cambiarEstado(p.id, 'rechazado')}>✕ Rechazar</button>}
-                            {p.estado === 'aceptado' && <button className="btn btn-sm" style={{ background: '#ede9fe', color: '#7c3aed', ...btnSm }} onClick={() => convertirVenta(p.id)}>→ Venta</button>}
-                            <button className="btn btn-icon btn-sm" title="Descargar PDF" onClick={() => downloadPDF(p.id)}>📄</button>
-                            <button className="btn btn-icon btn-sm" title="Enviar por email" onClick={() => openEmail(p)}>📧</button>
-                            <button className="btn btn-icon btn-sm" title="Agregar al pipeline" onClick={() => openPipeline(p)}>📋</button>
-                            <button className="btn btn-icon btn-sm" title="Eliminar" onClick={() => setConfirm(p.id)}>🗑</button>
+                            <button type="button" className="btn btn-icon btn-sm" title="Editar" onClick={() => openEdit(p)}>✏️</button>
+                            {p.estado === 'borrador' && <button type="button" className="btn btn-sm" style={{ background: '#dbeafe', color: '#1d4ed8', ...btnSm }} onClick={() => cambiarEstado(p.id, 'enviado')}>📤 Enviar</button>}
+                            {p.estado === 'enviado' && <button type="button" className="btn btn-sm" style={{ background: '#dcfce7', color: '#15803d', ...btnSm }} onClick={() => cambiarEstado(p.id, 'aceptado')}>✅ Aprobar</button>}
+                            {p.estado === 'enviado' && <button type="button" className="btn btn-sm" style={{ background: '#fee2e2', color: '#dc2626', ...btnSm }} onClick={() => cambiarEstado(p.id, 'rechazado')}>✕ Rechazar</button>}
+                            {p.estado === 'aceptado' && <button type="button" className="btn btn-sm" style={{ background: '#ede9fe', color: '#7c3aed', ...btnSm }} onClick={() => convertirVenta(p.id)}>→ Venta</button>}
+                            <button type="button" className="btn btn-icon btn-sm" title="Descargar PDF" onClick={() => downloadPDF(p.id)}>📄</button>
+                            <button type="button" className="btn btn-icon btn-sm" title="Enviar por email" onClick={() => openEmail(p)}>📧</button>
+                            <button type="button" className="btn btn-icon btn-sm" title="Agregar al pipeline" onClick={() => openPipeline(p)}>📋</button>
+                            <button type="button" className="btn btn-icon btn-sm" title="Eliminar" onClick={() => setConfirm(p.id)}>🗑</button>
                           </div>
                         </td>
                       </tr>
@@ -247,8 +247,8 @@ export function Presupuestos() {
       <Modal open={!!modal} onClose={() => setModal(null)} size="xl"
         title={modal === 'new' ? '+ Nuevo presupuesto' : `Presupuesto #${modal?.id?.substr(-8)}`}
         footer={<>
-          <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}>
+          <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
             {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Guardando...</> : '💾 Guardar'}
           </button>
         </>}
@@ -295,12 +295,12 @@ export function Presupuestos() {
                 {i === 0 && <div style={{ height: 20 }} />}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{ fontWeight: 700, fontSize: 13, minWidth: 70, textAlign: 'right' }}>{fmt((parseFloat(line.precio) || 0) * (parseInt(line.cantidad) || 0))}</span>
-                  <button onClick={() => removeLine(i)} style={{ background: 'none', border: 'none', color: 'var(--mu)', cursor: 'pointer', fontSize: 18 }}>✕</button>
+                  <button type="button" onClick={() => removeLine(i)} style={{ background: 'none', border: 'none', color: 'var(--mu)', cursor: 'pointer', fontSize: 18 }}>✕</button>
                 </div>
               </div>
             </div>
           ))}
-          <button className="btn btn-secondary btn-sm" onClick={addLine}>+ Agregar línea</button>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={addLine}>+ Agregar línea</button>
         </div>
 
         <div style={{ borderTop: '2px solid var(--bd)', paddingTop: 12, display: 'flex', justifyContent: 'flex-end' }}>
@@ -315,8 +315,8 @@ export function Presupuestos() {
 
       <Modal open={!!emailModal} onClose={() => setEmailModal(null)} title="📧 Enviar presupuesto por email"
         footer={<>
-          <button className="btn btn-secondary" onClick={() => setEmailModal(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={sendEmail} disabled={emailSending}>
+          <button type="button" className="btn btn-secondary" onClick={() => setEmailModal(null)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={sendEmail} disabled={emailSending}>
             {emailSending ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Enviando...</> : '📤 Enviar'}
           </button>
         </>}
@@ -346,8 +346,8 @@ export function Presupuestos() {
 
       <Modal open={!!pipeModal} onClose={() => setPipeModal(null)} title="📋 Agregar al pipeline"
         footer={<>
-          <button className="btn btn-secondary" onClick={() => setPipeModal(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={sendToPipeline} disabled={pipeSending}>
+          <button type="button" className="btn btn-secondary" onClick={() => setPipeModal(null)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={sendToPipeline} disabled={pipeSending}>
             {pipeSending ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Agregando...</> : '📋 Agregar al pipeline'}
           </button>
         </>}
@@ -376,3 +376,4 @@ export function Presupuestos() {
 }
 
 const selStyle = { padding: '9px 12px', borderRadius: 8, border: '1.5px solid var(--bd)', cursor: 'pointer', fontSize: 13, background: 'var(--bg)', color: 'var(--tx)' }
+

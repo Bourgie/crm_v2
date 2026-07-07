@@ -53,7 +53,7 @@ async function sendBackupEmail(backupPath) {
     host, port,
     secure: port === 465,
     auth: { user, pass },
-    tls: { rejectUnauthorized: false }
+    tls: { rejectUnauthorized: process.env.NODE_ENV === 'production' }
   });
 
   const fecha = new Date().toLocaleString('es-AR');

@@ -8,7 +8,7 @@ const { authMiddleware, requireRol } = require('../middleware/auth');
 const pendRouter = express.Router();
 pendRouter.use(authMiddleware);
 
-function enrichPend(p) {
+function enrichPend(p, db) {
   const sucs=db.all('sucursales'),clis=db.all('clientes'),vends=db.all('vendedores');
   const c=clis.find(x=>x.id===p.cliente_id), vd=vends.find(x=>x.id===p.vend_id);
   const sucEnt=sucs.find(s=>s.id===p.suc_entrega);
@@ -23,7 +23,7 @@ pendRouter.get('/',(req,res)=>{
   // Show pendientes from this suc (as cobro) OR destined to this suc (as entrega)
   if(suc_id) rows=rows.filter(p=>p.suc_id===suc_id || p.suc_entrega===suc_id);
   if(cli_id) rows=rows.filter(p=>p.cliente_id===cli_id);
-  res.json(rows.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(enrichPend));
+  res.json(rows.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).map(p => enrichPend(p, db)));
 });
 
 pendRouter.get('/:id',(req,res)=>{
@@ -31,7 +31,7 @@ pendRouter.get('/:id',(req,res)=>{
   const p=db.findOne('pendientes',req.params.id);
   if(!p) return res.status(404).json({error:'No encontrado'});
   const items=db.where('pendiente_items',i=>i.pendiente_id===req.params.id);
-  res.json({...enrichPend(p),items});
+  res.json({...enrichPend(p, db),items});
 });
 
 pendRouter.post('/',(req,res)=>{
@@ -46,7 +46,7 @@ pendRouter.post('/',(req,res)=>{
   seña = parseFloat(seña) || 0;
   const saldo = Math.max(0, (parseFloat(total) || 0) - seña);
   db.insert('pendientes',{id,numero,fecha,fecha_entrega_estimada:fecha_entrega_estimada||null,vend_nombre_fallback:vend_nombre_fallback||'',estado:estado_inicial||'pendiente',suc_entrega:suc_entrega||suc_id,suc_cobro:suc_cobro||suc_id,concepto:concepto||'Pedido #'+numero,fecha_vto:vto.toISOString().substr(0,10),suc_id,vend_id:vend_id||null,cliente_id:cliente_id||null,total:parseFloat(total),seña,saldo,notas:notas||'',activo_stock:true,venta_id:venta_id||null});
-  items.forEach(it=>db.insert('pendiente_items',{id:uid(),pendiente_id:id,prod_id:it.prod_id,nombre:it.nombre,talle:it.talle||'',precio:parseFloat(it.precio),cantidad:parseInt(it.cantidad),subtotal:parseFloat(it.subtotal),entregado:0}));
+  items.forEach(it=>db.insert('pendiente_items',{id:uid(),pendiente_id:id,prod_id:it.prod_id,variante_id:it.variante_id||null,nombre:it.nombre,talle:it.talle||'',precio:parseFloat(it.precio),cantidad:parseInt(it.cantidad),subtotal:parseFloat(it.subtotal),entregado:0}));
 
   // ── Restaurar stock a la sucursal que vendió ──
   // Al crear el pendiente, el producto vuelve al inventario disponible
@@ -192,12 +192,13 @@ ctacteRouter.get('/',(req,res)=>{
     const saldo=movs.filter(m=>!m.cancelado).reduce((a,m)=>a+(m.tipo==='deuda'?m.monto:m.tipo==='pago'?-m.monto:0),0);
     return res.json({movimientos:movs,saldo});
   }
-  let resumen=clis.filter(c=>c.activo).map(c=>{
+  let resumen=clis.flatMap(c=>{
+    if (!c.activo) return [];
     const movs=db.where('ctacte_movimientos',m=>m.cliente_id===c.id);
     const saldo=movs.filter(m=>!m.cancelado).reduce((a,m)=>a+(m.tipo==='deuda'?m.monto:m.tipo==='pago'?-m.monto:0),0);
     const venc=movs.filter(m=>m.tipo==='deuda'&&!m.cancelado&&m.fecha_vto&&m.fecha_vto<hoy).length;
     const prox=movs.filter(m=>{if(m.tipo!=='deuda'||m.cancelado||!m.fecha_vto)return false;const d=Math.floor((new Date(m.fecha_vto)-new Date())/(1000*60*60*24));return d>=0&&d<=7;}).length;
-    return {...c,saldo,vencidas_count:venc,proximas_count:prox,tiene_deuda:saldo>0};
+    return [{...c,saldo,vencidas_count:venc,proximas_count:prox,tiene_deuda:saldo>0}];
   });
   if(vencidas==='true') resumen=resumen.filter(c=>c.vencidas_count>0);
   const result = todas==='true' ? resumen : resumen.filter(c=>c.saldo!==0||c.vencidas_count>0);

@@ -61,7 +61,7 @@ export const useToast = create((set, get) => ({
   toasts: [],
 
   toast: (msg, type = '') => {
-    const id = Date.now() + Math.random()
+    const id = `${Date.now()}_${crypto.randomUUID().substring(0, 8)}`
     set((s) => ({ toasts: [...s.toasts, { id, msg, type }] }))
     setTimeout(() => {
       set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) }))
@@ -80,7 +80,7 @@ export const useOffline = create(
 
       enqueue: (method, endpoint, body) => {
         const op = {
-          id: 'op_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+          id: `op_${Date.now()}_${crypto.randomUUID().substring(0, 8)}`,
           method, endpoint, body: body || {},
           ts: new Date().toISOString(),
           intentos: 0,

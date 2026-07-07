@@ -3,6 +3,7 @@ const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
 const { authMiddleware, requireRol } = require('../middleware/auth');
+const { validate, gastoSchema } = require('../middleware/validate');
 router.use(authMiddleware);
 
 // ── Categorías ──
@@ -68,7 +69,7 @@ router.get('/', (req, res) => {
   res.json(rows.sort((a,b) => new Date(b.fecha) - new Date(a.fecha)));
 });
 
-router.post('/', requireRol('admin','supervisor','cajero'), (req, res) => {
+router.post('/', requireRol('admin','supervisor','cajero'), validate(gastoSchema), (req, res) => {
   const db = _getDB(req);
   const { nombre, categoria_id, monto, fecha, fecha_vencimiento, estado,
           metodo_pago, suc_id, recurrente_id, nro_comprobante, notas,
@@ -116,7 +117,11 @@ router.put('/:id', requireRol('admin','supervisor'), (req, res) => {
   const db = _getDB(req);
   const existing = db.findOne('gastos', req.params.id);
   if (!existing) return res.status(404).json({error:'No encontrado'});
-  const updates = {...req.body};
+  const { nombre, monto, fecha, fecha_vencimiento, estado, metodo_pago, suc_id, recurrente_id, nro_comprobante, notas, registrado_por, pagado_por, genera_egreso_caja, categoria_id, categoria_nombre } = req.body;
+  const updates = {};
+  for (const [k, v] of Object.entries({ nombre, monto, fecha, fecha_vencimiento, estado, metodo_pago, suc_id, recurrente_id, nro_comprobante, notas, registrado_por, pagado_por, genera_egreso_caja, categoria_id, categoria_nombre })) {
+    if (v !== undefined) updates[k] = v;
+  }
   if (updates.categoria_id) {
     const cat = db.findOne('gastos_categorias', updates.categoria_id);
     if (cat) updates.categoria_nombre = cat.nombre;

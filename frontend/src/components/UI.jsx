@@ -41,8 +41,8 @@ export function ConfirmDialog({ open, onClose, onConfirm, title, message, confir
     <Modal open={open} onClose={onClose} title={title || '¿Confirmar?'} size="sm"
       footer={
         <>
-          <button className="btn btn-secondary" onClick={onClose}>Cancelar</button>
-          <button className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} onClick={() => { onConfirm(); onClose(); }}>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancelar</button>
+          <button type="button" className={`btn ${danger ? 'btn-danger' : 'btn-primary'}`} onClick={() => { onConfirm(); onClose(); }}>
             {confirmLabel}
           </button>
         </>
@@ -82,17 +82,18 @@ export function Pagination({ page, total, perPage = 25, onChange }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 6, justifyContent: 'flex-end', padding: '12px 0', fontSize: 13 }}>
       <span style={{ color: 'var(--mu)' }}>{total} registros</span>
-      <button className="btn btn-secondary btn-sm" onClick={() => onChange(page - 1)} disabled={page <= 1}>‹</button>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => onChange(page - 1)} disabled={page <= 1}>‹</button>
       {Array.from({ length: Math.min(pages, 7) }, (_, i) => {
         const p = pages <= 7 ? i + 1 : (page <= 4 ? i + 1 : page - 3 + i)
         if (p < 1 || p > pages) return null
         return (
-          <button key={p} className={`btn btn-sm ${p === page ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onChange(p)}>
+          <button type="button" key={p} className={`btn btn-sm ${p === page ? 'btn-primary' : 'btn-secondary'}`} onClick={() => onChange(p)}>
             {p}
           </button>
         )
       })}
-      <button className="btn btn-secondary btn-sm" onClick={() => onChange(page + 1)} disabled={page >= pages}>›</button>
+      <button type="button" className="btn btn-secondary btn-sm" onClick={() => onChange(page + 1)} disabled={page >= pages}>›</button>
     </div>
   )
 }
+

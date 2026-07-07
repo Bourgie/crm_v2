@@ -66,7 +66,10 @@ master.exec(`
     usuario TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     nombre TEXT,
-    activo INTEGER DEFAULT 1
+    email TEXT,
+    activo INTEGER DEFAULT 1,
+    must_change_password INTEGER DEFAULT 0,
+    data TEXT DEFAULT '{}'
   );
 
   CREATE TABLE IF NOT EXISTS sa_audit_log (
@@ -88,6 +91,20 @@ master.exec(`
     estado TEXT DEFAULT 'pendiente'
   );
 
+  CREATE TABLE IF NOT EXISTS solicitudes_soporte (
+    id TEXT PRIMARY KEY,
+    empresa_id TEXT,
+    tipo TEXT DEFAULT 'soporte',
+    asunto TEXT,
+    descripcion TEXT,
+    fecha TEXT,
+    estado TEXT DEFAULT 'pendiente',
+    creado_por TEXT,
+    respuesta TEXT,
+    respondido_por TEXT,
+    fecha_respuesta TEXT
+  );
+
   CREATE TABLE IF NOT EXISTS empresa_notas (
     id TEXT PRIMARY KEY,
     empresa_id TEXT,
@@ -95,22 +112,64 @@ master.exec(`
     autor TEXT,
     fecha TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS prospectos (
+    id TEXT PRIMARY KEY,
+    nombre TEXT NOT NULL,
+    telefono TEXT,
+    email TEXT,
+    empresa_interes TEXT,
+    origen TEXT DEFAULT 'manual',
+    estado TEXT DEFAULT 'nuevo',
+    notas TEXT DEFAULT '',
+    asignado_a TEXT,
+    fecha_creacion TEXT,
+    fecha_ultimo_contacto TEXT,
+    ultimo_seguimiento TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS prospecto_seguimiento (
+    id TEXT PRIMARY KEY,
+    prospecto_id TEXT,
+    tipo TEXT DEFAULT 'nota',
+    descripcion TEXT,
+    fecha TEXT,
+    creado_por TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS landing_leads (
+    id TEXT PRIMARY KEY,
+    nombre TEXT,
+    telefono TEXT,
+    email TEXT,
+    mensaje TEXT,
+    empresa_interes TEXT,
+    pagina TEXT,
+    leido INTEGER DEFAULT 0,
+    fecha TEXT
+  );
 `);
+
+// Migration: add email and data columns to existing superadmin
+try { master.exec("ALTER TABLE superadmin ADD COLUMN email TEXT"); } catch(e) {}
+try { master.exec("ALTER TABLE superadmin ADD COLUMN data TEXT DEFAULT '{}'"); } catch(e) {}
+try { master.exec("ALTER TABLE superadmin ADD COLUMN must_change_password INTEGER DEFAULT 0"); } catch(e) {}
 
 // Seed superadmin if not exists
 const sa = master.prepare("SELECT id FROM superadmin LIMIT 1").get();
 if(!sa) {
   const bcrypt = require('bcryptjs');
-  const hash = bcrypt.hashSync('superadmin123', 10);
-  master.prepare("INSERT INTO superadmin (id,usuario,password,nombre) VALUES (?,?,?,?)").run(
-    'sa_' + Date.now(), 'superadmin', hash, 'Super Admin'
+  const saPassword = process.env.SEED_SUPERADMIN_PASSWORD || 'superadmin123';
+  const hash = bcrypt.hashSync(saPassword, 10);
+  master.prepare("INSERT INTO superadmin (id,usuario,password,nombre,email,must_change_password) VALUES (?,?,?,?,?,1)").run(
+    'sa_' + Date.now(), 'superadmin', hash, 'Super Admin', 'admin@flexcrm.local'
   );
   console.log('\n✓ ════════════════════════════════════');
-console.log('✓ Superadmin creado!');
-console.log('  Usuario: superadmin');
-console.log('  Password: superadmin123');
-console.log('  Panel: /superadmin.html');
-console.log('✓ ════════════════════════════════════\n');
+  console.log('✓ Superadmin creado — usuario: superadmin');
+  console.log('  La contraseña es la configurada en SEED_SUPERADMIN_PASSWORD');
+  console.log('  Debe cambiarla en el primer inicio de sesión.');
+  console.log('  Panel: /admin');
+  console.log('✓ ════════════════════════════════════\n');
 }
 
 // Seed default modules
@@ -273,7 +332,33 @@ function updateEmpresa(id, data) {
   );
 }
 
-console.log('✓ Master DB activa — empresas registradas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
+function getProspectos() {
+  return master.prepare("SELECT * FROM prospectos ORDER BY fecha_creacion DESC").all();
+}
+function getProspecto(id) {
+  return master.prepare("SELECT * FROM prospectos WHERE id=?").get(id);
+}
+function getProspectoSeguimiento(prospecto_id) {
+  return master.prepare("SELECT * FROM prospecto_seguimiento WHERE prospecto_id=? ORDER BY fecha DESC").all(prospecto_id);
+}
+function getLandingLeads(noLeidos) {
+  if (noLeidos) return master.prepare("SELECT * FROM landing_leads WHERE leido=0 ORDER BY fecha DESC").all();
+  return master.prepare("SELECT * FROM landing_leads ORDER BY fecha DESC").all();
+}
+function getDbStats() {
+  try {
+    const fs = require('fs');
+    const path = require('path');
+    const dbPath = path.join(__dirname, 'data', 'master.db');
+    const stats = fs.statSync(dbPath);
+    const empresaCount = master.prepare("SELECT COUNT(*) as n FROM empresas").get().n;
+    const activeCount = master.prepare("SELECT COUNT(*) as n FROM empresas WHERE activo=1").get().n;
+    const prospectCount = master.prepare("SELECT COUNT(*) as n FROM prospectos").get().n;
+    const newLeads = master.prepare("SELECT COUNT(*) as n FROM landing_leads WHERE leido=0").get().n;
+    const auditCount = master.prepare("SELECT COUNT(*) as n FROM sa_audit_log").get().n;
+    return { dbSize: stats.size, empresas: empresaCount, activas: activeCount, prospectos: prospectCount, nuevosLeads: newLeads, auditorias: auditCount, timestamp: new Date().toISOString() };
+  } catch(e) { return { error: e.message } }
+}
 
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
-module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos, saAudit };
+module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos, saAudit, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats };

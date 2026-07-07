@@ -4,3 +4,5 @@ node_modules/
 *.db
 *.db-shm
 *.db-wal
+public/app/assets/
+.agent-skills/

@@ -3,6 +3,7 @@ const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
 const { authMiddleware, requireRol } = require('../middleware/auth');
+const { validate, cajaAbrirSchema } = require('../middleware/validate');
 router.use(authMiddleware);
 
 // Métodos que entran físicamente a la caja (efectivo)
@@ -30,10 +31,11 @@ function getCajaEstado(suc_id, empDB) {
   const saldo_efectivo = (caja.fondo_inicial || 0) + ingresos_efectivo - egresos_efectivo;
 
   const por_pago = {};
-  movs.filter(m => m.pago_metodo).forEach(m => {
+  for (const m of movs) {
+    if (!m.pago_metodo) continue;
     if (!por_pago[m.pago_metodo]) por_pago[m.pago_metodo] = 0;
     por_pago[m.pago_metodo] += m.tipo === 'ingreso' ? m.monto : -m.monto;
-  });
+  }
 
   return { ...caja, movimientos: movs, ingresos, egresos, saldo: saldo_efectivo, saldo_efectivo, ingresos_efectivo, por_pago };
 }
@@ -71,7 +73,7 @@ router.get('/historial/:suc_id', (req, res) => {
 });
 
 // Abrir caja
-router.post('/abrir', requireRol('admin', 'supervisor', 'cajero'), (req, res) => {
+router.post('/abrir', requireRol('admin', 'supervisor', 'cajero'), validate(cajaAbrirSchema), (req, res) => {
   const empDB = _getDB(req);
   const { suc_id, fondo_inicial } = req.body;
   if (!suc_id) return res.status(400).json({ error: 'suc_id requerido' });
@@ -192,7 +194,7 @@ router.get('/resumen-cierre/:suc_id', (req, res) => {
   // — Ventas del día (movimientos automáticos de tipo ingreso con venta_id) —
   const movsVentas = movs.filter(m => m.auto && m.tipo === 'ingreso' && m.venta_id);
   const ventasIds = [...new Set(movsVentas.map(m => m.venta_id))];
-  const ventasDia = ventasIds.map(id => empDB.findOne('ventas', id)).filter(Boolean).filter(v => !v.anulada);
+  const ventasDia = ventasIds.flatMap(id => { const v = empDB.findOne('ventas', id); return v && !v.anulada ? [v] : []; });
 
   // Desglose por método de pago con cantidad y monto
   const porPago = {};

@@ -49,8 +49,10 @@ function autoBackup() {
   }
 }
 
-// Backup automático cada 6 horas
-setInterval(autoBackup, 6 * 60 * 60 * 1000);
+// Backup automático cada 6 horas (solo si la DB json existe)
+if (fs.existsSync(DB_PATH)) {
+  setInterval(autoBackup, 6 * 60 * 60 * 1000);
+}
 
 function getDB() {
   if (!_db) _db = loadFromDisk() || buildSeed();

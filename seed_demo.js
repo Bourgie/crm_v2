@@ -76,7 +76,8 @@ sucursales.forEach(s => { upsertById('sucursales', s); console.log(`  ✓ ${s.no
 
 // ── 4. Usuarios ──────────────────────────────────────────────────
 console.log('\n👤 Creando usuarios...')
-const PASS_HASH = bcrypt.hashSync('demo123', 10)
+const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD || 'demo123'
+const PASS_HASH = bcrypt.hashSync(DEMO_PASSWORD, 10)
 
 const usuarios = [
   {
@@ -84,31 +85,31 @@ const usuarios = [
     email: 'admin@demo.com', password: PASS_HASH,
     rol: 'admin', roles: JSON.stringify(['admin']),
     suc_id: SUC1_ID, suc_sesiones_permitidas: JSON.stringify([]),
-    activo: 1, creado: now(), data: '{}'
+    activo: 1, creado: now(), must_change_password: 1, data: '{}'
   },
   {
     id: 'usr_demo_caja1', nombre: 'María Cajera', usuario: 'cajera',
     email: 'cajera@demo.com', password: PASS_HASH,
     rol: 'cajero', roles: JSON.stringify(['cajero']),
     suc_id: SUC1_ID, suc_sesiones_permitidas: JSON.stringify([SUC1_ID]),
-    activo: 1, creado: now(), data: '{}'
+    activo: 1, creado: now(), must_change_password: 1, data: '{}'
   },
   {
     id: 'usr_demo_vend1', nombre: 'Juan Vendedor', usuario: 'vendedor',
     email: 'vendedor@demo.com', password: PASS_HASH,
     rol: 'vendedor', roles: JSON.stringify(['vendedor']),
     suc_id: SUC1_ID, suc_sesiones_permitidas: JSON.stringify([SUC1_ID, SUC2_ID]),
-    activo: 1, creado: now(), data: '{}'
+    activo: 1, creado: now(), must_change_password: 1, data: '{}'
   },
   {
     id: 'usr_demo_sup1', nombre: 'Laura Supervisora', usuario: 'supervisor',
     email: 'supervisor@demo.com', password: PASS_HASH,
     rol: 'supervisor', roles: JSON.stringify(['supervisor', 'cajero']),
     suc_id: SUC2_ID, suc_sesiones_permitidas: JSON.stringify([]),
-    activo: 1, creado: now(), data: '{}'
+    activo: 1, creado: now(), must_change_password: 1, data: '{}'
   },
 ]
-usuarios.forEach(u => { upsertById('usuarios', u); console.log(`  ✓ ${u.nombre} (${u.usuario} / demo123)`) })
+usuarios.forEach(u => { upsertById('usuarios', u); console.log(`  ✓ ${u.nombre} (${u.usuario})`) })
 
 // ── 5. Productos ─────────────────────────────────────────────────
 console.log('\n👕 Creando productos...')
@@ -317,7 +318,7 @@ console.log('🌐 URL de la app:  http://localhost:3000/app/')
 console.log('')
 console.log('🏢 Empresa:        demo')
 console.log('')
-console.log('👤 Usuarios (contraseña: demo123 para todos):')
+console.log('👤 Usuarios (contraseña: la configurada en SEED_DEMO_PASSWORD):')
 console.log('   admin       → Admin completo, todas las sucursales')
 console.log('   cajera      → Solo Sucursal Centro')
 console.log('   vendedor    → Centro y Norte')

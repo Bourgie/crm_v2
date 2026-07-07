@@ -16,15 +16,11 @@ router.post('/push', async (req, res) => {
     return res.json({ ok: true, results: [] });
 
   const results = [];
-
-  for (const op of ops) {
-    try {
-      const r = await applyOp(op, empDB, req);
-      results.push({ id: op.id, ok: true, data: r });
-    } catch (e) {
-      results.push({ id: op.id, ok: false, error: e.message });
-    }
-  }
+  await ops.reduce((chain, op) =>
+    chain.then(() => applyOp(op, empDB, req)
+      .then(r => results.push({ id: op.id, ok: true, data: r }))
+      .catch(e => results.push({ id: op.id, ok: false, error: e.message }))),
+    Promise.resolve());
 
   // Record sync in audit
   empDB.audit(req.user, req.user.suc_id, 'sync', 'offline_push',

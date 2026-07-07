@@ -8,6 +8,7 @@
   --tx: #0f172a;
   --mu: #64748b;
   --ok: #22c55e;
+  --info: #e0f2fe;
   --warn: #f59e0b;
   --bad: #ef4444;
   --sb-bg: #0f172a;
@@ -24,6 +25,7 @@
   --bd: #334155;
   --tx: #f1f5f9;
   --mu: #94a3b8;
+  --info: #1e3a5f;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -254,3 +256,5 @@ tbody tr:last-child td { border-bottom: none; }
   position: sticky; top: 52px; z-index: 29;
 }
 .offline-banner.syncing { background: #f59e0b; }
+
+

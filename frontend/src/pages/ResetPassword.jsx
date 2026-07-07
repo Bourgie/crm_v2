@@ -1,6 +1,26 @@
 import { useState } from 'react'
 import { useSearchParams, Link, useNavigate } from 'react-router-dom'
 
+function getPasswordStrength(pw) {
+  let score = 0
+  if (pw.length >= 8) score++
+  if (/[A-Z]/.test(pw)) score++
+  if (/[0-9]/.test(pw)) score++
+  if (/[^A-Za-z0-9]/.test(pw)) score++
+  return score
+}
+
+const STRENGTH_COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#22c55e']
+const STRENGTH_LABELS = ['Débil', 'Media', 'Buena', 'Fuerte']
+
+function validatePassword(pw) {
+  if (pw.length < 8) return 'Mínimo 8 caracteres'
+  if (!/[A-Z]/.test(pw)) return 'Debe contener al menos una mayúscula'
+  if (!/[0-9]/.test(pw)) return 'Debe contener al menos un número'
+  if (!/[^A-Za-z0-9]/.test(pw)) return 'Debe contener al menos un símbolo'
+  return null
+}
+
 export function ResetPassword() {
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
@@ -13,11 +33,14 @@ export function ResetPassword() {
   const [error, setError] = useState('')
   const [done, setDone] = useState(false)
 
+  const strength = getPasswordStrength(password)
+
   async function handleSubmit(e) {
     e.preventDefault()
     setError('')
     if (password !== confirm) { setError('Las contraseñas no coinciden'); return }
-    if (password.length < 6) { setError('Mínimo 6 caracteres'); return }
+    const pwErr = validatePassword(password)
+    if (pwErr) { setError(pwErr); return }
     setLoading(true)
     try {
       const r = await fetch('/api/auth/reset-password', {
@@ -36,9 +59,10 @@ export function ResetPassword() {
     return (
       <div style={styles.wrap}>
         <div style={styles.card}>
-          <h2 style={{ textAlign: 'center' }}>Enlace inválido</h2>
-          <p style={{ textAlign: 'center', color: 'var(--mu)', margin: '16px 0' }}>
-            Este enlace no es válido. Solicitá uno nuevo.
+          <div style={{ fontSize: 48, textAlign: 'center', marginBottom: 16 }}>🔗</div>
+          <h2 style={{ textAlign: 'center', marginBottom: 8 }}>Enlace inválido</h2>
+          <p style={{ textAlign: 'center', color: 'var(--mu)', margin: '0 0 20px', fontSize: 14 }}>
+            Este enlace no es válido o ya expiró. Solicitá uno nuevo.
           </p>
           <Link to="/app/forgot-password" className="btn btn-primary" style={{ display: 'block', textAlign: 'center' }}>
             Solicitar enlace
@@ -54,10 +78,10 @@ export function ResetPassword() {
         <div style={styles.card}>
           <div style={{ fontSize: 48, textAlign: 'center', marginBottom: 16 }}>✅</div>
           <h2 style={{ textAlign: 'center', marginBottom: 8 }}>Contraseña actualizada</h2>
-          <p style={{ textAlign: 'center', color: 'var(--mu)', marginBottom: 20 }}>
+          <p style={{ textAlign: 'center', color: 'var(--mu)', marginBottom: 20, fontSize: 14 }}>
             Ya podés iniciar sesión con tu nueva contraseña.
           </p>
-          <button className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }} onClick={() => navigate('/app/login')}>
+          <button type="button" className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center' }} onClick={() => navigate('/app/login')}>
             Ir al inicio →
           </button>
         </div>
@@ -76,7 +100,17 @@ export function ResetPassword() {
         <form onSubmit={handleSubmit}>
           <div className="fg">
             <label>Nueva contraseña *</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 6 caracteres" required autoFocus />
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Mínimo 8 caracteres, mayúscula, número y símbolo" required />
+            {password.length > 0 && (
+              <div style={{ marginTop: 6 }}>
+                <div style={{ height: 4, background: '#e4e4e7', borderRadius: 2, overflow: 'hidden' }}>
+                  <div style={{ height: '100%', width: `${(strength + 1) * 20}%`, background: STRENGTH_COLORS[strength - 1] || '#ef4444', borderRadius: 2 }} />
+                </div>
+                <div style={{ fontSize: 12, color: STRENGTH_COLORS[strength - 1] || '#ef4444', marginTop: 2 }}>
+                  {STRENGTH_LABELS[strength - 1] || 'Muy débil'}
+                </div>
+              </div>
+            )}
           </div>
           <div className="fg">
             <label>Confirmar contraseña *</label>
@@ -108,3 +142,5 @@ const styles = {
   },
   logo: { fontSize: 24, fontWeight: 800, marginBottom: 20, textAlign: 'center' },
 }
+
+

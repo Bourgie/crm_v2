@@ -21,10 +21,18 @@ function EmpleadosTab({ api, toast, allSucs }) {
   const [detalle, setDetalle] = useState(null)
   const [form, setForm] = useState({ nombre: '', apellido: '', dni: '', cuil: '', tel: '', email: '', direccion: '', fecha_ingreso: '', puesto: '', salario: '', obra_social: '', suc_id: '', notas: '' })
   const [saving, setSaving] = useState(false)
+  const [users, setUsers] = useState([])
 
   const load = useCallback(async () => {
     setLoading(true)
-    try { setList(await api('GET', '/rrhh/empleados')) } catch { setList([]) }
+    try {
+      const [emps, usrs] = await Promise.all([
+        api('GET', '/rrhh/empleados'),
+        api('GET', '/auth/usuarios').catch(() => []),
+      ])
+      setList(Array.isArray(emps) ? emps : [])
+      setUsers(Array.isArray(usrs) ? usrs : [])
+    } catch { setList([]) }
     finally { setLoading(false) }
   }, [api])
 
@@ -38,8 +46,9 @@ function EmpleadosTab({ api, toast, allSucs }) {
     return true
   })
 
-  function openNew() { setForm({ nombre: '', apellido: '', dni: '', cuil: '', tel: '', email: '', direccion: '', fecha_ingreso: '', puesto: '', salario: '', obra_social: '', suc_id: '', notas: '' }); setModal('new') }
-  function openEdit(e) { setForm({ nombre: e.nombre, apellido: e.apellido||'', dni: e.dni||'', cuil: e.cuil||'', tel: e.tel||'', email: e.email||'', direccion: e.direccion||'', fecha_ingreso: e.fecha_ingreso||'', puesto: e.puesto||'', salario: String(e.salario||''), obra_social: e.obra_social||'', suc_id: e.suc_id||'', notas: e.notas||'' }); setModal(e) }
+  const linkedUserIds = new Set(list.filter(e => e.usuario_id).map(e => e.usuario_id))
+
+  function openEdit(e) { setForm({ nombre: e.nombre, apellido: e.apellido||'', dni: e.dni||'', cuil: e.cuil||'', tel: e.tel||'', email: e.email||'', direccion: e.direccion||'', fecha_ingreso: e.fecha_ingreso||'', puesto: e.puesto||'', salario: String(e.salario||''), obra_social: e.obra_social||'', suc_id: e.suc_id||'', notas: e.notas||'', vincular_usuario_id: e.usuario_id||'' }); setModal(e) }
 
   const set = (f) => (e) => setForm(p => ({ ...p, [f]: e.target.value }))
 
@@ -47,8 +56,10 @@ function EmpleadosTab({ api, toast, allSucs }) {
     if (!form.nombre.trim()) { toast('Nombre requerido', 'err'); return }
     setSaving(true)
     try {
-      if (modal === 'new') { await api('POST', '/rrhh/empleados', form); toast('Empleado creado', 'ok') }
-      else { await api('PUT', '/rrhh/empleados/' + modal.id, form); toast('Empleado actualizado', 'ok') }
+      const body = { ...form }
+      if (!body.vincular_usuario_id) delete body.vincular_usuario_id
+      await api('PUT', '/rrhh/empleados/' + modal.id, body)
+      toast('Empleado actualizado', 'ok')
       setModal(null); load()
     } catch (e) { toast(e.message, 'err') }
     finally { setSaving(false) }
@@ -65,7 +76,6 @@ function EmpleadosTab({ api, toast, allSucs }) {
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Buscar nombre, apellido o DNI..." style={{ flex: 1, minWidth: 180 }} />
-        <button className="btn btn-primary btn-sm" onClick={openNew}>+ Nuevo empleado</button>
       </div>
 
       {filtered.length === 0 ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--mu)', fontSize: 13 }}>{search ? 'Sin resultados' : 'Sin empleados cargados'}</div> : (
@@ -78,11 +88,12 @@ function EmpleadosTab({ api, toast, allSucs }) {
                 <div style={{ fontSize: 11, color: 'var(--mu)', marginTop: 1 }}>
                   {e.puesto && <>{e.puesto} · </>}{e.dni && <>DNI {e.dni} · </>}
                   {e.suc_id && <>{(allSucs.find(s => s.id === e.suc_id) || {}).nombre || e.suc_id}</>}
+                  {e.usuario_nombre && <span className="badge badge-blue" style={{fontSize:9,marginLeft:4}}>👤 {e.usuario_nombre}</span>}
                 </div>
               </div>
               <span className={`badge ${e.activo ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 10 }}>{e.activo ? 'Activo' : 'Inactivo'}</span>
-              <button className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); openEdit(e) }} style={{ padding: '3px 8px', fontSize: 11 }}>✏️</button>
-              <button className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); toggleActivo(e) }} style={{ padding: '3px 8px', fontSize: 11 }}>{e.activo ? '🚫' : '✅'}</button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); openEdit(e) }} style={{ padding: '3px 8px', fontSize: 11 }}>✏️</button>
+              <button type="button" className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); toggleActivo(e) }} style={{ padding: '3px 8px', fontSize: 11 }}>{e.activo ? '🚫' : '✅'}</button>
             </div>
           ))}
         </div>
@@ -93,10 +104,10 @@ function EmpleadosTab({ api, toast, allSucs }) {
 
       {modal && (
         <div className="modal-overlay" onClick={() => setModal(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
             <div className="modal-header">
-              <h3>{modal === 'new' ? 'Nuevo empleado' : 'Editar empleado'}</h3>
-              <button className="modal-close" onClick={() => setModal(null)}>✕</button>
+              <h3>Editar empleado</h3>
+              <button type="button" className="modal-close" onClick={() => setModal(null)}>✕</button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <div className="fr">
@@ -127,10 +138,26 @@ function EmpleadosTab({ api, toast, allSucs }) {
                 </select>
               </Field>
               <Field label="Notas"><textarea value={form.notas} onChange={set('notas')} rows={2} style={{ fontSize: 12 }} placeholder="Notas internas..." /></Field>
+
+              {/* Vincular a usuario existente */}
+              <div style={{borderTop:'1px solid var(--bd)',paddingTop:10,marginTop:4}}>
+                <Field label="Vincular a usuario">
+                  <select value={form.vincular_usuario_id||''} onChange={set('vincular_usuario_id')}>
+                    <option value="">Sin vínculo</option>
+                    {users.map(u => (
+                      <option key={u.id} value={u.id}>{u.nombre} ({u.usuario}){linkedUserIds.has(u.id) && u.id !== (modal?.usuario_id) ? ' ⚠️ ya vinculado' : ''}</option>
+                    ))}
+                  </select>
+                </Field>
+                {form.vincular_usuario_id && (() => {
+                  const u = users.find(x => x.id === form.vincular_usuario_id)
+                  return u ? <div style={{fontSize:11,color:'var(--mu)',marginTop:-4}}>👤 {u.nombre} · {u.email||'—'} · rol: {u.rol}</div> : null
+                })()}
+              </div>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={save} disabled={saving}>{saving ? '⏳ Guardando...' : '💾 Guardar'}</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>{saving ? '⏳ Guardando...' : '💾 Guardar'}</button>
             </div>
           </div>
         </div>
@@ -177,7 +204,7 @@ function DetalleEmpleado({ empleado, api, toast, onUpdate }) {
     <div style={{ marginTop: 12, padding: '12px 14px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--sf)' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
         <div style={{ fontWeight: 700, fontSize: 14 }}>🏖️ Ausencias de {empleado.nombre} {empleado.apellido || ''}</div>
-        <button className="btn btn-primary btn-sm" onClick={openNuevaAus}>+ Nueva ausencia</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={openNuevaAus}>+ Nueva ausencia</button>
       </div>
       {loading ? <div className="spinner" style={{ margin: '0 auto' }} /> : ausencias.length === 0 ? (
         <div style={{ fontSize: 12, color: 'var(--mu)', textAlign: 'center', padding: 8 }}>Sin ausencias registradas</div>
@@ -189,7 +216,7 @@ function DetalleEmpleado({ empleado, api, toast, onUpdate }) {
               <span>{new Date(a.fecha_inicio).toLocaleDateString('es-AR')}{a.fecha_fin ? ' → ' + new Date(a.fecha_fin).toLocaleDateString('es-AR') : ''}</span>
               {a.motivo && <span style={{ color: 'var(--mu)' }}>· {a.motivo}</span>}
               {a.certificado && <span className="badge badge-blue" style={{ fontSize: 9 }}>📄 Certificado</span>}
-              <button onClick={() => eliminarAus(a.id)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bad)', fontSize: 12 }}>✕</button>
+              <button type="button" onClick={() => eliminarAus(a.id)} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--bad)', fontSize: 12 }}>✕</button>
             </div>
           ))}
         </div>
@@ -200,7 +227,7 @@ function DetalleEmpleado({ empleado, api, toast, onUpdate }) {
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
             <div className="modal-header">
               <h3>Nueva ausencia</h3>
-              <button className="modal-close" onClick={() => setModalAus(null)}>✕</button>
+              <button type="button" className="modal-close" onClick={() => setModalAus(null)}>✕</button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <Field label="Tipo">
@@ -219,8 +246,8 @@ function DetalleEmpleado({ empleado, api, toast, onUpdate }) {
               </label>
             </div>
             <div className="modal-footer">
-              <button className="btn btn-secondary" onClick={() => setModalAus(null)}>Cancelar</button>
-              <button className="btn btn-primary" onClick={saveAus} disabled={saving}>{saving ? '⏳ Guardando...' : '💾 Guardar'}</button>
+              <button type="button" className="btn btn-secondary" onClick={() => setModalAus(null)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={saveAus} disabled={saving}>{saving ? '⏳ Guardando...' : '💾 Guardar'}</button>
             </div>
           </div>
         </div>
@@ -276,8 +303,8 @@ export default function RRHH() {
     <div>
       <PageHeader title="👥 RRHH" subtitle="Gestión de empleados y ausencias" />
       <div style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: '2px solid var(--bd)', paddingBottom: 8 }}>
-        <button className={`btn btn-sm ${tab === 'empleados' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('empleados')}>👥 Empleados</button>
-        <button className={`btn btn-sm ${tab === 'ausencias' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('ausencias')}>🏖️ Ausencias</button>
+        <button type="button" className={`btn btn-sm ${tab === 'empleados' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('empleados')}>👥 Empleados</button>
+        <button type="button" className={`btn btn-sm ${tab === 'ausencias' ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setTab('ausencias')}>🏖️ Ausencias</button>
       </div>
       <div className="card" style={{ maxWidth: 720 }}>
         {tab === 'empleados' && <EmpleadosTab api={api} toast={toast} allSucs={allSucs} />}
@@ -286,3 +313,4 @@ export default function RRHH() {
     </div>
   )
 }
+

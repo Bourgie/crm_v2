@@ -17,7 +17,7 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
       <div className="modal" style={{ maxWidth: maxW }}>
         <div className="modal-header">
           <h3 style={{ margin: 0 }}>{title}</h3>
-          <button onClick={onClose} style={{
+          <button type="button" onClick={onClose} style={{
             background: 'none', border: 'none', fontSize: 22, cursor: 'pointer',
             color: 'var(--mu)', lineHeight: 1, padding: '0 4px'
           }}>×</button>
@@ -28,3 +28,4 @@ export function Modal({ open, onClose, title, children, footer, size = 'md' }) {
     </div>
   )
 }
+

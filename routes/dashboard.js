@@ -34,8 +34,13 @@ router.get('/', (req,res) => {
     dias7.push({fecha:ds,total:dv.reduce((a,v)=>a+v.total,0),n:dv.length});
   }
 
-  // Stock crítico
-  const stockCrit=db.find('productos',{activo:true}).filter(p=>p.stock<=p.stock_min).sort((a,b)=>a.stock-b.stock).slice(0,8);
+  // Stock crítico — stock se calcula desde stock_suc (no es columna en SQLite)
+  const allProds = db.find('productos',{activo:true});
+  const stockCrit = allProds.map(p => {
+    const row = db.raw.prepare("SELECT SUM(cantidad) as total FROM stock_suc WHERE prod_id=?").get(p.id);
+    const s = row?.total || 0;
+    return { ...p, stock: s };
+  }).filter(p => p.stock <= p.stock_min).sort((a,b) => a.stock - b.stock).slice(0,8);
 
   // Últimas 10 ventas
   const sucs=db.all('sucursales'),vends=db.all('vendedores'),clis=db.all('clientes');
@@ -117,18 +122,18 @@ router.get('/', (req,res) => {
 
   // ─── Cumpleaños próximos (bebés de clientes) ──
   const hoyDate = new Date();
-  const cumples = db.find('clientes',{activo:true}).filter(c=>c.bebe_nac).map(c=>{
+  const cumples = db.find('clientes',{activo:true}).flatMap(c=>{
+    if (!c.bebe_nac) return [];
     const nac = new Date(c.bebe_nac);
     const next = new Date(hoyDate.getFullYear(), nac.getMonth(), nac.getDate());
     if(next < hoyDate) next.setFullYear(hoy.getFullYear()+1);
     const dias = Math.ceil((next-hoyDate)/86400000);
     const edad = next.getFullYear() - nac.getFullYear();
-    return {
-      cliente_id:c.id, nombre:c.nombre+' '+c.apellido,
+    return dias<=30?[{cliente_id:c.id, nombre:c.nombre+' '+c.apellido,
       bebe_nac:c.bebe_nac, dias, edad,
       hoy: dias===0
-    };
-  }).filter(c=>c.dias<=30).sort((a,b)=>a.dias-b.dias);
+    }]:[];
+  }).sort((a,b)=>a.dias-b.dias);
 
   // Objetivo mensual
   const cfg2 = db.getConfig();
@@ -154,7 +159,7 @@ router.get('/', (req,res) => {
       ventas_mes:{t:vM.reduce((a,v)=>a+v.total,0),n:vM.length},
       ticket_promedio:vM.length?vM.reduce((a,v)=>a+v.total,0)/vM.length:0,
       margen_mes:margenMes,
-      clientes:{total:db.find('clientes',{activo:true}).length,mes:new Set(vM.filter(v=>v.cliente_id).map(v=>v.cliente_id)).size},
+      clientes:{total:db.find('clientes',{activo:true}).length,mes:new Set(vM.flatMap(v=>v.cliente_id?[v.cliente_id]:[])).size},
       stock_critico:stockCrit.length,
       pendientes_sin_despachar:pendientes.length,
       ctacte_vencidas:deudasVencidas.length,
@@ -185,11 +190,11 @@ router.get('/', (req,res) => {
 router.get('/reporte', (req,res) => {
   const db = _getDB(req);
   const dias=parseInt(req.query.dias)||30;
-  const {suc_id,vend_id} = req.query;
-  const desde=new Date(); desde.setDate(desde.getDate()-dias);
-  const desdeStr=desde.toISOString().substr(0,10);
+  const {suc_id,vend_id,desde,hasta} = req.query;
+  const desdeStr = desde || (() => { const d = new Date(); d.setDate(d.getDate()-dias); return d.toISOString().substr(0,10); })();
+  const hastaStr = hasta || new Date().toISOString().substr(0,10);
 
-  let ventas=db.where('ventas',v=>!v.anulada&&v.fecha.substr(0,10)>=desdeStr);
+  let ventas=db.where('ventas',v=>!v.anulada&&v.fecha.substr(0,10)>=desdeStr&&v.fecha.substr(0,10)<=hastaStr);
   if(suc_id) ventas=ventas.filter(v=>v.suc_id===suc_id);
   if(vend_id) ventas=ventas.filter(v=>v.vend_id===vend_id);
 
@@ -201,8 +206,8 @@ router.get('/reporte', (req,res) => {
   const tot=ventas.reduce((a,v)=>a+v.total,0);
   const margen=items.reduce((a,i)=>{ const p=prods.find(x=>x.id===i.prod_id); return a+((i.precio-(p?p.costo:0))*i.cantidad);},0);
 
-  const bySuc=sucs.map(s=>{const sv=ventas.filter(v=>v.suc_id===s.id);return{nombre:s.nombre,n:sv.length,tot:sv.reduce((a,v)=>a+v.total,0)};}).filter(x=>x.n>0).sort((a,b)=>b.tot-a.tot);
-  const byVend=vends.map(vd=>{const sv=ventas.filter(v=>v.vend_id===vd.id);const tm=sv.reduce((a,v)=>a+v.total,0);const cfg=db.getConfig();const cp=vd.comision||parseFloat(cfg.comision)||5;return{id:vd.id,nombre:vd.nombre+' '+vd.apellido,n:sv.length,tot:tm,comision:Math.round(tm*cp/100)};}).filter(x=>x.n>0).sort((a,b)=>b.tot-a.tot);
+  const bySuc=sucs.flatMap(s=>{const sv=ventas.filter(v=>v.suc_id===s.id);const t=sv.reduce((a,v)=>a+v.total,0);return t>0?[{nombre:s.nombre,n:sv.length,tot:t}]:[];}).sort((a,b)=>b.tot-a.tot);
+  const byVend=vends.flatMap(vd=>{const sv=ventas.filter(v=>v.vend_id===vd.id);const tm=sv.reduce((a,v)=>a+v.total,0);if(tm===0)return[];const cfg=db.getConfig();const cp=vd.comision||parseFloat(cfg.comision)||5;return[{id:vd.id,nombre:vd.nombre+' '+vd.apellido,n:sv.length,tot:tm,comision:Math.round(tm*cp/100)}];}).sort((a,b)=>b.tot-a.tot);
 
   const pagoMap={};
   ventas.forEach(v=>{if(!pagoMap[v.pago])pagoMap[v.pago]={pago:v.pago,n:0,tot:0};pagoMap[v.pago].n++;pagoMap[v.pago].tot+=v.total;});
@@ -215,13 +220,26 @@ router.get('/reporte', (req,res) => {
     prodMap[i.prod_id].margen+=((i.precio-(p?p.costo:0))*i.cantidad);
   });
 
+  const cliMap={}; const clis=db.all('clientes');
+  ventas.forEach(v=>{
+    if(!v.cliente_id) return;
+    if(!cliMap[v.cliente_id]){ const c=clis.find(x=>x.id===v.cliente_id); cliMap[v.cliente_id]={nombre:c?c.nombre+' '+c.apellido:'Desconocido',n_compras:0,total:0}; }
+    cliMap[v.cliente_id].n_compras++; cliMap[v.cliente_id].total+=v.total;
+  });
+
   res.json({
+    ventas_diarias: (() => {
+      const map = {};
+      ventas.forEach(v => { const d = v.fecha.substr(0,10); if (!map[d]) map[d] = { fecha: d, total: 0, n: 0 }; map[d].total += v.total; map[d].n++; });
+      return Object.values(map).sort((a,b) => a.fecha.localeCompare(b.fecha));
+    })(),
     kpis:{total:tot,ventas:ventas.length,items:items.reduce((a,i)=>a+i.cantidad,0),margen,ticket_promedio:ventas.length?tot/ventas.length:0,margen_pct:tot?margen/tot*100:0},
     by_sucursal:bySuc,
     by_vendedor:byVend,
     by_pago:Object.values(pagoMap).sort((a,b)=>b.tot-a.tot),
     top_productos:Object.values(prodMap).sort((a,b)=>b.qty-a.qty).slice(0,10),
     top_rentables:Object.values(prodMap).sort((a,b)=>b.margen-a.margen).slice(0,10),
+    top_clientes:Object.values(cliMap).sort((a,b)=>b.total-a.total).slice(0,10),
   });
 });
 

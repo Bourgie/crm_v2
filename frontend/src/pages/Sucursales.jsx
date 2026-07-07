@@ -51,7 +51,7 @@ export function Sucursales() {
   return (
     <div>
       <PageHeader title={`🏪 Sucursales (${sucs.length})`}>
-        <button className="btn btn-primary" onClick={openNew}>+ Nueva sucursal</button>
+        <button type="button" className="btn btn-primary" onClick={openNew}>+ Nueva sucursal</button>
       </PageHeader>
 
       <div className="card" style={{ padding: 0 }}>
@@ -68,7 +68,7 @@ export function Sucursales() {
                     <td style={{ fontSize: 12 }}>{s.tel || '—'}</td>
                     <td style={{ fontSize: 12 }}>{s.email || '—'}</td>
                     <td onClick={(e) => e.stopPropagation()}>
-                      <button className="btn btn-icon btn-sm" onClick={() => setConfirm(s.id)}>🗑</button>
+                      <button type="button" className="btn btn-icon btn-sm" onClick={() => setConfirm(s.id)}>🗑</button>
                     </td>
                   </tr>
                 ))}
@@ -79,13 +79,13 @@ export function Sucursales() {
 
       <Modal open={!!modal} onClose={() => setModal(null)} title={modal === 'new' ? '+ Nueva sucursal' : `Editar: ${modal?.nombre}`}
         footer={<>
-          <button className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-          <button className="btn btn-primary" onClick={save} disabled={saving}>
+          <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
             {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Guardando...</> : '💾 Guardar'}
           </button>
         </>}
       >
-        <Field label="Nombre *"><input value={form.nombre} onChange={set('nombre')} placeholder="Nombre de la sucursal" autoFocus /></Field>
+        <Field label="Nombre *"><input value={form.nombre} onChange={set('nombre')} placeholder="Nombre de la sucursal" /></Field>
         <Field label="Dirección"><input value={form.dir} onChange={set('dir')} placeholder="Dirección física" /></Field>
         <div className="fr">
           <Field label="Teléfono"><input value={form.tel} onChange={set('tel')} placeholder="Teléfono" /></Field>
@@ -100,3 +100,5 @@ export function Sucursales() {
     </div>
   )
 }
+
+

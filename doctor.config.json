@@ -1,0 +1,7 @@
+{
+  "$schema": "https://react.doctor/schema/config.json",
+  "rootDir": "frontend",
+  "ignore": {
+    "files": ["dist/**", "node_modules/**"]
+  }
+}
