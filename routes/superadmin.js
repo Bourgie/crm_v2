@@ -504,9 +504,9 @@ router.post('/planes', superAuth, (req, res) => {
 });
 
 router.put('/planes/:id', superAuth, (req, res) => {
-  const {nombre,descripcion,precio,modulos,limites,activo,orden} = req.body;
-  master.prepare("UPDATE planes SET nombre=?,descripcion=?,precio=?,modulos=?,limites=?,activo=?,orden=? WHERE id=?")
-    .run(nombre,descripcion||'',precio||0,JSON.stringify(modulos||[]),JSON.stringify(limites||{}),activo?1:0,orden||99,req.params.id);
+  const {codigo,nombre,descripcion,precio,modulos,limites,activo,orden} = req.body;
+  master.prepare("UPDATE planes SET codigo=?,nombre=?,descripcion=?,precio=?,modulos=?,limites=?,activo=?,orden=? WHERE id=?")
+    .run(codigo||'',nombre,descripcion||'',precio||0,JSON.stringify(modulos||[]),JSON.stringify(limites||{}),activo != null ? (activo ? 1 : 0) : 1,orden||99,req.params.id);
   saAudit(req.sadmin.id,'editar_plan',null,`Plan: ${nombre}`);
   res.json({ok:true});
 });

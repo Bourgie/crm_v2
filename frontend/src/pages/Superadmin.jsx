@@ -199,7 +199,7 @@ export default function Superadmin() {
     if (!planForm.codigo.trim() || !planForm.nombre.trim()) { alert('Código y nombre requeridos'); return }
     setPlanSaving(true)
     try {
-      const body = { codigo: planForm.codigo.trim().toLowerCase(), nombre: planForm.nombre, descripcion: planForm.descripcion || '', precio: parseFloat(planForm.precio) || 0, modulos: planForm.modulos || [], limites: { usuarios: parseInt(planForm.umax) || 0, sucursales: parseInt(planForm.smax) || 0 } }
+      const body = { codigo: planForm.codigo.trim().toLowerCase(), nombre: planForm.nombre, descripcion: planForm.descripcion || '', precio: parseFloat(planForm.precio) || 0, modulos: planForm.modulos || [], limites: { usuarios: parseInt(planForm.umax) || 0, sucursales: parseInt(planForm.smax) || 0 }, activo: true }
       if (planModal === 'new') { await saApi('POST', '/planes', body); alert('✅ Plan creado') }
       else { await saApi('PUT', '/planes/' + planModal.id, body); alert('✅ Plan actualizado') }
       setPlanModal(null); loadPlanes()
