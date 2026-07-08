@@ -1,0 +1,14 @@
+node_modules/
+frontend/node_modules/
+data/
+.git/
+.gitignore
+.env
+*.md
+.opencode/
+.claude/
+.agents/
+.ai/
+.vite/
+test/
+scripts/
