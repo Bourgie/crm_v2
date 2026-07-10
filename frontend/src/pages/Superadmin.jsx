@@ -27,6 +27,8 @@ const SIDEBAR = [
   ['solicitudes', '📋 Solicitudes'],
   ['planes', '💼 Planes'],
   ['modulos', '🧩 Módulos'],
+  ['email', '📧 Email'],
+  ['atributos', '🏷️ Atributos'],
   ['landing', '🌐 Landing'],
   ['soporte', '🆘 Soporte'],
   ['audit', '📋 Auditoría'],
@@ -91,6 +93,17 @@ export default function Superadmin() {
 
   const [landingFiltro, setLandingFiltro] = useState('todos')
 
+  const [emailConfig, setEmailConfig] = useState({ smtp_host:'', smtp_port:'465', smtp_user:'', smtp_pass:'', smtp_from:'', smtp_from_name:'FlexCRM' })
+  const [emailSaving, setEmailSaving] = useState(false)
+  const [emailTesting, setEmailTesting] = useState(false)
+  const [emailTestResult, setEmailTestResult] = useState(null)
+
+  const [atributos, setAtributos] = useState([])
+  const [atributoModal, setAtributoModal] = useState(null)
+  const [atributoForm, setAtributoForm] = useState({ rubro:'general', atributo_key:'', atributo_label:'', tipo:'text', opciones:'', orden:'0' })
+  const [atributoSaving, setAtributoSaving] = useState(false)
+  const [atributoFiltroRubro, setAtributoFiltroRubro] = useState('')
+
   useEffect(() => {
     saApi('GET', '/me').then(r => { setLogged(true); setUser(r); loadAll() }).catch(() => {})
   }, [])
@@ -115,7 +128,7 @@ export default function Superadmin() {
   async function saLogout() { try { await saApi('POST', '/logout') } catch {} setLogged(false); setUser(null); setImpersonating(null) }
 
   function loadAll() {
-    loadDash(); loadEmpresas(); loadPlanes(); loadModulos(); loadSolicitudes(); loadAudit(); loadProspectos(); loadLanding(); loadTickets();
+    loadDash(); loadEmpresas(); loadPlanes(); loadModulos(); loadSolicitudes(); loadAudit(); loadProspectos(); loadLanding(); loadTickets(); loadEmailConfig(); loadAtributos();
     try { const imp = JSON.parse(sessionStorage.getItem('SA_IMP') || 'null'); if (imp) setImpersonating(imp) } catch {}
   }
 
@@ -128,6 +141,53 @@ export default function Superadmin() {
   async function loadProspectos() { try { const r = await saApi('GET', '/prospectos'); setProspectos(r) } catch {} }
   async function loadLanding() { try { const r = await saApi('GET', '/landing-leads'); setLeads(r) } catch {} }
   async function loadTickets() { try { const r = await saApi('GET', '/solicitudes-soporte'); setTickets(r) } catch {} }
+  async function loadEmailConfig() { try { const r = await saApi('GET', '/email-config'); setEmailConfig(r) } catch {} }
+  async function loadAtributos() { try { const r = await saApi('GET', '/rubros-atributos'); setAtributos(r) } catch {} }
+
+  async function saveEmailConfig() {
+    setEmailSaving(true)
+    try { await saApi('PUT', '/email-config', emailConfig); alert('✅ Configuración guardada') }
+    catch(e) { alert(e.message) }
+    finally { setEmailSaving(false) }
+  }
+
+  async function testEmail() {
+    if (!emailConfig.smtp_host || !emailConfig.smtp_user) { alert('Completá Host y Usuario para probar'); return }
+    setEmailTesting(true); setEmailTestResult(null)
+    try {
+      const r = await saApi('POST', '/email-test', {
+        host: emailConfig.smtp_host,
+        port: emailConfig.smtp_port,
+        user: emailConfig.smtp_user,
+        pass: emailConfig.smtp_pass,
+        from: emailConfig.smtp_from,
+      })
+      setEmailTestResult({ ok: true, msg: r.message || 'Mail enviado' })
+    } catch(e) { setEmailTestResult({ ok: false, msg: e.message }) }
+    finally { setEmailTesting(false) }
+  }
+
+  async function saveAtributo() {
+    if (!atributoForm.rubro || !atributoForm.atributo_key || !atributoForm.atributo_label) { alert('Rubro, Key y Label requeridos'); return }
+    setAtributoSaving(true)
+    try {
+      const body = { ...atributoForm, opciones: atributoForm.opciones ? atributoForm.opciones.split(',').map(s => s.trim()).filter(Boolean) : [], orden: parseInt(atributoForm.orden) || 0 }
+      if (atributoModal === 'new') { await saApi('POST', '/rubros-atributos', body); alert('✅ Atributo creado') }
+      else { await saApi('PUT', '/rubros-atributos/' + atributoModal.id, body); alert('✅ Atributo actualizado') }
+      setAtributoModal(null); loadAtributos()
+    } catch(e) { alert(e.message) }
+    finally { setAtributoSaving(false) }
+  }
+
+  function openNewAtributo() {
+    setAtributoForm({ rubro: atributoFiltroRubro || 'general', atributo_key:'', atributo_label:'', tipo:'text', opciones:'', orden:'0' })
+    setAtributoModal('new')
+  }
+
+  function openEditAtributo(a) {
+    setAtributoForm({ rubro: a.rubro, atributo_key: a.atributo_key, atributo_label: a.atributo_label, tipo: a.tipo || 'text', opciones: Array.isArray(a.opciones) ? a.opciones.join(', ') : '', orden: String(a.orden || 0) })
+    setAtributoModal(a)
+  }
   async function responderTicket(id) {
     if (!ticketRespuesta.trim()) return
     setTicketSaving(true)
@@ -553,6 +613,71 @@ export default function Superadmin() {
             </div>
           )}
 
+          {/* ═══════ EMAIL ═══════ */}
+          {tab === 'email' && (
+            <div className="card" style={{ maxWidth: 600 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 16 }}>📧 Configuración SMTP Global</h3>
+              <p style={{ fontSize: 12, color: 'var(--mu)', marginBottom: 16 }}>
+                Este SMTP se usa como respaldo cuando una empresa no tiene su propio email configurado. También para los emails del superadmin (olvidé mi clave).
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <div className="fr">
+                  <div style={{ flex: 1 }}><label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Servidor SMTP</label><input value={emailConfig.smtp_host} onChange={e => setEmailConfig(p => ({ ...p, smtp_host: e.target.value }))} placeholder="smtp.gmail.com" /></div>
+                  <div style={{ width: 100 }}><label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Puerto</label><input value={emailConfig.smtp_port} onChange={e => setEmailConfig(p => ({ ...p, smtp_port: e.target.value }))} placeholder="465" /></div>
+                </div>
+                <div className="fr">
+                  <div style={{ flex: 1 }}><label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Usuario SMTP</label><input value={emailConfig.smtp_user} onChange={e => setEmailConfig(p => ({ ...p, smtp_user: e.target.value }))} placeholder="tu@email.com" /></div>
+                  <div style={{ flex: 1 }}><label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Contraseña / App Password</label><input type="password" value={emailConfig.smtp_pass} onChange={e => setEmailConfig(p => ({ ...p, smtp_pass: e.target.value }))} placeholder="••••••••" /></div>
+                </div>
+                <div className="fr">
+                  <div style={{ flex: 1 }}><label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Email remitente (FROM)</label><input value={emailConfig.smtp_from} onChange={e => setEmailConfig(p => ({ ...p, smtp_from: e.target.value }))} placeholder="noreply@midominio.com" /></div>
+                  <div style={{ flex: 1 }}><label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Nombre remitente</label><input value={emailConfig.smtp_from_name} onChange={e => setEmailConfig(p => ({ ...p, smtp_from_name: e.target.value }))} placeholder="FlexCRM" /></div>
+                </div>
+                {emailTestResult && (
+                  <div style={{ padding: '10px 14px', borderRadius: 8, fontSize: 12, background: emailTestResult.ok ? 'rgba(34,197,94,.08)' : 'rgba(239,68,68,.08)', border: '1px solid ' + (emailTestResult.ok ? 'rgba(34,197,94,.3)' : 'rgba(239,68,68,.3)'), color: emailTestResult.ok ? 'var(--ok)' : 'var(--bad)' }}>
+                    {emailTestResult.ok ? '✅ ' : '❌ '}{emailTestResult.msg}
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                  <button type="button" className="btn btn-secondary" onClick={testEmail} disabled={emailTesting}>{emailTesting ? '⏳ Probando...' : '📨 Probar conexión'}</button>
+                  <button type="button" className="btn btn-primary" onClick={saveEmailConfig} disabled={emailSaving}>{emailSaving ? '⏳ Guardando...' : '💾 Guardar configuración'}</button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════ ATRIBUTOS POR RUBRO ═══════ */}
+          {tab === 'atributos' && (
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase' }}>🏷️ Atributos por Rubro</h3>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <select value={atributoFiltroRubro} onChange={e => setAtributoFiltroRubro(e.target.value)} style={{ ...S.select, width: 'auto', fontSize: 12, padding: '6px 10px' }}>
+                    <option value="">Todos los rubros</option>
+                    {[...new Set(atributos.map(a => a.rubro))].map(r => <option key={r} value={r}>{RUBROS.find(x => x.v === r)?.l || r}</option>)}
+                  </select>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={openNewAtributo}>+ Nuevo atributo</button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={loadAtributos}>↻</button>
+                </div>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {atributos.filter(a => !atributoFiltroRubro || a.rubro === atributoFiltroRubro).map(a => (
+                  <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 14px', background: 'var(--sf)', borderRadius: 8, border: '1px solid var(--bd)', fontSize: 13 }}>
+                    <span style={{ fontWeight: 600, width: 140, flexShrink: 0 }}>{RUBROS.find(x => x.v === a.rubro)?.l || a.rubro}</span>
+                    <span style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--ac)', width: 120, flexShrink: 0 }}>{a.atributo_key}</span>
+                    <span style={{ flex: 1 }}>{a.atributo_label}</span>
+                    <span className="badge badge-gray" style={{ fontSize: 10 }}>{a.tipo}</span>
+                    {Array.isArray(a.opciones) && a.opciones.length > 0 && (
+                      <span style={{ fontSize: 11, color: 'var(--mu)' }}>{a.opciones.join(', ')}</span>
+                    )}
+                    <button type="button" className="btn btn-icon btn-sm" onClick={() => openEditAtributo(a)}>✏️</button>
+                  </div>
+                ))}
+                {atributos.length === 0 && <div style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}>Sin atributos configurados</div>}
+              </div>
+            </div>
+          )}
+
           {/* ═══════ LANDING ═══════ */}
           {tab === 'landing' && (
             <div className="card">
@@ -821,6 +946,33 @@ export default function Superadmin() {
             <div className="modal-footer">
               <button type="button" className="btn btn-secondary" onClick={() => setProspModal(null)}>Cancelar</button>
               <button type="button" className="btn btn-primary" onClick={saveProspecto} disabled={prospSaving}>{prospSaving ? '⏳' : '💾 Guardar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Atributo Rubro */}
+      {atributoModal && (
+        <div className="modal-overlay" onClick={() => setAtributoModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
+            <div className="modal-header"><h3>{atributoModal === 'new' ? 'Nuevo atributo' : 'Editar atributo'}</h3><button type="button" onClick={() => setAtributoModal(null)} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--mu)'}}>×</button></div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="fr">
+                <div style={{ flex:1 }}><label style={{ display:'block',marginBottom:4,fontSize:11,fontWeight:600 }}>Rubro</label><select value={atributoForm.rubro} onChange={e => setAtributoForm(p => ({ ...p, rubro: e.target.value }))} style={S.select}>{RUBROS.map(r => <option key={r.v} value={r.v}>{r.l}</option>)}</select></div>
+                <div style={{ flex:1 }}><label style={{ display:'block',marginBottom:4,fontSize:11,fontWeight:600 }}>Tipo</label><select value={atributoForm.tipo} onChange={e => setAtributoForm(p => ({ ...p, tipo: e.target.value }))} style={S.select}><option value="text">Texto</option><option value="number">Número</option><option value="select">Selector</option></select></div>
+              </div>
+              <div className="fr">
+                <div style={{ flex:1 }}><label style={{ display:'block',marginBottom:4,fontSize:11,fontWeight:600 }}>Key *</label><input value={atributoForm.atributo_key} onChange={e => setAtributoForm(p => ({ ...p, atributo_key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g,'') }))} placeholder="ej: sabor" style={{...S.input, fontFamily:'monospace'}} /></div>
+                <div style={{ flex:1 }}><label style={{ display:'block',marginBottom:4,fontSize:11,fontWeight:600 }}>Label *</label><input value={atributoForm.atributo_label} onChange={e => setAtributoForm(p => ({ ...p, atributo_label: e.target.value }))} placeholder="ej: Sabor" style={S.input} /></div>
+              </div>
+              {atributoForm.tipo === 'select' && (
+                <div><label style={{ display:'block',marginBottom:4,fontSize:11,fontWeight:600 }}>Opciones (separadas por coma)</label><input value={atributoForm.opciones} onChange={e => setAtributoForm(p => ({ ...p, opciones: e.target.value }))} placeholder="ej: Vainilla, Chocolate, Frutilla" style={S.input} /></div>
+              )}
+              <div><label style={{ display:'block',marginBottom:4,fontSize:11,fontWeight:600 }}>Orden</label><input type="number" value={atributoForm.orden} onChange={e => setAtributoForm(p => ({ ...p, orden: e.target.value }))} min="0" style={{...S.input, width:100}} /></div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setAtributoModal(null)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={saveAtributo} disabled={atributoSaving}>{atributoSaving ? '⏳' : '💾 Guardar'}</button>
             </div>
           </div>
         </div>

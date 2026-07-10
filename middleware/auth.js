@@ -3,7 +3,15 @@ const jwt = require('jsonwebtoken');
 const { db } = require('../db_sqlite');
 
 function getSecret() {
-  return process.env.JWT_SECRET || db.getConfig('jwt_secret') || (() => { throw new Error('JWT_SECRET no configurado. Revisá el archivo .env'); })();
+  const envSecret = process.env.JWT_SECRET;
+  if (envSecret) return envSecret;
+  // Fallback to DB config (legacy — should migrate to env var)
+  const dbSecret = db.getConfig('jwt_secret');
+  if (dbSecret) {
+    console.warn('[auth] ADVERTENCIA: JWT_SECRET no configurado en .env. Usando jwt_secret de la DB (obsoleto). Configurá JWT_SECRET en .env.');
+    return dbSecret;
+  }
+  throw new Error('JWT_SECRET no configurado. Revisá el archivo .env');
 }
 
 // Permisos por rol: qué rutas/acciones puede hacer cada rol
@@ -28,6 +36,20 @@ function authMiddleware(req, res, next) {
     const userDB = req.db || (payload.empresa ? getEmpresaDB(payload.empresa) : db);
     const user = userDB.findOne('usuarios', payload.id);
     if (!user || !user.activo) return res.status(401).json({ error: 'Usuario no válido' });
+    // Check password expiry
+    if (user.password_changed_at) {
+      try {
+        const cfg = userDB.getConfig();
+        const expireDays = parseInt(cfg.password_expira_dias) || 0;
+        if (expireDays > 0) {
+          const changedAt = new Date(user.password_changed_at);
+          const expireAt = new Date(changedAt.getTime() + expireDays * 86400000);
+          if (new Date() > expireAt) {
+            return res.status(401).json({ error: 'Tu contraseña ha expirado. Debes cambiarla.', require_password_change: true });
+          }
+        }
+      } catch(e) { /* ignore config read errors */ }
+    }
     req.user = { ...user, empresa: payload.empresa || 'default' };
     req.userPermisos = PERMISOS[user.rol] || [];
     next();

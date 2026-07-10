@@ -148,6 +148,23 @@ master.exec(`
     leido INTEGER DEFAULT 0,
     fecha TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS global_config (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS rubros_atributos (
+    id TEXT PRIMARY KEY,
+    rubro TEXT NOT NULL,
+    atributo_key TEXT NOT NULL,
+    atributo_label TEXT NOT NULL,
+    tipo TEXT DEFAULT 'text',
+    opciones TEXT DEFAULT '[]',
+    orden INTEGER DEFAULT 0,
+    activo INTEGER DEFAULT 1
+  );
 `);
 
 // Migration: add email and data columns to existing superadmin
@@ -306,6 +323,14 @@ function saAudit(admin_id, accion, empresa_id, detalle) {
       .run('sal_'+Date.now(), new Date().toISOString(), admin_id, accion, empresa_id||null, detalle||null);
   } catch(e) {}
 }
+function saPurgeAuditLog(retentionDays) {
+  try {
+    const days = retentionDays || 90;
+    const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+    const result = master.prepare("DELETE FROM sa_audit_log WHERE fecha < ?").run(cutoff);
+    if (result.changes > 0) console.log(`[sa-audit-purge] ${result.changes} registros eliminados (> ${days} días)`);
+  } catch(e) {}
+}
 function getEmpresas() {
   return master.prepare("SELECT * FROM empresas ORDER BY nombre").all();
 }
@@ -360,5 +385,85 @@ function getDbStats() {
   } catch(e) { return { error: e.message } }
 }
 
+function getGlobalConfig(key) {
+  const row = master.prepare("SELECT value FROM global_config WHERE key=?").get(key);
+  return row ? row.value : null;
+}
+
+function setGlobalConfig(key, value) {
+  const existing = master.prepare("SELECT key FROM global_config WHERE key=?").get(key);
+  if (existing) {
+    master.prepare("UPDATE global_config SET value=?, updated_at=? WHERE key=?").run(value, new Date().toISOString(), key);
+  } else {
+    master.prepare("INSERT INTO global_config (key, value, updated_at) VALUES (?,?,?)").run(key, value, new Date().toISOString());
+  }
+}
+
+function getAllGlobalConfig() {
+  return master.prepare("SELECT key, value, updated_at FROM global_config").all();
+}
+
+function getRubroAtributos(rubro) {
+  return master.prepare("SELECT * FROM rubros_atributos WHERE rubro=? AND activo=1 ORDER BY orden").all(rubro)
+    .map(a => ({ ...a, opciones: JSON.parse(a.opciones || '[]') }));
+}
+
+function getAllRubrosAtributos() {
+  return master.prepare("SELECT * FROM rubros_atributos WHERE activo=1 ORDER BY rubro, orden").all()
+    .map(a => ({ ...a, opciones: JSON.parse(a.opciones || '[]') }));
+}
+
+function createRubroAtributo(data) {
+  const id = 'ra_' + Date.now();
+  master.prepare("INSERT INTO rubros_atributos (id, rubro, atributo_key, atributo_label, tipo, opciones, orden, activo) VALUES (?,?,?,?,?,?,?,1)")
+    .run(id, data.rubro, data.atributo_key, data.atributo_label, data.tipo || 'text', JSON.stringify(data.opciones || []), data.orden || 0);
+  return id;
+}
+
+function updateRubroAtributo(id, data) {
+  master.prepare("UPDATE rubros_atributos SET rubro=?, atributo_key=?, atributo_label=?, tipo=?, opciones=?, orden=?, activo=? WHERE id=?")
+    .run(data.rubro, data.atributo_key, data.atributo_label, data.tipo || 'text', JSON.stringify(data.opciones || []), data.orden || 0, data.activo !== false ? 1 : 0, id);
+}
+
+function seedDefaultRubroAtributos() {
+  const count = master.prepare("SELECT COUNT(*) as n FROM rubros_atributos").get().n;
+  if (count > 0) return;
+  const defaults = [
+    // Indumentaria
+    { rubro: 'indumentaria', key: 'talle', label: 'Talle', tipo: 'select', opciones: ['XS','S','M','L','XL','XXL','Único'] },
+    { rubro: 'indumentaria', key: 'color', label: 'Color', tipo: 'text', opciones: [] },
+    { rubro: 'indumentaria', key: 'temporada', label: 'Temporada', tipo: 'text', opciones: [] },
+    // Ropa infantil
+    { rubro: 'ropa_infantil', key: 'talle', label: 'Talle', tipo: 'select', opciones: ['NB','0-3m','3-6m','6-12m','12-18m','18-24m','2','3','4','6','8','10','12','14','16'] },
+    { rubro: 'ropa_infantil', key: 'color', label: 'Color', tipo: 'text', opciones: [] },
+    { rubro: 'ropa_infantil', key: 'temporada', label: 'Temporada', tipo: 'text', opciones: [] },
+    // Panadería
+    { rubro: 'panaderia', key: 'sabor', label: 'Sabor', tipo: 'text', opciones: [] },
+    { rubro: 'panaderia', key: 'gramaje', label: 'Gramaje', tipo: 'number', opciones: [] },
+    { rubro: 'panaderia', key: 'tipo_masa', label: 'Tipo de masa', tipo: 'select', opciones: ['Común','Hojaldre','Integral','Manteca','Medialuna','Dulce'] },
+    { rubro: 'panaderia', key: 'unidad_venta', label: 'Unidad de venta', tipo: 'select', opciones: ['unidad','kg','docena','media docena'] },
+    // Ferretería
+    { rubro: 'ferreteria', key: 'material', label: 'Material', tipo: 'text', opciones: [] },
+    { rubro: 'ferreteria', key: 'medida', label: 'Medida', tipo: 'text', opciones: [] },
+    { rubro: 'ferreteria', key: 'marca', label: 'Marca', tipo: 'text', opciones: [] },
+    { rubro: 'ferreteria', key: 'peso', label: 'Peso (kg)', tipo: 'number', opciones: [] },
+    // Farmacia
+    { rubro: 'farmacia', key: 'laboratorio', label: 'Laboratorio', tipo: 'text', opciones: [] },
+    { rubro: 'farmacia', key: 'principio_activo', label: 'Principio activo', tipo: 'text', opciones: [] },
+    { rubro: 'farmacia', key: 'presentacion', label: 'Presentación', tipo: 'select', opciones: ['Caja','Blister','Frasco','Ampolla','Sobre'] },
+    // General
+    { rubro: 'general', key: 'marca', label: 'Marca', tipo: 'text', opciones: [] },
+    { rubro: 'general', key: 'modelo', label: 'Modelo', tipo: 'text', opciones: [] },
+  ];
+  const stmt = master.prepare("INSERT INTO rubros_atributos (id, rubro, atributo_key, atributo_label, tipo, opciones, orden, activo) VALUES (?,?,?,?,?,?,?,1)");
+  defaults.forEach((d, i) => {
+    stmt.run('ra_seed_' + i, d.rubro, d.key, d.label, d.tipo, JSON.stringify(d.opciones), i);
+  });
+  console.log('✓ Atributos por rubro sembrados:', defaults.length);
+}
+
+// Seed default rubro attributes on load
+seedDefaultRubroAtributos();
+
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
-module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos, saAudit, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats };
+module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos, saAudit, saPurgeAuditLog, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo };

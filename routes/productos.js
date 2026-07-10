@@ -260,4 +260,16 @@ router.get('/:id/historial', authMiddleware, (req,res) => {
   res.json(movs);
 });
 
+// ── Rubro atributos ──
+router.get('/rubro-atributos', (req, res) => {
+  try {
+    const { getRubroAtributos } = require('../db_master');
+    const db = _getDB(req);
+    const cfg = db.getConfig();
+    const rubro = cfg.rubro || 'general';
+    const atributos = getRubroAtributos(rubro);
+    res.json({ rubro, atributos });
+  } catch(e) { res.json({ rubro: 'general', atributos: [] }); }
+});
+
 module.exports = router;

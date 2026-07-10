@@ -6,7 +6,9 @@ const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const { master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa,
         getPlanes, getPlan, getModulos, saAudit,
-        getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats } = require('../db_master');
+        getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats,
+        getGlobalConfig, setGlobalConfig, getAllGlobalConfig,
+        getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo } = require('../db_master');
 const { getEmpresaDB } = require('../db_sqlite');
 const { validate, superadminLoginSchema } = require('../middleware/validate');
 
@@ -46,10 +48,10 @@ function superAuth(req, res, next) {
 // ══════════════════════════════════════
 // AUTH
 // ══════════════════════════════════════
-router.post('/login', superadminLoginLimiter, validate(superadminLoginSchema), (req, res) => {
+router.post('/login', superadminLoginLimiter, validate(superadminLoginSchema), async (req, res) => {
   const { usuario, password } = req.body;
   const sa = master.prepare("SELECT * FROM superadmin WHERE usuario=? AND activo=1").get(usuario);
-  if(!sa || !bcrypt.compareSync(password, sa.password))
+  if(!sa || !await bcrypt.compare(password, sa.password))
     return res.status(401).json({error:'Credenciales incorrectas'});
 
   if (sa.must_change_password) {
@@ -87,7 +89,7 @@ router.put('/password', superAuth, async (req, res) => {
   if(!/[A-Z]/.test(password_nuevo) || !/[0-9]/.test(password_nuevo) || !/[^A-Za-z0-9]/.test(password_nuevo))
     return res.status(400).json({error:'Debe contener mayúscula, número y símbolo'});
   const sa = master.prepare("SELECT * FROM superadmin WHERE id=?").get(req.sadmin.id);
-  if(!sa || !bcrypt.compareSync(password_actual, sa.password))
+  if(!sa || !await bcrypt.compare(password_actual, sa.password))
     return res.status(401).json({error:'Contraseña actual incorrecta'});
 
   // Check password history from data field
@@ -95,7 +97,7 @@ router.put('/password', superAuth, async (req, res) => {
   try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
   const history = data.password_history || [];
   for (const oldHash of history) {
-    if (bcrypt.compareSync(password_nuevo, oldHash)) {
+    if (await bcrypt.compare(password_nuevo, oldHash)) {
       return res.status(400).json({error:'No podés usar una contraseña reciente. Elegí una que no hayas usado antes.'});
     }
   }
@@ -855,6 +857,153 @@ router.post('/prospectos-recuperables/notificar', superAuth, async (req, res) =>
     saAudit(req.sadmin.id, 'notificar_stale_prospects', null, 'Envío manual de recordatorios a prospectos sin seguimiento');
     res.json({ ok: true, mensaje: 'Resumen de prospectos recuperables enviado' });
   } catch(e) { res.status(500).json({ error: e.message }) }
+});
+
+// ══════════════════════════════════════
+// GLOBAL EMAIL CONFIG (SMTP)
+// ══════════════════════════════════════
+router.get('/email-config', superAuth, (req, res) => {
+  const keys = ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_from', 'smtp_from_name'];
+  const config = {};
+  for (const key of keys) {
+    config[key] = getGlobalConfig(key) || '';
+  }
+  res.json(config);
+});
+
+router.put('/email-config', superAuth, (req, res) => {
+  const { smtp_host, smtp_port, smtp_user, smtp_pass, smtp_from, smtp_from_name } = req.body;
+  if (smtp_host) setGlobalConfig('smtp_host', smtp_host);
+  if (smtp_port) setGlobalConfig('smtp_port', String(smtp_port));
+  if (smtp_user) setGlobalConfig('smtp_user', smtp_user);
+  if (smtp_pass && smtp_pass.trim() && !smtp_pass.includes('***')) {
+    const { encryptValue } = require('../lib/crypto-utils');
+    setGlobalConfig('smtp_pass', encryptValue(smtp_pass));
+  }
+  if (smtp_from) setGlobalConfig('smtp_from', smtp_from);
+  if (smtp_from_name !== undefined) setGlobalConfig('smtp_from_name', smtp_from_name || '');
+  saAudit(req.sadmin.id, 'config_smtp', null, 'Configuración SMTP global actualizada');
+  res.json({ ok: true });
+});
+
+router.post('/email-test', superAuth, (req, res) => {
+  const { host, port, user, pass, from, to } = req.body;
+  const testTo = to || master.prepare("SELECT email FROM superadmin WHERE id=?").get(req.sadmin.id)?.email || user;
+  if (!host || !user || !testTo) return res.status(400).json({ error: 'Faltan datos: host, user y destinatario requeridos' });
+  try {
+    const { sendEmail } = require('../lib/send-email');
+    let smtpPass = pass;
+    if (!smtpPass || smtpPass.includes('***')) {
+      const { decryptValue } = require('../lib/crypto-utils');
+      const encrypted = getGlobalConfig('smtp_pass');
+      if (encrypted) smtpPass = decryptValue(encrypted);
+    }
+    sendEmail(host, parseInt(port) || 465, user, smtpPass, from || user,
+      testTo, 'Test de conexión — FlexCRM SuperAdmin',
+      `<div style="font-family:sans-serif;padding:20px"><h2>✅ ¡Funciona!</h2><p>Tu configuración SMTP global es correcta.</p><p style="color:#64748b;font-size:12px">Enviado: ${new Date().toLocaleString('es-AR')}</p></div>`
+    ).then(() => res.json({ ok: true, message: 'Mail de prueba enviado ✅' }))
+      .catch(e => res.status(500).json({ error: 'Error SMTP: ' + e.message }));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Superadmin forgot-password ──
+router.post('/forgot-password', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.json({ ok: true, mensaje: 'Si el email existe en nuestro sistema, recibirás un enlace para restablecer tu contraseña.' });
+  const sa = master.prepare("SELECT * FROM superadmin WHERE email=? AND activo=1").get(email.trim().toLowerCase());
+  if (!sa) return res.json({ ok: true, mensaje: 'Si el email existe en nuestro sistema, recibirás un enlace para restablecer tu contraseña.' });
+  const crypto = require('crypto');
+  const token = crypto.randomBytes(32).toString('hex');
+  const expiresAt = new Date(Date.now() + 3600000).toISOString();
+  // Store reset token in superadmin data
+  let data = {};
+  try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+  data.reset_token = crypto.createHash('sha256').update(token).digest('hex');
+  data.reset_token_expires = expiresAt;
+  master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), sa.id);
+  // Try to send email using global SMTP
+  const smtpHost = getGlobalConfig('smtp_host');
+  const smtpPort = parseInt(getGlobalConfig('smtp_port')) || 465;
+  const smtpUser = getGlobalConfig('smtp_user');
+  const { decryptValue } = require('../lib/crypto-utils');
+  const smtpPass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
+  const smtpFrom = getGlobalConfig('smtp_from') || smtpUser;
+  const smtpFromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
+  if (smtpHost && smtpUser && smtpPass) {
+    const { sendEmail } = require('../lib/send-email');
+    const resetLink = `${process.env.APP_URL || 'http://localhost:3000'}/admin/reset-password?token=${token}`;
+    const html = `<div style="font-family:sans-serif;padding:20px"><h2>Restablecer contraseña</h2><p>Recibiste este email porque solicitaste restablecer tu contraseña de superadmin en FlexCRM.</p><p><a href="${resetLink}" style="display:inline-block;padding:12px 32px;background:#F97316;color:#fff;font-size:15px;font-weight:700;text-decoration:none;border-radius:8px">Restablecer contraseña</a></p><p style="color:#64748b;font-size:12px">Este enlace expira en 1 hora. Si no solicitaste este cambio, ignorá este mensaje.</p></div>`;
+    try {
+      await sendEmail(smtpHost, smtpPort, smtpUser, smtpPass, `"${smtpFromName}" <${smtpFrom}>`, email, 'Restablecer contraseña — FlexCRM SuperAdmin', html);
+      saAudit(sa.id, 'forgot_password', null, 'Solicitud de restablecimiento de contraseña');
+    } catch(e) {
+      console.error('[SA] Error enviando email forgot-password:', e.message);
+    }
+  }
+  res.json({ ok: true, mensaje: 'Si el email existe en nuestro sistema, recibirás un enlace para restablecer tu contraseña.' });
+});
+
+// ── Superadmin reset-password ──
+router.post('/reset-password', async (req, res) => {
+  const { token, password } = req.body;
+  if (!token || !password) return res.status(400).json({ error: 'Token y contraseña requeridos' });
+  if (password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password) || !/[^A-Za-z0-9]/.test(password))
+    return res.status(400).json({ error: 'La contraseña debe tener mínimo 8 caracteres, una mayúscula, un número y un símbolo' });
+  const crypto = require('crypto');
+  const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+  const admins = master.prepare("SELECT * FROM superadmin WHERE activo=1").all();
+  let found = null;
+  for (const sa of admins) {
+    let data = {};
+    try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+    if (data.reset_token === hashedToken && data.reset_token_expires && new Date(data.reset_token_expires) > new Date()) {
+      found = sa;
+      break;
+    }
+  }
+  if (!found) return res.status(400).json({ error: 'Token inválido o expirado' });
+  // Check password history
+  let data = {};
+  try { data = JSON.parse(found.data || '{}'); } catch(e) {}
+  const history = data.password_history || [];
+  for (const oldHash of history) {
+    if (await bcrypt.compare(password, oldHash)) {
+      return res.status(400).json({ error: 'No podés usar una contraseña reciente.' });
+    }
+  }
+  history.push(found.password);
+  if (history.length > 5) history.shift();
+  data.password_history = history;
+  delete data.reset_token;
+  delete data.reset_token_expires;
+  master.prepare("UPDATE superadmin SET password=?, data=?, must_change_password=0 WHERE id=?")
+    .run(bcrypt.hashSync(password, 10), JSON.stringify(data), found.id);
+  saAudit(found.id, 'reset_password', null, 'Contraseña restablecida vía token');
+  res.json({ ok: true, mensaje: 'Contraseña restablecida correctamente' });
+});
+
+// ══════════════════════════════════════
+// RUBROS ATRIBUTOS (atributos dinámicos por rubro)
+// ══════════════════════════════════════
+router.get('/rubros-atributos', superAuth, (req, res) => {
+  const rubro = req.query.rubro;
+  if (rubro) return res.json(getRubroAtributos(rubro));
+  res.json(getAllRubrosAtributos());
+});
+
+router.post('/rubros-atributos', superAuth, (req, res) => {
+  const { rubro, atributo_key, atributo_label, tipo, opciones, orden } = req.body;
+  if (!rubro || !atributo_key || !atributo_label) return res.status(400).json({ error: 'Rubro, key y label requeridos' });
+  const id = createRubroAtributo({ rubro, atributo_key, atributo_label, tipo, opciones, orden });
+  saAudit(req.sadmin.id, 'crear_atributo_rubro', null, `Atributo ${atributo_key} para rubro ${rubro}`);
+  res.json({ id, ok: true });
+});
+
+router.put('/rubros-atributos/:id', superAuth, (req, res) => {
+  const { rubro, atributo_key, atributo_label, tipo, opciones, orden, activo } = req.body;
+  updateRubroAtributo(req.params.id, { rubro, atributo_key, atributo_label, tipo, opciones, orden, activo });
+  saAudit(req.sadmin.id, 'editar_atributo_rubro', null, `Atributo ${req.params.id}`);
+  res.json({ ok: true });
 });
 
 module.exports = router;

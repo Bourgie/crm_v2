@@ -267,6 +267,9 @@ export function Config() {
     tienda_tn_store_id:'', tienda_tn_access_token:'',
     tienda_meli_app_id:'', tienda_meli_client_secret:'', tienda_meli_access_token:'', tienda_meli_refresh_token:'', tienda_meli_seller_id:'', tienda_meli_user_id:'', tienda_meli_expires_at:'',
     tienda_ultima_sync:'',
+    smtp_host:'', smtp_port:'465', smtp_user:'', smtp_pass:'', smtp_from:'',
+    inactividad_minutos:'15', login_max_intentos:'3', login_bloqueo_minutos:'15',
+    password_expira_dias:'0', password_historial_count:'5',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -274,6 +277,9 @@ export function Config() {
   const [soporteForm, setSoporteForm] = useState({ asunto: '', descripcion: '' })
   const [soporteSending, setSoporteSending] = useState(false)
   const [soporteSent, setSoporteSent] = useState(false)
+
+  const [emailTesting, setEmailTesting] = useState(false)
+  const [emailTestRes, setEmailTestRes] = useState(null)
 
   useEffect(() => {
     api('GET', '/config').then((d) => {
@@ -306,9 +312,23 @@ export function Config() {
     finally { setSoporteSending(false) }
   }
 
+  async function testEmail() {
+    if (!form.smtp_host || !form.smtp_user) { toast('Completá Host y Usuario SMTP','err'); return }
+    setEmailTesting(true); setEmailTestRes(null)
+    try {
+      const r = await api('POST', '/config/email-test', {
+        host: form.smtp_host, port: parseInt(form.smtp_port) || 465,
+        user: form.smtp_user, pass: form.smtp_pass, from: form.smtp_from
+      })
+      setEmailTestRes({ ok: true, msg: r.message || 'Mail enviado' })
+      toast('Mail de prueba enviado','ok')
+    } catch(e) { setEmailTestRes({ ok: false, msg: e.message }); toast(e.message,'err') }
+    finally { setEmailTesting(false) }
+  }
+
   if (loading) return <Loader/>
 
-  const TABS = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['webhooks','🔗 Webhooks'],['arca','📄 ARCA'],['tienda','🛒 Tienda'],['plan','📦 Plan'],['micuenta','👤 Mi Cuenta'],['backups','💾 Backups'],['ayuda','🆘 Ayuda']]
+  const TABS = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['email','📧 Email'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['seguridad','🔒 Seguridad'],['webhooks','🔗 Webhooks'],['arca','📄 ARCA'],['tienda','🛒 Tienda'],['plan','📦 Plan'],['micuenta','👤 Mi Cuenta'],['backups','💾 Backups'],['ayuda','🆘 Ayuda']]
 
   return (
     <div>
@@ -355,6 +375,85 @@ export function Config() {
             <div style={{display:'flex',gap:8,marginTop:8}}>
               <button type="button" className={`btn btn-sm ${theme==='light'?'btn-primary':'btn-secondary'}`} onClick={()=>setTheme('light')}>☀️ Claro</button>
               <button type="button" className={`btn btn-sm ${theme==='dark'?'btn-primary':'btn-secondary'}`} onClick={()=>setTheme('dark')}>🌙 Oscuro</button>
+            </div>
+          </>
+        )}
+
+        {tab==='email' && (
+          <>
+            <div style={{background:'rgba(99,102,241,.06)',border:'1px solid rgba(99,102,241,.2)',borderRadius:8,padding:'10px 14px',fontSize:13,marginBottom:14}}>
+              📧 Configura tu servidor SMTP para envío de emails (olvidé mi clave, presupuestos, notificaciones).
+              Si no lo configurás, se usará el SMTP global del sistema como respaldo.
+            </div>
+            <div className="fr">
+              <Field label="Servidor SMTP"><input value={form.smtp_host} onChange={set('smtp_host')} placeholder="smtp.gmail.com"/></Field>
+              <Field label="Puerto"><input value={form.smtp_port} onChange={set('smtp_port')} placeholder="465"/></Field>
+            </div>
+            <div className="fr">
+              <Field label="Usuario SMTP"><input value={form.smtp_user} onChange={set('smtp_user')} placeholder="tu@email.com"/></Field>
+              <Field label="Contraseña / App Password"><input type="password" value={form.smtp_pass} onChange={set('smtp_pass')} placeholder="••••••••"/></Field>
+            </div>
+            <Field label="Email remitente (FROM)"><input value={form.smtp_from} onChange={set('smtp_from')} placeholder="noreply@midominio.com"/></Field>
+            {emailTestRes && (
+              <div style={{padding:'10px 14px',borderRadius:8,fontSize:12,background:emailTestRes.ok?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(emailTestRes.ok?'rgba(34,197,94,.3)':'rgba(239,68,68,.3)'),color:emailTestRes.ok?'var(--ok)':'var(--bad)',marginBottom:8}}>
+                {emailTestRes.ok ? '✅ ' : '❌ '}{emailTestRes.msg}
+              </div>
+            )}
+            <button type="button" className="btn btn-secondary" onClick={testEmail} disabled={emailTesting} style={{marginBottom:8}}>{emailTesting ? '⏳ Probando...' : '📨 Probar conexión'}</button>
+          </>
+        )}
+
+        {tab==='seguridad' && (
+          <>
+            <div style={{background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.2)',borderRadius:8,padding:'10px 14px',fontSize:13,marginBottom:14}}>
+              🔒 Configuración de seguridad para todos los usuarios de la empresa.
+            </div>
+            <Field label="Cierre de sesión por inactividad (minutos)">
+              <select value={form.inactividad_minutos} onChange={set('inactividad_minutos')}>
+                <option value="5">5 minutos</option>
+                <option value="10">10 minutos</option>
+                <option value="15">15 minutos (recomendado)</option>
+                <option value="30">30 minutos</option>
+                <option value="60">1 hora</option>
+                <option value="0">Nunca</option>
+              </select>
+            </Field>
+            <div className="fr">
+              <Field label="Intentos máximos de login">
+                <select value={form.login_max_intentos} onChange={set('login_max_intentos')}>
+                  <option value="3">3 intentos</option>
+                  <option value="4">4 intentos</option>
+                  <option value="5">5 intentos</option>
+                </select>
+              </Field>
+              <Field label="Tiempo de bloqueo (minutos)">
+                <select value={form.login_bloqueo_minutos} onChange={set('login_bloqueo_minutos')}>
+                  <option value="5">5 minutos</option>
+                  <option value="15">15 minutos</option>
+                  <option value="30">30 minutos</option>
+                  <option value="60">1 hora</option>
+                </select>
+              </Field>
+            </div>
+            <div style={{fontSize:11,color:'var(--mu)',padding:'8px 12px',background:'var(--sf)',borderRadius:6}}>
+              💡 Después de <strong>{form.login_max_intentos}</strong> intentos fallidos, la cuenta se bloquea por <strong>{form.login_bloqueo_minutos}</strong> minutos.
+            </div>
+            <div style={{ borderTop: '1px solid var(--bd)', marginTop: 16, paddingTop: 16 }}>
+              <div style={{ background: 'rgba(245,158,11,.06)', border: '1px solid rgba(245,158,11,.2)', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14 }}>
+                🔐 Política de contraseñas
+              </div>
+              <Field label="Expiración de contraseña (días)">
+                <select value={form.password_expira_dias} onChange={set('password_expira_dias')}>
+                  <option value="0">Nunca</option>
+                  <option value="30">30 días</option>
+                  <option value="60">60 días</option>
+                  <option value="90">90 días</option>
+                  <option value="180">180 días</option>
+                </select>
+              </Field>
+              <div style={{ fontSize: 11, color: 'var(--mu)', padding: '8px 12px', background: 'var(--sf)', borderRadius: 6 }}>
+                💡 Los usuarios deberán cambiar su contraseña cada <strong>{form.password_expira_dias === '0' ? 'que nunca expira' : form.password_expira_dias + ' días'}</strong>. Se mantienen las últimas 5 contraseñas para evitar reutilización.
+              </div>
             </div>
           </>
         )}

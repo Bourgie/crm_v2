@@ -90,6 +90,23 @@ export function Productos() {
   const [varSaving, setVarSaving] = useState(false)
   const [varAttrKeys, setVarAttrKeys] = useState(['talle','color'])
 
+  const [rubroAtributos, setRubroAtributos] = useState([])
+  const [rubroNombre, setRubroNombre] = useState('general')
+
+  const loadRubroAttrs = useCallback(async () => {
+    try {
+      const data = await api('GET', '/productos/rubro-atributos')
+      const attrs = data?.atributos || []
+      setRubroAtributos(attrs)
+      setRubroNombre(data?.rubro || 'general')
+      if (attrs.length > 0) {
+        setVarAttrKeys(attrs.map(a => a.atributo_key))
+      }
+    } catch { /* default to talle/color */ }
+  }, [api])
+
+  useEffect(() => { loadRubroAttrs() }, [loadRubroAttrs])
+
   const load = useCallback(async () => {
     try {
       const data = await api('GET', `/productos?viewer_suc=${sucSesion || ''}`)
@@ -485,15 +502,64 @@ export function Productos() {
                 <input value={form.categoria} onChange={set('categoria')} list="cat-opts" placeholder="Ej: Remera" />
                 <datalist id="cat-opts">{[...CATEGORIAS, ...categorias].map((c) => <option key={c} value={c} />)}</datalist>
               </Field>
-              <Field label="Talle">
-                <input value={form.talle} onChange={set('talle')} list="talle-opts" placeholder="Ej: M" />
-                <datalist id="talle-opts">{TALLES.map((t) => <option key={t} value={t} />)}</datalist>
-              </Field>
+              {rubroAtributos.length > 0 ? (
+                rubroAtributos.slice(0, 1).map(attr => (
+                  attr.tipo === 'select' ? (
+                    <Field key={attr.atributo_key} label={attr.atributo_label}>
+                      <input value={form[attr.atributo_key] || ''} onChange={set(attr.atributo_key)} list={`${attr.atributo_key}-opts`} placeholder={`Ej: ${attr.opciones?.[0] || attr.atributo_label}`} />
+                      <datalist id={`${attr.atributo_key}-opts`}>{(attr.opciones || []).map((o) => <option key={o} value={o} />)}</datalist>
+                    </Field>
+                  ) : (
+                    <Field key={attr.atributo_key} label={attr.atributo_label}>
+                      <input type={attr.tipo} value={form[attr.atributo_key] || ''} onChange={set(attr.atributo_key)} placeholder={`Ej: ${attr.atributo_label}`} />
+                    </Field>
+                  )
+                ))
+              ) : (
+                <Field label="Talle">
+                  <input value={form.talle} onChange={set('talle')} list="talle-opts" placeholder="Ej: M" />
+                  <datalist id="talle-opts">{TALLES.map((t) => <option key={t} value={t} />)}</datalist>
+                </Field>
+              )}
             </div>
-            <div className="fr">
-              <Field label="Color"><input value={form.color} onChange={set('color')} placeholder="Ej: Azul marino" /></Field>
-              <Field label="Temporada"><input value={form.temporada} onChange={set('temporada')} placeholder="Ej: Verano 2025" /></Field>
-            </div>
+            {rubroAtributos.length > 1 ? (
+              <div className="fr">
+                {rubroAtributos.slice(1, 3).map(attr => (
+                  attr.tipo === 'select' ? (
+                    <Field key={attr.atributo_key} label={attr.atributo_label}>
+                      <input value={form[attr.atributo_key] || ''} onChange={set(attr.atributo_key)} list={`${attr.atributo_key}-opts`} placeholder={`Ej: ${attr.opciones?.[0] || attr.atributo_label}`} />
+                      <datalist id={`${attr.atributo_key}-opts`}>{(attr.opciones || []).map((o) => <option key={o} value={o} />)}</datalist>
+                    </Field>
+                  ) : (
+                    <Field key={attr.atributo_key} label={attr.atributo_label}>
+                      <input type={attr.tipo} value={form[attr.atributo_key] || ''} onChange={set(attr.atributo_key)} placeholder={`Ej: ${attr.atributo_label}`} />
+                    </Field>
+                  )
+                ))}
+                {rubroAtributos.length === 2 && <div style={{ flex: 1 }} />}
+              </div>
+            ) : rubroAtributos.length === 0 && (
+              <div className="fr">
+                <Field label="Color"><input value={form.color} onChange={set('color')} placeholder="Ej: Azul marino" /></Field>
+                <Field label="Temporada"><input value={form.temporada} onChange={set('temporada')} placeholder="Ej: Verano 2025" /></Field>
+              </div>
+            )}
+            {rubroAtributos.length > 2 && (
+              <div className="fr">
+                {rubroAtributos.slice(3).map(attr => (
+                  attr.tipo === 'select' ? (
+                    <Field key={attr.atributo_key} label={attr.atributo_label}>
+                      <input value={form[attr.atributo_key] || ''} onChange={set(attr.atributo_key)} list={`${attr.atributo_key}-opts`} placeholder={`Ej: ${attr.opciones?.[0] || attr.atributo_label}`} />
+                      <datalist id={`${attr.atributo_key}-opts`}>{(attr.opciones || []).map((o) => <option key={o} value={o} />)}</datalist>
+                    </Field>
+                  ) : (
+                    <Field key={attr.atributo_key} label={attr.atributo_label}>
+                      <input type={attr.tipo} value={form[attr.atributo_key] || ''} onChange={set(attr.atributo_key)} placeholder={`Ej: ${attr.atributo_label}`} />
+                    </Field>
+                  )
+                ))}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 16 }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
                 <input type="checkbox" checked={!!form.favorito} onChange={set('favorito')} style={{ width: 16, height: 16 }} />

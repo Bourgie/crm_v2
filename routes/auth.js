@@ -9,12 +9,29 @@ const { authMiddleware, requireRol, getSecret } = require('../middleware/auth');
 const { validate, loginSchema, createUserSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema } = require('../middleware/validate');
 
 // ── Login lockout (persistente en SQLite) ──
-const MAX_ATTEMPTS = 3;
-const LOCKOUT_MINUTES = 15;
+const DEFAULT_MAX_ATTEMPTS = 3;
+const DEFAULT_LOCKOUT_MINUTES = 15;
 const ACCESS_TOKEN_EXPIRY = '24h';
 const REFRESH_TOKEN_EXPIRY = 7 * 24 * 60 * 60 * 1000;
+const MAX_CONCURRENT_SESSIONS = 5;
 const { getIp } = require('../lib/suspicious-activity');
 const suspicious = require('../lib/suspicious-activity');
+
+function getLockoutConfig(db) {
+  try {
+    const cfg = db.getConfig();
+    return {
+      maxAttempts: parseInt(cfg.login_max_intentos) || DEFAULT_MAX_ATTEMPTS,
+      lockoutMinutes: parseInt(cfg.login_bloqueo_minutos) || DEFAULT_LOCKOUT_MINUTES,
+    };
+  } catch { return { maxAttempts: DEFAULT_MAX_ATTEMPTS, lockoutMinutes: DEFAULT_LOCKOUT_MINUTES }; }
+}
+
+function progressiveDelay(attemptCount) {
+  if (attemptCount <= 1) return 0;
+  const delayMs = Math.min(1000 * Math.pow(2, attemptCount - 1), 8000);
+  return delayMs;
+}
 
 function getLoginDB(req) {
   return _getDB(req);
@@ -33,12 +50,13 @@ function checkLocked(db, key) {
 }
 
 function recordFailedAttempt(db, key) {
+  const { maxAttempts, lockoutMinutes } = getLockoutConfig(db);
   const now = new Date();
   const row = db.raw.prepare("SELECT count, locked_until FROM login_attempts WHERE key=?").get(key);
   let count = row ? row.count + 1 : 1;
   let lockedUntil = null;
-  if (count >= MAX_ATTEMPTS) {
-    lockedUntil = new Date(now.getTime() + LOCKOUT_MINUTES * 60000).toISOString();
+  if (count >= maxAttempts) {
+    lockedUntil = new Date(now.getTime() + lockoutMinutes * 60000).toISOString();
   }
   if (row) {
     db.raw.prepare("UPDATE login_attempts SET count=?, last_attempt=?, locked_until=? WHERE key=?")
@@ -47,7 +65,7 @@ function recordFailedAttempt(db, key) {
     db.raw.prepare("INSERT INTO login_attempts(key,count,last_attempt,locked_until) VALUES(?,?,?,?)")
       .run(key, count, now.toISOString(), lockedUntil);
   }
-  return MAX_ATTEMPTS - count;
+  return maxAttempts - count;
 }
 
 function resetAttempts(db, key) {
@@ -100,6 +118,17 @@ function setRefreshCookie(res, token) {
   });
 }
 
+function enforceSessionLimit(db, userId) {
+  const active = db.raw.prepare(
+    "SELECT id FROM password_reset_tokens WHERE usuario_id=? AND usado=0 AND id LIKE 'rt_%' AND expires > datetime('now') ORDER BY creado ASC"
+  ).all(userId);
+  if (active.length >= MAX_CONCURRENT_SESSIONS) {
+    const toRevoke = active.slice(0, active.length - MAX_CONCURRENT_SESSIONS + 1);
+    const stmt = db.raw.prepare("UPDATE password_reset_tokens SET usado=1 WHERE id=?");
+    toRevoke.forEach(r => stmt.run(r.id));
+  }
+}
+
 // POST /api/auth/login
 router.post('/login', validate(loginSchema), async (req, res) => {
   const { usuario, password, empresa } = req.body;
@@ -108,28 +137,35 @@ router.post('/login', validate(loginSchema), async (req, res) => {
   const lockKey = getLoginKey(empresa, usuario);
 
   if (checkLocked(userDB, lockKey)) {
+    const { lockoutMinutes } = getLockoutConfig(userDB);
     userDB.audit(null, null, 'auth', 'login_locked', 'Cuenta bloqueada por múltiples intentos fallidos', null, suspicious.buildExtra(req, { empresa, usuario, lockKey }))
     return res.status(429).json({
-      error: `Demasiados intentos. Esperá ${LOCKOUT_MINUTES} minutos antes de intentar de nuevo.`,
-      locked: true, locked_minutes: LOCKOUT_MINUTES
+      error: `Demasiados intentos. Esperá ${lockoutMinutes} minutos antes de intentar de nuevo.`,
+      locked: true, locked_minutes: lockoutMinutes
     });
   }
 
   const user = userDB.where('usuarios', u => (u.usuario === usuario || u.email === usuario) && u.activo)[0];
   if (!user) {
-    const cnt = recordFailedAttempt(userDB, lockKey);
-    suspicious.auditLoginFailed(req, userDB, empresa, usuario, MAX_ATTEMPTS - cnt + 1)
+    const remaining = recordFailedAttempt(userDB, lockKey);
+    const { maxAttempts } = getLockoutConfig(userDB);
+    const attempts = maxAttempts - remaining;
+    suspicious.auditLoginFailed(req, userDB, empresa, usuario, attempts);
+    await new Promise(r => setTimeout(r, progressiveDelay(attempts)));
     return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
   }
 
   const ok = await bcrypt.compare(password, user.password);
   if (!ok) {
     const remaining = recordFailedAttempt(userDB, lockKey);
-    suspicious.auditLoginFailed(req, userDB, empresa, usuario, MAX_ATTEMPTS - remaining + 1)
+    const { maxAttempts, lockoutMinutes } = getLockoutConfig(userDB);
+    const attempts = maxAttempts - remaining;
+    suspicious.auditLoginFailed(req, userDB, empresa, usuario, attempts);
+    await new Promise(r => setTimeout(r, progressiveDelay(attempts)));
     if (remaining <= 0) {
       return res.status(429).json({
-        error: `Demasiados intentos. Esperá ${LOCKOUT_MINUTES} minutos antes de intentar de nuevo.`,
-        locked: true, locked_minutes: LOCKOUT_MINUTES
+        error: `Demasiados intentos. Esperá ${lockoutMinutes} minutos antes de intentar de nuevo.`,
+        locked: true, locked_minutes: lockoutMinutes
       });
     }
     return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
@@ -169,6 +205,8 @@ router.post('/login', validate(loginSchema), async (req, res) => {
   }
 
   const { accessToken, refreshToken } = generateTokens(user, empresa);
+
+  enforceSessionLimit(userDB, user.id);
 
   // Store refresh token hash in DB
   const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
@@ -287,7 +325,7 @@ router.post('/cambiar-password', authMiddleware, validate(changePasswordSchema),
   });
 
   const hash = await bcrypt.hash(password_nuevo, 10);
-  db.update('usuarios', req.user.id, { password: hash, must_change_password: 0 });
+  db.update('usuarios', req.user.id, { password: hash, must_change_password: 0, password_changed_at: new Date().toISOString() });
 
   // Invalidate all refresh tokens for this user
   db.raw.prepare("UPDATE password_reset_tokens SET usado=1 WHERE usuario_id=? AND id LIKE 'rt_%'").run(req.user.id);
@@ -428,7 +466,7 @@ router.post('/usuarios/:id/reset-password', authMiddleware, requireRol('admin'),
   }
 
   const hash = await bcrypt.hash(tempPassword, 10);
-  db.update('usuarios', req.params.id, { password: hash, debe_cambiar_password: 1 });
+  db.update('usuarios', req.params.id, { password: hash, debe_cambiar_password: 1, password_changed_at: new Date().toISOString() });
 
   // Invalidate all refresh tokens
   db.raw.prepare("UPDATE password_reset_tokens SET usado=1 WHERE usuario_id=? AND id LIKE 'rt_%'").run(req.params.id);
@@ -530,13 +568,29 @@ router.post('/forgot-password', validate(forgotPasswordSchema), async (req, res)
   });
   try {
     const cfg = userDB.getConfig();
-    const host = cfg.smtp_host;
-    const port = parseInt(cfg.smtp_port) || 465;
-    const smtpUser = cfg.smtp_user;
-    const smtpPass = cfg.smtp_pass;
-    const from = cfg.smtp_from || 'noreply@flexcrm.com';
+    let host = cfg.smtp_host;
+    let port = parseInt(cfg.smtp_port) || 465;
+    let smtpUser = cfg.smtp_user;
+    let smtpPass = cfg.smtp_pass;
+    let from = cfg.smtp_from;
+    let tenantConfigured = !!(host && smtpUser && smtpPass);
+    // Fallback to global SMTP if tenant SMTP is not configured
+    if (!tenantConfigured) {
+      try {
+        const { getGlobalConfig } = require('../db_master');
+        const { decryptValue } = require('../lib/crypto-utils');
+        host = getGlobalConfig('smtp_host');
+        port = parseInt(getGlobalConfig('smtp_port')) || 465;
+        smtpUser = getGlobalConfig('smtp_user');
+        const encryptedPass = getGlobalConfig('smtp_pass');
+        smtpPass = encryptedPass ? decryptValue(encryptedPass) : '';
+        from = getGlobalConfig('smtp_from') || smtpUser;
+        const fromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
+        if (from && fromName) from = `"${fromName}" <${from}>`;
+      } catch (g) { /* global SMTP not available */ }
+    }
     if (!host || !smtpUser || !smtpPass) {
-      console.log('[PasswordReset] SMTP no configurado para empresa:', empresa);
+      console.log('[PasswordReset] SMTP no configurado (ni tenant ni global) para empresa:', empresa);
       return res.json({ ok: true, mensaje: 'Si el usuario existe, recibirás un email con instrucciones' });
     }
     const resetLink = `${req.protocol}://${req.get('host')}/app/reset-password?token=${token}&empresa=${empresa}`;
@@ -581,7 +635,7 @@ router.post('/reset-password', validate(resetPasswordSchema), async (req, res) =
   }
 
   const hash = await bcrypt.hash(password, 10);
-  userDB.update('usuarios', rt.usuario_id, { password: hash });
+  userDB.update('usuarios', rt.usuario_id, { password: hash, password_changed_at: new Date().toISOString() });
   userDB.update('password_reset_tokens', rt.id, { usado: 1 });
 
   // Invalidate all refresh tokens for this user

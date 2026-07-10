@@ -576,6 +576,10 @@ try { sqlite.exec("ALTER TABLE ventas ADD COLUMN envio_detalle TEXT"); } catch(e
 try { sqlite.exec("ALTER TABLE empleados ADD COLUMN usuario_id TEXT"); } catch(e) {}
 // Force password change flag
 try { sqlite.exec("ALTER TABLE usuarios ADD COLUMN must_change_password INTEGER DEFAULT 0"); } catch(e) {}
+// Password expiry tracking
+try { sqlite.exec("ALTER TABLE usuarios ADD COLUMN password_changed_at TEXT"); } catch(e) {}
+// User sessions tracking
+try { sqlite.exec("CREATE TABLE IF NOT EXISTS user_sessions (id TEXT PRIMARY KEY, usuario_id TEXT NOT NULL, token_hash TEXT, ip TEXT, user_agent TEXT, creado TEXT, ultimo_acceso TEXT, activo INTEGER DEFAULT 1)"); } catch(e) {}
 }
 sqlite.prepare("INSERT OR REPLACE INTO schema_version(version) VALUES(?)").run(CURRENT_SCHEMA_VERSION);
 
@@ -909,6 +913,9 @@ function enrichProduct(row, viewer_suc_id) {
 }
 
 // ─── DB API ──────────────────────────────────────────────────
+const AUDIT_RETENTION_DAYS = 90;
+let _auditInsertCount = 0;
+
 const db = {
   all(table) {
     const rows = sqlite.prepare(`SELECT * FROM \`${table}\``).all();
@@ -1030,6 +1037,7 @@ const db = {
   raw: sqlite,
 
   // ── Audit helper — disponible en todas las DBs ──
+  // Realiza purge de registros antiguos (> 90 días) cada ~100 inserciones
   audit(usuario, suc_id, modulo, accion, descripcion, entidad_id, extra) {
     try {
       this.insert('audit_log', {
@@ -1043,7 +1051,27 @@ const db = {
         entidad_id: entidad_id || null,
         data: extra ? JSON.stringify(extra) : '{}',
       });
+
+      // Purge old audit logs periodically
+      _auditInsertCount++;
+      if (_auditInsertCount % 100 === 0) {
+        this.purgeAuditLog();
+      }
     } catch(e) { /* audit never breaks the app */ }
+  },
+
+  // ── Purge audit logs older than retention period ──
+  purgeAuditLog(retentionDays) {
+    try {
+      const days = retentionDays || AUDIT_RETENTION_DAYS;
+      const cutoff = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
+      const result = sqlite.prepare(
+        "DELETE FROM audit_log WHERE fecha < ?"
+      ).run(cutoff);
+      if (result.changes > 0 && process.env.NODE_ENV !== 'production') {
+        console.log(`[audit-purge] ${result.changes} registros eliminados (> ${days} días)`);
+      }
+    } catch(e) { /* non-blocking */ }
   },
 };
 

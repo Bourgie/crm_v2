@@ -3,8 +3,9 @@ import { Outlet, useLocation } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { OfflineBanner } from './OfflineBanner'
 import { useOfflineManager } from '../hooks/useOfflineManager'
+import { useIdleTimer } from '../hooks/useIdleTimer'
 import { useApi } from '../hooks/useApi'
-import { useApp } from '../store'
+import { useApp, useAuth } from '../store'
 import { chatUnread } from '../pages/Chat'
 import { pipelineVencidas, tareasVencidas, pipelineActivity } from '../pages/Pipeline'
 
@@ -35,8 +36,15 @@ export function Layout() {
   const location = useLocation()
   useOfflineManager()
   const { api } = useApi()
-  const { sucSesion, allSucs, setSucs } = useApp()
+  const { sucSesion, allSucs, setSucs, cfg } = useApp()
+  const { logout } = useAuth()
   const pollRef = useRef(null)
+
+  const inactivityMinutes = parseInt(cfg?.inactividad_minutos) || 15
+  const { showWarning, countdown, stayAlive } = useIdleTimer(inactivityMinutes, () => {
+    api('POST', '/auth/logout').catch(() => {})
+    logout()
+  })
 
   // Load sucursales on mount if not loaded (e.g. after page reload bypassing Login)
   useEffect(() => {
@@ -120,6 +128,22 @@ export function Layout() {
           <Outlet />
         </div>
       </div>
+
+      {/* Inactivity warning modal */}
+      {showWarning && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: 'var(--bg)', borderRadius: 16, padding: '28px 32px', maxWidth: 400, textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,.3)', border: '1px solid var(--bd)' }}>
+            <div style={{ fontSize: 40, marginBottom: 12 }}>⏰</div>
+            <h3 style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>¿Seguís ahí?</h3>
+            <p style={{ fontSize: 13, color: 'var(--mu)', marginBottom: 16 }}>
+              Tu sesión se cerrará por inactividad en <strong style={{ color: 'var(--bad)' }}>{countdown}s</strong>.
+            </p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+              <button type="button" className="btn btn-primary" onClick={stayAlive}>Sí, seguir usando FlexCRM</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
