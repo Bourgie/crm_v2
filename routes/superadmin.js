@@ -944,7 +944,10 @@ router.post('/forgot-password', async (req, res) => {
       console.error('[SA] Error enviando email forgot-password:', e.message);
     }
   } else {
-    console.log('[SA] Forgot-password: SMTP global no configurado, token NO enviado. Token:', token.substring(0, 8) + '...');
+    const resetLink = `${process.env.APP_URL || 'https://crm-v2.fly.dev'}/admin?token=${token}`;
+    console.log('[SA] ⚠️  SMTP global no configurado — token NO enviado por email.');
+    console.log('[SA] 🔗 URL reset:', resetLink);
+    console.log('[SA] 🔑 Token:', token);
   }
   res.json({ ok: true, mensaje: 'Si la cuenta existe en nuestro sistema, recibirás un enlace para restablecer tu contraseña.' });
 });
