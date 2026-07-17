@@ -478,7 +478,7 @@ router.post('/usuarios/:id/reset-password', authMiddleware, requireRol('admin'),
     const port = parseInt(cfg.smtp_port) || 465;
     const smtpUser = cfg.smtp_user;
     const smtpPass = cfg.smtp_pass;
-    const from = cfg.smtp_from || 'noreply@flexcrm.com';
+    const from = cfg.smtp_from || 'noreply@unfulanodev.com.ar';
     if (host && smtpUser && smtpPass && user.email) {
       const loginLink = `${req.protocol}://${req.get('host')}/app/login?e=${req.user.empresa || 'default'}`;
       const html = `<div style="font-family:sans-serif;padding:24px;max-width:480px;margin:0 auto">
@@ -650,7 +650,7 @@ router.post('/reset-password', validate(resetPasswordSchema), async (req, res) =
     const host = cfg.smtp_host;
     const smtpUser = cfg.smtp_user;
     const smtpPass = cfg.smtp_pass;
-    const from = cfg.smtp_from || 'noreply@flexcrm.com';
+    const from = cfg.smtp_from || 'noreply@unfulanodev.com.ar';
     if (host && smtpUser && smtpPass && rt.email) {
       const loginLink = `${req.protocol}://${req.get('host')}/app/login`;
       await sendEmail(host, parseInt(cfg.smtp_port) || 465, smtpUser, smtpPass, from, rt.email, 'Contraseña actualizada — FlexCRM', buildResetConfirmedHtml(loginLink));

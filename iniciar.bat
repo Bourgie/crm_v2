@@ -1,9 +1,9 @@
 @echo off
-title PequeñosCRM Pro
+title FlexCRM
 color 0A
 echo.
 echo  ============================================
-echo     PequenosCRM Pro  iniciando...
+echo     FlexCRM  iniciando...
 echo  ============================================
 echo.
 node --version >nul 2>&1

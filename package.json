@@ -1,7 +1,7 @@
 {
   "name": "pequenoscrm-pro",
   "version": "2.47.0",
-  "description": "PequeñosCRM Pro — Ropa Infantil — Fase 2",
+  "description": "FlexCRM — CRM multi-rubro SaaS multi-tenant",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

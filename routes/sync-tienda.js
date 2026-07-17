@@ -77,7 +77,7 @@ async function pushStockWoo(cfg, db, tiendaSucId) {
 async function tnRequest(cfg, method, endpoint, data) {
   const base = `https://api.tiendanube.com/v1/${cfg.tienda_tn_store_id}`;
   const url = `${base}/${endpoint}`;
-  const opts = { method, headers: { 'Authorization': `Bearer ${cfg.tienda_tn_access_token}`, 'User-Agent': 'FlexCRM (info@flexcrm.com)', 'Content-Type': 'application/json', 'Accept': 'application/json' } };
+  const opts = { method, headers: { 'Authorization': `Bearer ${cfg.tienda_tn_access_token}`,       'User-Agent': 'FlexCRM (info@unfulanodev.com.ar)', 'Content-Type': 'application/json', 'Accept': 'application/json' } };
   if (data) opts.body = JSON.stringify(data);
   const res = await fetch(url, opts);
   const text = await res.text();

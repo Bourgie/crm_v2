@@ -1,9 +1,9 @@
 @echo off
-title PequeñosCRM Pro
+title FlexCRM
 cd /d "%~dp0"
 echo.
 echo  ════════════════════════════════════════
-echo    PequeñosCRM Pro — Iniciando...
+echo    FlexCRM — Iniciando...
 echo  ════════════════════════════════════════
 echo.
 echo  Red LOCAL (misma red WiFi):
