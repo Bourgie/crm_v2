@@ -66,6 +66,19 @@ export default function Superadmin() {
   const [loginErr, setLoginErr] = useState('')
   const [loginLoading, setLoginLoading] = useState(false)
 
+  const [saForgot, setSaForgot] = useState(false)
+  const [forgotEmail, setForgotEmail] = useState('')
+  const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotSent, setForgotSent] = useState(false)
+  const [forgotErr, setForgotErr] = useState('')
+
+  const [saReset, setSaReset] = useState(false)
+  const [resetToken, setResetToken] = useState('')
+  const [resetForm, setResetForm] = useState({ password: '', repetir: '' })
+  const [resetLoading, setResetLoading] = useState(false)
+  const [resetDone, setResetDone] = useState(false)
+  const [resetErr, setResetErr] = useState('')
+
   const [passModal, setPassModal] = useState(false)
   const [passForm, setPassForm] = useState({ password_actual: '', password_nuevo: '', repetir: '' })
 
@@ -126,6 +139,35 @@ export default function Superadmin() {
   }
 
   async function saLogout() { try { await saApi('POST', '/logout') } catch {} setLogged(false); setUser(null); setImpersonating(null) }
+
+  async function saForgotPassword() {
+    if (!forgotEmail.trim()) { setForgotErr('Ingresá tu email'); return }
+    setForgotLoading(true); setForgotErr('')
+    try {
+      await saApi('POST', '/forgot-password', { email: forgotEmail.trim() })
+      setForgotSent(true)
+    } catch(e) { setForgotErr(e.message) }
+    finally { setForgotLoading(false) }
+  }
+
+  async function saResetPassword() {
+    if (resetForm.password.length < 8) { setResetErr('Mínimo 8 caracteres'); return }
+    if (!/[A-Z]/.test(resetForm.password) || !/[0-9]/.test(resetForm.password) || !/[^A-Za-z0-9]/.test(resetForm.password)) { setResetErr('Debe contener mayúscula, número y símbolo'); return }
+    if (resetForm.password !== resetForm.repetir) { setResetErr('Las contraseñas no coinciden'); return }
+    setResetLoading(true); setResetErr('')
+    try {
+      await saApi('POST', '/reset-password', { token: resetToken, password: resetForm.password })
+      setResetDone(true)
+    } catch(e) { setResetErr(e.message) }
+    finally { setResetLoading(false) }
+  }
+
+  // Check for reset token in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const token = params.get('token')
+    if (token) { setSaReset(true); setResetToken(token) }
+  }, [])
 
   function loadAll() {
     loadDash(); loadEmpresas(); loadPlanes(); loadModulos(); loadSolicitudes(); loadAudit(); loadProspectos(); loadLanding(); loadTickets(); loadEmailConfig(); loadAtributos();
@@ -314,12 +356,56 @@ export default function Superadmin() {
       <div style={{ fontSize: 52, marginBottom: 12 }}>🔐</div>
       <h2 style={{ fontSize: 22, fontWeight: 900, marginBottom: 6 }}>Super Admin</h2>
       <p style={{ color: 'var(--mu)', fontSize: 13, marginBottom: 24 }}>FlexCRM — Panel de control</p>
-      <div className="card" style={{ textAlign: 'left' }}>
-        <div style={{ marginBottom: 12 }}><label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Usuario</label><input value={loginForm.usuario} onChange={e => setLoginForm(p => ({ ...p, usuario: e.target.value }))} placeholder="superadmin" style={{ width: '100%' }} /></div>
-        <div style={{ marginBottom: 16 }}><label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Contraseña</label><input type="password" value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} onKeyDown={e => e.key === 'Enter' && saLogin()} style={{ width: '100%' }} /></div>
-        {loginErr && <div style={{ color: 'var(--bad)', fontSize: 12, marginBottom: 12 }}>{loginErr}</div>}
-        <button type="button" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: 10 }} onClick={saLogin} disabled={loginLoading}>{loginLoading ? '⏳' : '→ Ingresar'}</button>
-      </div>
+
+      {saReset ? (
+        <div className="card" style={{ textAlign: 'left' }}>
+          {resetDone ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>✅</div>
+              <p style={{ fontWeight: 700, color: 'var(--ok)', marginBottom: 8 }}>Contraseña restablecida</p>
+              <p style={{ fontSize: 12, color: 'var(--mu)', marginBottom: 16 }}>Ya podés iniciar sesión con tu nueva contraseña.</p>
+              <button type="button" className="btn btn-primary" style={{ width: '100%' }} onClick={() => { setSaReset(false); setResetDone(false); setResetToken('') }}>Ir al inicio de sesión</button>
+            </div>
+          ) : (
+            <>
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Nueva contraseña</h3>
+              {resetErr && <div style={{ color: 'var(--bad)', fontSize: 12, marginBottom: 12 }}>{resetErr}</div>}
+              <div style={{ marginBottom: 10 }}><label style={{ fontSize: 11, fontWeight: 600, color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Nueva contraseña</label><input type="password" value={resetForm.password} onChange={e => setResetForm(p => ({ ...p, password: e.target.value }))} placeholder="Mín. 8 caracteres, mayúscula, número, símbolo" style={{ width: '100%' }} /></div>
+              <div style={{ marginBottom: 16 }}><label style={{ fontSize: 11, fontWeight: 600, color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Repetir contraseña</label><input type="password" value={resetForm.repetir} onChange={e => setResetForm(p => ({ ...p, repetir: e.target.value }))} onKeyDown={e => e.key === 'Enter' && saResetPassword()} style={{ width: '100%' }} /></div>
+              <button type="button" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: 10 }} onClick={saResetPassword} disabled={resetLoading}>{resetLoading ? '⏳' : '💾 Guardar nueva contraseña'}</button>
+              <button type="button" className="btn btn-secondary" style={{ width: '100%', marginTop: 8 }} onClick={() => { setSaReset(false); setResetErr('') }}>← Volver</button>
+            </>
+          )}
+        </div>
+      ) : saForgot ? (
+        <div className="card" style={{ textAlign: 'left' }}>
+          {forgotSent ? (
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>📧</div>
+              <p style={{ fontWeight: 700, color: 'var(--ok)', marginBottom: 8 }}>Email enviado</p>
+              <p style={{ fontSize: 12, color: 'var(--mu)', marginBottom: 16 }}>Si tu email está registrado, recibirás un enlace para restablecer tu contraseña. Revisá tu bandeja de entrada.</p>
+              <button type="button" className="btn btn-secondary" style={{ width: '100%' }} onClick={() => { setSaForgot(false); setForgotSent(false); setForgotEmail('') }}>← Volver al login</button>
+            </div>
+          ) : (
+            <>
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 12 }}>Olvidé mi contraseña</h3>
+              <p style={{ fontSize: 12, color: 'var(--mu)', marginBottom: 16 }}>Ingresá tu email o nombre de usuario. Te enviaremos un enlace para restablecer tu contraseña.</p>
+              {forgotErr && <div style={{ color: 'var(--bad)', fontSize: 12, marginBottom: 12 }}>{forgotErr}</div>}
+              <div style={{ marginBottom: 16 }}><label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Email o usuario</label><input value={forgotEmail} onChange={e => setForgotEmail(e.target.value)} type="text" placeholder="superadmin" onKeyDown={e => e.key === 'Enter' && saForgotPassword()} style={{ width: '100%' }} /></div>
+              <button type="button" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: 10 }} onClick={saForgotPassword} disabled={forgotLoading}>{forgotLoading ? '⏳' : '📧 Enviar enlace'}</button>
+              <button type="button" className="btn btn-secondary" style={{ width: '100%', marginTop: 8 }} onClick={() => { setSaForgot(false); setForgotErr('') }}>← Volver al login</button>
+            </>
+          )}
+        </div>
+      ) : (
+        <div className="card" style={{ textAlign: 'left' }}>
+          <div style={{ marginBottom: 12 }}><label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Usuario</label><input value={loginForm.usuario} onChange={e => setLoginForm(p => ({ ...p, usuario: e.target.value }))} placeholder="superadmin" style={{ width: '100%' }} /></div>
+          <div style={{ marginBottom: 8 }}><label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Contraseña</label><input type="password" value={loginForm.password} onChange={e => setLoginForm(p => ({ ...p, password: e.target.value }))} onKeyDown={e => e.key === 'Enter' && saLogin()} style={{ width: '100%' }} /></div>
+          <div style={{ textAlign: 'right', marginBottom: 16 }}><a href="#" onClick={e => { e.preventDefault(); setSaForgot(true); setForgotEmail('') }} style={{ fontSize: 11, color: 'var(--ac)', textDecoration: 'none' }}>¿Olvidaste tu contraseña?</a></div>
+          {loginErr && <div style={{ color: 'var(--bad)', fontSize: 12, marginBottom: 12 }}>{loginErr}</div>}
+          <button type="button" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: 10 }} onClick={saLogin} disabled={loginLoading}>{loginLoading ? '⏳' : '→ Ingresar'}</button>
+        </div>
+      )}
       <a href="/" style={{ color: 'var(--mu)', fontSize: 12, marginTop: 12, display: 'inline-block' }}>← Volver al CRM</a>
     </div>
   )

@@ -909,9 +909,13 @@ router.post('/email-test', superAuth, (req, res) => {
 // ── Superadmin forgot-password ──
 router.post('/forgot-password', async (req, res) => {
   const { email } = req.body;
-  if (!email) return res.json({ ok: true, mensaje: 'Si el email existe en nuestro sistema, recibirás un enlace para restablecer tu contraseña.' });
-  const sa = master.prepare("SELECT * FROM superadmin WHERE email=? AND activo=1").get(email.trim().toLowerCase());
-  if (!sa) return res.json({ ok: true, mensaje: 'Si el email existe en nuestro sistema, recibirás un enlace para restablecer tu contraseña.' });
+  const search = (email || '').trim().toLowerCase();
+  if (!search) return res.json({ ok: true, mensaje: 'Si la cuenta existe en nuestro sistema, recibirás un enlace para restablecer tu contraseña.' });
+  // Search by email first, then by usuario
+  let sa = master.prepare("SELECT * FROM superadmin WHERE LOWER(email)=? AND activo=1").get(search);
+  if (!sa) sa = master.prepare("SELECT * FROM superadmin WHERE LOWER(usuario)=? AND activo=1").get(search);
+  if (!sa) return res.json({ ok: true, mensaje: 'Si la cuenta existe en nuestro sistema, recibirás un enlace para restablecer tu contraseña.' });
+  const userEmail = sa.email || search;
   const crypto = require('crypto');
   const token = crypto.randomBytes(32).toString('hex');
   const expiresAt = new Date(Date.now() + 3600000).toISOString();
@@ -927,20 +931,22 @@ router.post('/forgot-password', async (req, res) => {
   const smtpUser = getGlobalConfig('smtp_user');
   const { decryptValue } = require('../lib/crypto-utils');
   const smtpPass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
-  const smtpFrom = getGlobalConfig('smtp_from') || smtpUser;
+  const smtpFrom = getGlobalConfig('smtp_from') || smtpUser || '';
   const smtpFromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
-  if (smtpHost && smtpUser && smtpPass) {
+  const resetLink = `${process.env.APP_URL || 'https://crm-v2.fly.dev'}/admin?token=${token}`;
+  if (smtpHost && smtpUser && smtpPass && smtpFrom && userEmail) {
     const { sendEmail } = require('../lib/send-email');
-    const resetLink = `${process.env.APP_URL || 'http://localhost:3000'}/admin/reset-password?token=${token}`;
     const html = `<div style="font-family:sans-serif;padding:20px"><h2>Restablecer contraseña</h2><p>Recibiste este email porque solicitaste restablecer tu contraseña de superadmin en FlexCRM.</p><p><a href="${resetLink}" style="display:inline-block;padding:12px 32px;background:#F97316;color:#fff;font-size:15px;font-weight:700;text-decoration:none;border-radius:8px">Restablecer contraseña</a></p><p style="color:#64748b;font-size:12px">Este enlace expira en 1 hora. Si no solicitaste este cambio, ignorá este mensaje.</p></div>`;
     try {
-      await sendEmail(smtpHost, smtpPort, smtpUser, smtpPass, `"${smtpFromName}" <${smtpFrom}>`, email, 'Restablecer contraseña — FlexCRM SuperAdmin', html);
-      saAudit(sa.id, 'forgot_password', null, 'Solicitud de restablecimiento de contraseña');
+      await sendEmail(smtpHost, smtpPort, smtpUser, smtpPass, `"${smtpFromName}" <${smtpFrom}>`, userEmail, 'Restablecer contraseña — FlexCRM SuperAdmin', html);
+      saAudit(sa.id, 'forgot_password', null, 'Token enviado a ' + userEmail);
     } catch(e) {
       console.error('[SA] Error enviando email forgot-password:', e.message);
     }
+  } else {
+    console.log('[SA] Forgot-password: SMTP global no configurado, token NO enviado. Token:', token.substring(0, 8) + '...');
   }
-  res.json({ ok: true, mensaje: 'Si el email existe en nuestro sistema, recibirás un enlace para restablecer tu contraseña.' });
+  res.json({ ok: true, mensaje: 'Si la cuenta existe en nuestro sistema, recibirás un enlace para restablecer tu contraseña.' });
 });
 
 // ── Superadmin reset-password ──
