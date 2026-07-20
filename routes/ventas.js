@@ -435,4 +435,164 @@ router.put('/:id/items', requireRol('admin','supervisor','cajero'), (req,res) =>
   res.json({ok:true});
 });
 
+// ── Cambiar método de pago de una venta ya cobrada ──
+router.put('/:id/cambiar-pago', requireRol('admin','supervisor','cajero'), (req, res) => {
+  const db = _getDB(req);
+  const venta = db.findOne('ventas', req.params.id);
+  if (!venta) return res.status(404).json({ error: 'Venta no encontrada' });
+  if (venta.anulada) return res.status(400).json({ error: 'No se puede cambiar el pago de una venta anulada' });
+  if (!venta.cobrada) return res.status(400).json({ error: 'La venta aún no fue cobrada. Cobrala primero desde Caja.' });
+
+  const { pago, pago_principal, pagos_detalle, ctacte_monto, suc_id } = req.body;
+  if (!pago) return res.status(400).json({ error: 'Método de pago requerido' });
+
+  const sucId = suc_id || req.user.suc_id || venta.suc_id;
+  const hoy = new Date().toISOString().substr(0, 10);
+
+  // Solo permitir si la caja está abierta hoy para esa sucursal
+  const cajaAbierta = db.where('cajas',
+    c => c.suc_id === sucId && c.fecha.substr(0, 10) === hoy && c.estado === 'abierta'
+  )[0];
+  if (!cajaAbierta) {
+    return res.status(400).json({ error: 'La caja está cerrada. Abrí la caja para modificar métodos de pago.' });
+  }
+
+  // Anular movimientos_caja existentes de esta venta
+  const movsViejos = db.where('movimientos_caja',
+    m => m.venta_id === req.params.id && !m.anulado
+  );
+  for (const m of movsViejos) {
+    db.update('movimientos_caja', m.id, { anulado: true });
+    // Crear contrapartida para mantener trazabilidad
+    db.insert('movimientos_caja', {
+      id: 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      caja_id: cajaAbierta.id, suc_id: sucId, fecha: new Date().toISOString(),
+      tipo: 'egreso', concepto: 'Corrección pago — anula venta #' + (venta.numero || req.params.id.substr(-6)),
+      monto: m.monto, pago_metodo: m.pago_metodo, usuario: req.user.nombre || req.user.usuario,
+      auto: false, venta_id: req.params.id,
+    });
+  }
+
+  // Crear nuevos movimientos_caja según el método corregido
+  let detalles = [];
+  try { detalles = JSON.parse(pagos_detalle || '[]'); } catch(e) {}
+  if (detalles.length === 0) {
+    // Pago simple
+    const montoTotal = parseFloat(venta.total) - parseFloat(ctacte_monto || 0);
+    db.insert('movimientos_caja', {
+      id: 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      caja_id: cajaAbierta.id, suc_id: sucId, fecha: new Date().toISOString(),
+      tipo: 'ingreso', concepto: 'Cobro corregido venta #' + (venta.numero || req.params.id.substr(-6)),
+      monto: montoTotal, pago_metodo: pago, usuario: req.user.nombre || req.user.usuario,
+      auto: true, venta_id: req.params.id,
+    });
+  } else {
+    for (const d of detalles) {
+      const metodoId = d.id || pago;
+      if (metodoId === 'ctacte') continue;
+      const monto = parseFloat(d.monto) || 0;
+      if (monto <= 0) continue;
+      db.insert('movimientos_caja', {
+        id: 'cm_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        caja_id: cajaAbierta.id, suc_id: sucId, fecha: new Date().toISOString(),
+        tipo: 'ingreso', concepto: 'Cobro corregido venta #' + (venta.numero || req.params.id.substr(-6)),
+        monto: monto, pago_metodo: metodoId, usuario: req.user.nombre || req.user.usuario,
+        auto: true, venta_id: req.params.id,
+      });
+    }
+  }
+
+  // Actualizar venta
+  db.update('ventas', req.params.id, {
+    pago: pago || 'mixto',
+    pago_principal: pago_principal || pago,
+    pagos_detalle: pagos_detalle || '[]',
+    ctacte_monto: parseFloat(ctacte_monto) || 0,
+  });
+
+  db.audit(req.user, null, 'ventas', 'cambiar_pago',
+    `Venta #${venta.numero || req.params.id.substr(-6)}: pago cambiado de "${venta.pago}" a "${pago}"`);
+
+  res.json({ ok: true, mensaje: 'Método de pago actualizado' });
+});
+
+// ── Comprobante PDF ──
+router.get('/:id/comprobante-pdf', (req, res) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const db = _getDB(req);
+    const venta = enrichVenta(db.findOne('ventas', req.params.id), db);
+    if (!venta) return res.status(404).json({ error: 'Venta no encontrada' });
+
+    const cfg = db.getConfig();
+    const items = db.where('venta_items', i => i.venta_id === req.params.id);
+    let pagosDetalle = [];
+    try { pagosDetalle = JSON.parse(venta.pagos_detalle || '[]'); } catch(e) {}
+
+    const doc = new PDFDocument({ size: [260, 400], margin: 15, bufferPages: true });
+    const chunks = [];
+    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('end', () => {
+      const pdf = Buffer.concat(chunks);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="venta-${venta.numero || venta.id.substr(-8)}.pdf"`);
+      res.send(pdf);
+    });
+
+    const w = 230;
+    let y = 15;
+    const center = (text, size = 10, bold = false) => {
+      if (bold) doc.font('Helvetica-Bold'); else doc.font('Helvetica');
+      doc.fontSize(size).text(text, 15, y, { width: w, align: 'center' });
+      y += size + 3;
+    };
+    const row = (label, value, size = 9) => {
+      doc.font('Helvetica').fontSize(size).text(label, 15, y, { width: 130 });
+      doc.font('Helvetica-Bold').fontSize(size).text(value, 145, y, { width: 100, align: 'right' });
+      y += size + 4;
+    };
+
+    center(cfg.nombre || 'FlexCRM', 12, true);
+    if (cfg.ticket_cabecera) center(cfg.ticket_cabecera, 8);
+    y += 4;
+    doc.moveTo(15, y).lineTo(245, y).stroke('#ddd');
+    y += 8;
+    center('COMPROBANTE DE VENTA', 11, true);
+    y += 2;
+    center('#' + (venta.numero || venta.id.substr(-8)), 10, true);
+    y += 6;
+    row('Fecha:', new Date(venta.fecha).toLocaleString('es-AR'), 9);
+    if (venta.cli_nombre) row('Cliente:', venta.cli_nombre, 9);
+    doc.moveTo(15, y).lineTo(245, y).stroke('#ddd');
+    y += 8;
+    center('DETALLE', 9, true);
+    y += 2;
+    items.forEach(it => {
+      const name = it.nombre + (it.talle ? ' T:' + it.talle : '');
+      row(name, it.cantidad + ' x $' + (it.precio || 0).toLocaleString('es-AR'), 8);
+    });
+    y += 2;
+    doc.moveTo(15, y).lineTo(245, y).stroke('#ddd');
+    y += 8;
+    row('TOTAL:', '$' + (venta.total || 0).toLocaleString('es-AR'), 11);
+    if (pagosDetalle.length > 0) {
+      pagosDetalle.forEach(d => {
+        if (parseFloat(d.monto) > 0) row((d.id || 'Efectivo'), '$' + parseFloat(d.monto).toLocaleString('es-AR'), 8);
+      });
+    }
+    if (venta.factura_cae) {
+      y += 4;
+      center('CAE: ' + venta.factura_cae, 8);
+      if (venta.factura_fecha_vto) center('Vto CAE: ' + venta.factura_fecha_vto, 8);
+    }
+    y += 8;
+    if (cfg.ticket_pie) center(cfg.ticket_pie, 7);
+    y += 4;
+    center('¡Gracias por su compra!', 9, true);
+    doc.end();
+  } catch(e) {
+    res.status(500).json({ error: 'Error generando PDF: ' + e.message });
+  }
+});
+
 module.exports = router;

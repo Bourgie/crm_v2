@@ -1,12 +1,21 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useApi } from '../hooks/useApi'
-import { useApp, useToast } from '../store'
+import { useApp, useToast, useAuth } from '../store'
 import { Modal } from '../components/Modal'
 import { SearchBar, PageHeader, EmptyRow, Loader, Pagination } from '../components/UI'
 import { exportExcel } from '../utils/excel'
+import { imprimirTicket } from '../utils/comprobante'
 
 const PER_PAGE = 30
+
+const PAGOS_DEF = [
+  { id: 'efectivo', nombre: 'Efectivo', icono: '💵', recargo: 0, activo: true },
+  { id: 'debito', nombre: 'Débito', icono: '💳', recargo: 0, activo: true },
+  { id: 'credito', nombre: 'Crédito', icono: '💳', recargo: 10, activo: true },
+  { id: 'transferencia', nombre: 'Transferencia', icono: '🏦', recargo: 0, activo: true },
+  { id: 'qr', nombre: 'QR / MP', icono: '📱', recargo: 0, activo: true },
+]
 
 const PAGO_LABELS = {
   efectivo: '💵 Efectivo', debito: '💳 Débito', credito: '💳 Crédito',
@@ -280,6 +289,7 @@ export function Ventas() {
   const { api } = useApi()
   const { toast } = useToast()
   const { sucSesion, allSucs } = useApp()
+  const { token } = useAuth()
   const [searchParams] = useSearchParams()
 
   const [ventas, setVentas] = useState([])
@@ -290,6 +300,13 @@ export function Ventas() {
   const [desdeHasta, setDesdeHasta] = useState({ desde: '', hasta: '' })
   const [page, setPage] = useState(1)
   const [detail, setDetail] = useState(null)
+
+  const [cajaAbierta, setCajaAbierta] = useState(false)
+  const [pagosMethods, setPagosMethods] = useState(PAGOS_DEF)
+  const [modalCambioPago, setModalCambioPago] = useState(null)
+  const [cambioPagoForm, setCambioPagoForm] = useState({ pago: '', monto: 0 })
+  const [cambioPagoSaving, setCambioPagoSaving] = useState(false)
+  const [cfg, setCfg] = useState({})
 
   const cliId = searchParams.get('cli_id')
 
@@ -312,8 +329,17 @@ export function Ventas() {
       if (desde) qs += `&desde=${desde}`
       if (hasta) qs += `&hasta=${hasta}`
       if (cliId) qs += `&cli_id=${cliId}`
-      const data = await api('GET', '/ventas' + qs)
+      const [data, cajaRes, cfgData] = await Promise.all([
+        api('GET', '/ventas' + qs),
+        api('GET', '/caja/check/' + (sucSesion || '')).catch(() => ({ abierta: false })),
+        api('GET', '/config').catch(() => ({})),
+      ])
       setVentas(Array.isArray(data) ? data : [])
+      setCajaAbierta(cajaRes?.abierta || false)
+      setCfg(cfgData)
+      if (cfgData?.tipos_pago) {
+        try { const pm = JSON.parse(cfgData.tipos_pago); setPagosMethods(pm.filter(p => p.activo !== false)) } catch {}
+      }
     } catch { toast('Error cargando ventas', 'err') }
     finally { setLoading(false) }
   }, [sucSesion, getDateRange, cliId])
@@ -351,6 +377,61 @@ export function Ventas() {
   }), [filtered])
 
   if (loading) return <Loader />
+
+  const hoy = new Date().toISOString().substr(0, 10)
+
+  function openCambioPago(venta) {
+    const detalles = venta.pagos_detalle ? (() => { try { return JSON.parse(venta.pagos_detalle) } catch { return [] } })() : []
+    const metodo = detalles.length ? 'mixto' : (venta.pago_principal || venta.pago)
+    setCambioPagoForm({ pago: metodo, pagos_detalle: detalles, pago_principal: venta.pago_principal || venta.pago })
+    setModalCambioPago(venta)
+  }
+
+  async function confirmarCambioPago() {
+    setCambioPagoSaving(true)
+    try {
+      const v = modalCambioPago
+      let pagosDetalle = []
+      if (cambioPagoForm.pago === 'mixto') {
+        pagosDetalle = cambioPagoForm.pagos_detalle || []
+      } else {
+        pagosDetalle = [{ id: cambioPagoForm.pago, monto: v.total - (v.ctacte_monto || 0) }]
+      }
+      await api('PUT', '/ventas/' + v.id + '/cambiar-pago', {
+        pago: cambioPagoForm.pago,
+        pago_principal: cambioPagoForm.pago === 'mixto' ? (cambioPagoForm.pago_principal || cambioPagoForm.pago) : cambioPagoForm.pago,
+        pagos_detalle: JSON.stringify(pagosDetalle),
+        ctacte_monto: v.ctacte_monto || 0,
+        suc_id: v.suc_id || sucSesion,
+      })
+      toast('Método de pago actualizado', 'ok')
+      setModalCambioPago(null)
+      load()
+    } catch(e) { toast(e.message, 'err') }
+    finally { setCambioPagoSaving(false) }
+  }
+
+  async function handleImprimir(venta) {
+    try {
+      const items = await api('GET', '/ventas/' + venta.id + '/items').catch(() => [])
+      const v = { ...venta, items: Array.isArray(items) ? items : [] }
+      const detalles = v.pagos_detalle ? (() => { try { return JSON.parse(v.pagos_detalle) } catch { return [] } })() : []
+      imprimirTicket(v, detalles.length ? detalles : [{ id: v.pago_principal || v.pago, monto: v.total }], cfg)
+    } catch { toast('Error al imprimir', 'err') }
+  }
+
+  async function handleDescargarPDF(venta) {
+    try {
+      const r = await fetch('/api/ventas/' + venta.id + '/comprobante-pdf', {
+        headers: { Authorization: 'Bearer ' + (token || '') }
+      })
+      if (!r.ok) throw new Error('Error')
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = 'venta-' + (venta.numero || venta.id.substr(-8)) + '.pdf'; a.click()
+      URL.revokeObjectURL(url)
+    } catch(e) { toast('Error descargando PDF', 'err') }
+  }
 
   return (
     <div>
@@ -399,7 +480,7 @@ export function Ventas() {
           <table>
             <thead><tr>
               <th>Fecha</th><th>Cliente</th><th>Vendedor</th><th>Método</th>
-              <th style={{ textAlign: 'right' }}>Total</th><th style={{ width: 80 }}></th>
+              <th style={{ textAlign: 'right' }}>Total</th><th style={{ width: 140 }}></th>
             </tr></thead>
             <tbody>
               {paginated.length === 0
@@ -412,10 +493,19 @@ export function Ventas() {
                       {v.cli_nombre || 'Consumidor final'}
                     </td>
                     <td style={{ fontSize: 12, color: 'var(--mu)' }}>{v.vendedor_nombre || '—'}</td>
-                    <td style={{ fontSize: 12 }}>{PAGO_LABELS[v.pago] || v.pago}</td>
+                    <td style={{ fontSize: 12 }}>{PAGO_LABELS[v.pago_principal || v.pago] || v.pago}</td>
                     <td style={{ textAlign: 'right', fontWeight: 700, color: v.anulada ? 'var(--mu)' : 'var(--ok)' }}>{fmt(v.total)}</td>
-                    <td onClick={(e) => e.stopPropagation()}>
-                      {!v.anulada && <button type="button" className="btn btn-icon btn-sm" onClick={() => setDetail({ ...v, _showAnular: true })} title="Anular">🚫</button>}
+                    <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
+                      {v.cobrada && !v.anulada && (
+                        <>
+                          <button type="button" className="btn btn-icon btn-sm" onClick={() => handleImprimir(v)} title="Imprimir comprobante" style={{ fontSize: 14 }}>🖨️</button>
+                          <button type="button" className="btn btn-icon btn-sm" onClick={() => handleDescargarPDF(v)} title="Descargar PDF" style={{ fontSize: 14 }}>📥</button>
+                        </>
+                      )}
+                      {cajaAbierta && v.cobrada && !v.anulada && v.fecha?.substr(0, 10) === hoy && (
+                        <button type="button" className="btn btn-icon btn-sm" onClick={() => openCambioPago(v)} title="Cambiar método de pago" style={{ fontSize: 14, color: 'var(--warn)' }}>🔄</button>
+                      )}
+                      {!v.anulada && <button type="button" className="btn btn-icon btn-sm" onClick={() => setDetail({ ...v, _showAnular: true })} title="Anular" style={{ fontSize: 14 }}>🚫</button>}
                     </td>
                   </tr>
                 ))}
@@ -429,6 +519,55 @@ export function Ventas() {
       <Modal open={!!detail} onClose={() => setDetail(null)} title={`Venta #${detail?.id?.substr(-8)}`} size="lg">
         {detail && <VentaDetail venta={detail} api={api} onRefresh={load} onClose={() => setDetail(null)} showAnularByDefault={detail._showAnular} />}
       </Modal>
+
+      {/* Cambiar Pago Modal */}
+      {modalCambioPago && (
+        <div className="modal-overlay" onClick={() => setModalCambioPago(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <div className="modal-header">
+              <h3>🔄 Cambiar método de pago</h3>
+              <button type="button" onClick={() => setModalCambioPago(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--mu)' }}>×</button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div style={{ background: 'var(--sf)', borderRadius: 8, padding: 12, fontSize: 13 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ color: 'var(--mu)' }}>Venta #</span>
+                  <strong>{modalCambioPago.numero || modalCambioPago.id.substr(-8)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ color: 'var(--mu)' }}>Cliente</span>
+                  <span>{modalCambioPago.cli_nombre || 'Consumidor final'}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                  <span style={{ color: 'var(--mu)' }}>Total</span>
+                  <strong style={{ color: 'var(--ok)' }}>{fmt(modalCambioPago.total)}</strong>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: 'var(--mu)' }}>Pago actual</span>
+                  <span className="badge badge-orange">{PAGO_LABELS[modalCambioPago.pago_principal || modalCambioPago.pago] || modalCambioPago.pago}</span>
+                </div>
+              </div>
+              <div>
+                <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--mu)', marginBottom: 4, textTransform: 'uppercase' }}>Nuevo método de pago</label>
+                <select value={cambioPagoForm.pago} onChange={e => setCambioPagoForm(p => ({ ...p, pago: e.target.value }))} style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1.5px solid var(--bd)', fontSize: 14, background: 'var(--bg)', color: 'var(--tx)' }}>
+                  {pagosMethods.map(pm => (
+                    <option key={pm.id} value={pm.id}>{pm.icono} {pm.nombre}</option>
+                  ))}
+                </select>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--mu)', padding: '8px 12px', background: 'var(--sf)', borderRadius: 6 }}>
+                ⚠️ Solo cambia el método de pago. No modifica total, items ni stock.
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setModalCambioPago(null)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={confirmarCambioPago} disabled={cambioPagoSaving} style={{ background: 'var(--warn)', color: '#000' }}>
+                {cambioPagoSaving ? '⏳' : '💾 Cambiar método de pago'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
