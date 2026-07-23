@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Un Fulano Dev — Sitios web a medida para tu negocio</title>
+<meta name="description" content="Sitios web, tiendas online y sistemas a medida. Sin agencia, sin vueltas. Hablás directo conmigo, un desarrollador de Catamarca.">
+<meta property="og:title" content="Un Fulano Dev — Sitios web a medida">
+<meta property="og:description" content="Sitios web, tiendas online y sistemas a medida para tu negocio. Sin agencia, sin vueltas.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://unfulanodev.com.ar">
+<meta property="og:image" content="https://unfulanodev.com.ar/og.jpg">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 20'><ellipse cx='12' cy='14' rx='7' ry='5.5' fill='%23E85B4F'/><circle cx='4' cy='6' r='3' fill='%23E85B4F'/><circle cx='11' cy='3' r='3' fill='%23E85B4F'/><circle cx='18' cy='6' r='3' fill='%23E85B4F'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Caveat:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #F9F6F0;
+    --bg-alt: #F3EDE4;
+    --card: #FFFFFF;
+    --ink: #2B221C;
+    --ink-soft: #635750;
+    --coral: #E85B4F;
+    --coral-dark: #D94F43;
+    --coral-deep: #C8453B;
+    --mustard: #D9A441;
+    --olive: #5E8C5A;
+    --olive-soft: #7DAA79;
+    --line: rgba(43,34,28,.10);
+    --shadow: rgba(43,34,28,.12);
+    --font-display: 'Baloo 2', sans-serif;
+    --font-body: 'Inter', sans-serif;
+    --font-hand: 'Caveat', cursive;
+    --radius-card: 18px;
+    --radius-btn: 30px;
+    --max-wrap: 1060px;
+  }
+  *,*::before,*::after{box-sizing:border-box; margin:0;}
+  html{scroll-behavior:smooth;}
+  body{background:var(--bg); color:var(--ink); font-family:var(--font-body); line-height:1.6; -webkit-font-smoothing:antialiased;}
+  a{color:inherit;}
+  img,svg{display:block; max-width:100%;}
+  .wrap{max-width:var(--max-wrap); margin:0 auto; padding:0 24px;}
+  h1,h2,h3{text-wrap:balance;}
+  p{text-wrap:pretty;}
+  .paw{width:16px; height:14px; flex-shrink:0;}
+
+  /* ---------- HEADER ---------- */
+  header{position:sticky; top:0; z-index:50; background:rgba(249,246,240,.92); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-bottom:1px solid var(--line);}
+  .navrow{display:flex; align-items:center; justify-content:space-between; padding:16px 0;}
+  .brand{font-family:var(--font-display); font-weight:800; font-size:1.2rem; color:var(--ink); display:flex; align-items:center; gap:8px; text-decoration:none;}
+  .brand .hl{color:var(--coral);}
+  nav.links{display:flex; gap:24px; align-items:center;}
+  nav.links a{font-family:var(--font-display); font-weight:600; font-size:.9rem; color:var(--ink-soft); text-decoration:none; transition:color .2s; position:relative;}
+  nav.links a::after{content:''; position:absolute; bottom:-3px; left:0; width:0; height:2px; background:var(--coral); border-radius:2px; transition:width .25s;}
+  nav.links a:hover{color:var(--coral);}
+  nav.links a:hover::after{width:100%;}
+  .btn-nav{font-family:var(--font-display); font-weight:700; font-size:.88rem; background:var(--coral); color:#fff!important; padding:9px 20px; border-radius:var(--radius-btn); transition:background .2s, transform .15s;}
+  .btn-nav:hover{background:var(--coral-deep)!important; transform:scale(1.03);}
+  .btn-nav::after{display:none!important;}
+  .nav-toggle{display:none; background:none; border:1.5px solid var(--line); border-radius:10px; padding:7px 11px; font-size:1.1rem; cursor:pointer; color:var(--ink); line-height:1;}
+  @media (max-width:700px){
+    nav.links{display:none; position:absolute; top:100%; left:0; right:0; background:var(--bg); flex-direction:column; align-items:flex-start; padding:16px 24px 24px; gap:16px; border-bottom:1px solid var(--line);}
+    nav.links.open{display:flex;}
+    .nav-toggle{display:inline-block;}
+    nav.links a::after{display:none;}
+  }
+
+  /* ---------- HERO ---------- */
+  .hero{padding:76px 0 64px;}
+  .hero-grid{display:grid; grid-template-columns:1.2fr .8fr; gap:48px; align-items:center;}
+  @media (max-width:800px){.hero-grid{grid-template-columns:1fr; gap:36px;}}
+  .hero h1{font-family:var(--font-display); font-weight:800; font-size:clamp(2rem, 5.5vw, 3rem); line-height:1.12; margin-bottom:14px; color:var(--ink);}
+  .hero .sub{font-size:1.08rem; color:var(--ink-soft); margin-bottom:8px; max-width:54ch;}
+  .hero .sub2{font-size:.95rem; color:var(--ink-soft); margin-bottom:28px; font-family:var(--font-hand);}
+  .ctas{display:flex; gap:12px; flex-wrap:wrap;}
+  .btn{font-family:var(--font-display); font-weight:700; font-size:.95rem; padding:14px 28px; border-radius:var(--radius-btn); display:inline-block; text-decoration:none; transition:background .2s, color .2s, transform .15s, box-shadow .2s; border:none; cursor:pointer;}
+  .btn:active{transform:scale(.96);}
+  .btn-primary{background:var(--coral); color:#fff; box-shadow:0 4px 14px rgba(232,91,79,.3);}
+  .btn-primary:hover{background:var(--coral-deep); box-shadow:0 6px 20px rgba(232,91,79,.4);}
+  .btn-secondary{background:transparent; color:var(--ink); border:2px solid var(--ink);}
+  .btn-secondary:hover{background:var(--ink); color:#fff;}
+  .btn-sm{padding:11px 22px; font-size:.88rem;}
+  .hero-art{background:var(--card); border-radius:var(--radius-card); padding:24px; box-shadow:0 16px 44px -16px var(--shadow);}
+  .hero-art svg{width:100%; height:auto;}
+
+  /* ---------- SECTIONS ---------- */
+  .section{padding:72px 0;}
+  .section-alt{background:var(--bg-alt);}
+  .section-title{font-family:var(--font-display); font-weight:700; font-size:clamp(1.5rem, 3.5vw, 2rem); color:var(--ink); margin-bottom:10px;}
+  .section-desc{font-size:1rem; color:var(--ink-soft); max-width:58ch; margin-bottom:36px;}
+
+  /* ---------- PARA QUIEN ---------- */
+  .pq-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:20px;}
+  @media (max-width:860px){.pq-grid{grid-template-columns:1fr; max-width:420px;}}
+  .pq-card{background:var(--card); border-radius:var(--radius-card); padding:28px 24px; display:flex; flex-direction:column; border:1px solid var(--line); transition:transform .25s, box-shadow .25s;}
+  .pq-card:hover{transform:translateY(-4px); box-shadow:0 14px 36px -14px var(--shadow);}
+  .pq-card svg{width:72px; height:72px; margin-bottom:16px;}
+  .pq-card h3{font-family:var(--font-display); font-weight:700; font-size:1.1rem; margin-bottom:8px;}
+  .pq-card p{font-size:.92rem; color:var(--ink-soft); margin-bottom:18px; flex:1;}
+  .pq-card .btn{text-align:center; padding:10px 20px; font-size:.86rem;}
+  .pq-footnote{margin-top:36px; text-align:center;}
+  .pq-footnote p{font-size:.98rem; color:var(--ink-soft);}
+  .pq-footnote a{color:var(--coral); font-weight:600; text-decoration:underline; text-underline-offset:3px;}
+
+  /* ---------- PLANS ---------- */
+  .plans-list{display:flex; flex-direction:column; gap:16px; max-width:640px; margin:0 auto;}
+  .plan{background:var(--card); border-radius:var(--radius-card); padding:24px 28px; display:flex; gap:20px; align-items:flex-start; border:1px solid var(--line); transition:transform .2s, box-shadow .2s;}
+  .plan:hover{transform:translateY(-2px); box-shadow:0 10px 28px -12px var(--shadow);}
+  .plan-icon{width:64px; height:64px; flex-shrink:0;}
+  .plan-info{flex:1;}
+  .plan-head{display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; margin-bottom:4px;}
+  .plan-name{font-family:var(--font-display); font-weight:800; font-size:1.2rem;}
+  .plan-price{font-family:var(--font-display); font-weight:700; font-size:.95rem; color:var(--coral);}
+  .plan-desc{font-size:.9rem; color:var(--ink-soft); margin-bottom:2px;}
+  .plan-rec{font-size:.82rem; color:var(--olive); font-weight:500; margin-bottom:10px;}
+  .plan-includes{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:12px;}
+  .plan-includes span{font-size:.78rem; background:var(--bg-alt); padding:4px 12px; border-radius:20px; color:var(--ink-soft); display:flex; align-items:center; gap:6px;}
+  .plan-includes span .paw{width:12px; height:10px;}
+  .plan .btn{font-size:.86rem; padding:10px 22px; display:inline-block;}
+  .plans-prompt{text-align:center; margin-top:28px;}
+  .plans-prompt p{font-size:.98rem; color:var(--ink-soft); font-family:var(--font-hand);}
+
+  /* ---------- PROCESS ---------- */
+  .process{display:flex; align-items:flex-start; gap:0;}
+  @media (max-width:780px){.process{flex-direction:column; gap:24px;}}
+  .process-step{flex:1; text-align:center; padding:0 16px;}
+  .step-num{font-family:var(--font-hand); font-size:2.2rem; color:var(--mustard); line-height:1; display:block; margin-bottom:4px;}
+  .process-step h3{font-family:var(--font-display); font-weight:700; font-size:1.05rem; margin-bottom:6px;}
+  .process-step p{font-size:.9rem; color:var(--ink-soft); max-width:32ch; margin:0 auto;}
+  .process-arrow{margin-top:32px; flex-shrink:0; color:var(--line); font-size:1.6rem;}
+  @media (max-width:780px){.process-arrow{display:none;}}
+
+  /* ---------- PORTFOLIO ---------- */
+  .port-grid{display:grid; grid-template-columns:repeat(3,1fr); gap:20px;}
+  @media (max-width:860px){.port-grid{grid-template-columns:1fr 1fr;}}
+  @media (max-width:560px){.port-grid{grid-template-columns:1fr;}}
+  .port-card{background:var(--card); border-radius:var(--radius-card); overflow:hidden; border:1px solid var(--line); transition:transform .25s, box-shadow .25s;}
+  .port-card:hover{transform:translateY(-4px); box-shadow:0 14px 36px -14px var(--shadow);}
+  .port-preview{aspect-ratio:4/3; display:flex; align-items:center; justify-content:center; padding:24px; position:relative;}
+  .port-preview svg{width:55%; height:55%;}
+  .port-tag{position:absolute; top:12px; left:12px; font-family:var(--font-display); font-size:.68rem; font-weight:700; padding:4px 12px; border-radius:20px;}
+  .tag-site{background:rgba(94,140,90,.15); color:var(--olive);}
+  .tag-ecom{background:rgba(217,164,65,.15); color:#A87D28;}
+  .tag-sys{background:rgba(43,34,28,.08); color:var(--ink-soft);}
+  .port-info{padding:20px;}
+  .port-info h3{font-family:var(--font-display); font-weight:700; font-size:1.05rem; margin-bottom:4px;}
+  .port-info p{font-size:.86rem; color:var(--ink-soft); margin-bottom:12px;}
+  .port-link{font-family:var(--font-display); font-weight:600; font-size:.85rem; color:var(--coral); text-decoration:none; display:inline-flex; align-items:center; gap:4px; transition:gap .2s;}
+  .port-link:hover{gap:8px;}
+
+  /* ---------- FAQ ---------- */
+  .faq-list{max-width:640px; margin:0 auto; display:flex; flex-direction:column; gap:10px;}
+  .faq-q{background:var(--card); border-radius:14px; border:1px solid var(--line); overflow:hidden;}
+  .faq-q button{width:100%; font-family:var(--font-display); font-weight:600; font-size:.98rem; padding:16px 20px; text-align:left; background:none; border:none; cursor:pointer; color:var(--ink); display:flex; align-items:center; justify-content:space-between; gap:12px;}
+  .faq-q button::after{content:'+'; font-family:var(--font-body); font-size:1.2rem; color:var(--coral); transition:transform .3s; flex-shrink:0;}
+  .faq-q.open button::after{transform:rotate(45deg);}
+  .faq-answer{padding:0 20px 0; max-height:0; overflow:hidden; transition:max-height .35s ease, padding .35s ease;}
+  .faq-answer-inner{padding-bottom:18px; font-size:.9rem; color:var(--ink-soft); line-height:1.65;}
+  .faq-q.open .faq-answer{max-height:300px;}
+
+  /* ---------- CTA ---------- */
+  .cta-section{text-align:center; padding:80px 0;}
+  .cta-section h2{font-family:var(--font-display); font-weight:800; font-size:clamp(1.6rem, 3.5vw, 2.2rem); margin-bottom:12px;}
+  .cta-section p{font-size:1.02rem; color:var(--ink-soft); max-width:48ch; margin:0 auto 28px;}
+  .cta-alt{font-size:.88rem; color:var(--ink-soft); margin-top:16px;}
+  .cta-alt a{color:var(--coral); text-decoration:underline; text-underline-offset:3px;}
+
+  /* ---------- FOOTER ---------- */
+  footer{padding:56px 0 36px; text-align:center; border-top:1px solid var(--line);}
+  .foot-paw{color:var(--coral); margin:0 auto 12px;}
+  .foot-brand{font-family:var(--font-display); font-weight:800; font-size:1rem; margin-bottom:4px;}
+  .foot-loc{font-size:.85rem; color:var(--ink-soft); margin-bottom:16px;}
+  .foot-links{display:flex; gap:20px; justify-content:center; flex-wrap:wrap; margin-bottom:18px;}
+  .foot-links a{font-size:.85rem; text-decoration:none; color:var(--ink-soft); transition:color .2s;}
+  .foot-links a:hover{color:var(--coral);}
+  .foot-demos{font-size:.8rem; color:var(--ink-soft);}
+  .foot-demos a{color:var(--ink); text-decoration:underline; text-underline-offset:2px;}
+  .foot-demos a:hover{color:var(--coral);}
+
+  /* ---------- REVEAL ---------- */
+  .js .reveal{opacity:0; transform:translateY(20px); transition:opacity .6s cubic-bezier(.16,1,.3,1), transform .6s cubic-bezier(.16,1,.3,1);}
+  .js .reveal.revealed{opacity:1; transform:none;}
+  .js .rd1{transition-delay:.1s;}
+  .js .rd2{transition-delay:.2s;}
+  .js .rd3{transition-delay:.3s;}
+
+  /* ---------- REDUCED MOTION ---------- */
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto;}
+    *,*::before,*::after{animation-duration:.01ms!important; transition-duration:.01ms!important;}
+    .js .reveal{opacity:1; transform:none;}
+  }
+</style>
+</head>
+<body>
+
+<svg style="display:none" xmlns="http://www.w3.org/2000/svg">
+  <symbol id="paw" viewBox="0 0 24 20">
+    <ellipse cx="12" cy="14" rx="7" ry="5.5" fill="currentColor"/>
+    <circle cx="4" cy="6" r="3" fill="currentColor"/>
+    <circle cx="11" cy="3" r="3" fill="currentColor"/>
+    <circle cx="18" cy="6" r="3" fill="currentColor"/>
+  </symbol>
+</svg>
+
+<header>
+  <div class="wrap navrow">
+    <a class="brand" href="#"><svg class="paw" style="width:18px;height:16px;color:var(--coral)"><use href="#paw"/></svg> un <span class="hl">fulano</span> dev</a>
+    <button class="nav-toggle" id="navToggle" aria-label="Abrir menú" aria-expanded="false">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="5" x2="15" y2="5"/><line x1="3" y1="9" x2="15" y2="9"/><line x1="3" y1="13" x2="15" y2="13"/></svg>
+    </button>
+    <nav class="links" id="navLinks">
+      <a href="#para-quien">Para quien es</a>
+      <a href="#planes">Planes</a>
+      <a href="#portfolio">Portfolio</a>
+      <a href="#contacto">Contacto</a>
+      <a href="#faq">FAQ</a>
+      <a class="btn-nav" href="https://wa.me/5493517424391" target="_blank" rel="noopener">WhatsApp</a>
+    </nav>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero wrap">
+  <div class="hero-grid">
+    <div>
+      <h1>Tu negocio merece estar online.</h1>
+      <p class="sub">Sitios web, tiendas, sistemas a medida — sin vueltas de agencia.</p>
+      <p class="sub2">Hablamos cinco minutos por WhatsApp y te digo si puedo ayudarte.</p>
+      <div class="ctas">
+        <a class="btn btn-primary" href="https://wa.me/5493517424391?text=Hola!%20Vi%20tu%20web%20y%20quiero%20charlar" target="_blank" rel="noopener">Charlamos</a>
+        <a class="btn btn-secondary" href="#portfolio">Ver trabajos</a>
+      </div>
+    </div>
+    <div class="hero-art">
+      <svg viewBox="0 0 300 220" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="150" cy="208" rx="135" ry="10" fill="#2B221C" opacity=".06"/>
+        <rect x="18" y="138" width="172" height="14" rx="4" fill="#B8956A"/>
+        <rect x="28" y="152" width="8" height="44" rx="3" fill="#8B7355"/>
+        <rect x="174" y="152" width="8" height="44" rx="3" fill="#8B7355"/>
+        <rect x="32" y="146" width="144" height="4" rx="2" fill="#A38056" opacity=".5"/>
+        <rect x="58" y="114" width="100" height="24" rx="4" fill="#D4CFC8"/>
+        <rect x="52" y="112" width="112" height="6" rx="2" fill="#D4CFC8"/>
+        <rect x="64" y="73" width="88" height="41" rx="4" fill="#F9F6F0" stroke="#D4CFC8" stroke-width="2.5"/>
+        <path d="M90 88 Q95 82 100 88 L106 84 Q102 90 108 92" fill="none" stroke="#E85B4F" stroke-width="3" stroke-linecap="round"/>
+        <rect x="226" y="108" width="28" height="8" rx="3" fill="#635750" transform="rotate(-10 240 112)"/>
+        <path d="M228 108 L228 72 L254 80 L254 108" fill="none" stroke="#635750" stroke-width="3" rx="2"/>
+        <ellipse cx="254" cy="72" rx="18" ry="6" fill="#D9A441" opacity=".25" transform="rotate(-10 254 72)"/>
+        <rect x="130" y="126" width="18" height="12" rx="3" fill="#D4CFC8"/>
+        <ellipse cx="45" cy="190" rx="22" ry="13" fill="#2B221C" opacity=".08"/>
+        <ellipse cx="45" cy="186" rx="20" ry="12" fill="#B8956A"/>
+        <circle cx="45" cy="170" r="11" fill="#B8956A"/>
+        <ellipse cx="34" cy="164" rx="6" ry="10" fill="#A38056" transform="rotate(-18 34 164)"/>
+        <ellipse cx="56" cy="164" rx="6" ry="10" fill="#A38056" transform="rotate(18 56 164)"/>
+        <circle cx="49" cy="169" r="2" fill="#2B221C"/>
+        <circle cx="42" cy="169" r="2" fill="#2B221C"/>
+        <path d="M52 175 Q55 178 58 175" fill="none" stroke="#2B221C" stroke-width="1.8" stroke-linecap="round" opacity=".5"/>
+        <path d="M66 184 Q76 174 86 184" fill="none" stroke="#B8956A" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    </div>
+  </div>
+</section>
+
+<!-- PARA QUIEN ES ESTO -->
+<section class="section section-alt" id="para-quien">
+  <div class="wrap">
+    <h2 class="section-title reveal">Esto es para vos si...</h2>
+    <p class="section-desc reveal">No importa si tenes un emprendimiento chico o un negocio armado. Estas tres son las cosas que hago. Si lo tuyo no encaja, igual hablame.</p>
+    <div class="pq-grid">
+      <div class="pq-card reveal">
+        <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="12" y="16" width="48" height="36" rx="5" fill="#D94F43" opacity=".12"/>
+          <rect x="15" y="19" width="42" height="27" rx="3" fill="#F9F6F0" stroke="#D94F43" stroke-width="2"/>
+          <rect x="19" y="24" width="14" height="5" rx="1.5" fill="#E85B4F" opacity=".3"/>
+          <rect x="19" y="32" width="20" height="3" rx="1.5" fill="#E85B4F" opacity=".2"/>
+          <rect x="19" y="37" width="16" height="3" rx="1.5" fill="#E85B4F" opacity=".15"/>
+          <rect x="22" y="46" width="28" height="4" rx="2" fill="#D94F43" opacity=".15"/>
+          <rect x="35" y="50" width="2" height="10" rx="1" fill="#635750"/>
+          <rect x="22" y="56" width="28" height="3" rx="1.5" fill="#D94F43" opacity=".1"/>
+        </svg>
+        <h3>Necesitas una web</h3>
+        <p>Landing o sitio completo para presentar tu negocio. Desde USD 100.</p>
+        <a class="btn btn-secondary btn-sm" href="/demos/inmobiliaria/index.html" target="_blank" rel="noopener">Ver ejemplo</a>
+      </div>
+      <div class="pq-card reveal rd1">
+        <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="14" y="18" width="44" height="36" rx="8" fill="#D9A441" opacity=".12"/>
+          <path d="M18 24 L22 48 L50 48 L54 24 Z" fill="#F9F6F0" stroke="#D9A441" stroke-width="2" stroke-linejoin="round"/>
+          <path d="M22 30 L26 34 L30 28" stroke="#D9A441" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="30" cy="38" r="3" fill="#D9A441" opacity=".3"/>
+          <circle cx="40" cy="38" r="3" fill="#D9A441" opacity=".3"/>
+          <rect x="20" y="46" width="32" height="3" rx="1.5" fill="#D9A441" opacity=".1"/>
+          <path d="M32 20 L36 14 L40 20" stroke="#D9A441" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/>
+        </svg>
+        <h3>Queres vender online</h3>
+        <p>Tienda autoadministrable con catalogo, carrito y cobros.</p>
+        <a class="btn btn-secondary btn-sm" href="/demos/entremimos/index.html" target="_blank" rel="noopener">Ver ejemplo</a>
+      </div>
+      <div class="pq-card reveal rd2">
+        <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <rect x="12" y="14" width="48" height="44" rx="6" fill="#5E8C5A" opacity=".1"/>
+          <rect x="18" y="20" width="36" height="22" rx="3" fill="#F9F6F0" stroke="#5E8C5A" stroke-width="2"/>
+          <rect x="22" y="25" width="12" height="3" rx="1.5" fill="#5E8C5A" opacity=".3"/>
+          <rect x="22" y="31" width="28" height="2" rx="1" fill="#5E8C5A" opacity=".2"/>
+          <rect x="22" y="36" width="22" height="2" rx="1" fill="#5E8C5A" opacity=".15"/>
+          <circle cx="44" cy="28" r="6" fill="#5E8C5A" opacity=".15"/>
+          <circle cx="44" cy="28" r="3" fill="none" stroke="#5E8C5A" stroke-width="1.5"/>
+          <path d="M47 25 L49 27" stroke="#5E8C5A" stroke-width="2" stroke-linecap="round"/>
+          <rect x="18" y="44" width="36" height="4" rx="2" fill="#5E8C5A" opacity=".1"/>
+          <rect x="16" y="50" width="40" height="3" rx="1.5" fill="#5E8C5A" opacity=".08"/>
+        </svg>
+        <h3>Necesitas un sistema</h3>
+        <p>CRM, stock, gestion a tu medida.</p>
+        <a class="btn btn-secondary btn-sm" href="https://app.flexcrm.com.ar" target="_blank" rel="noopener">Ver ejemplo</a>
+      </div>
+    </div>
+    <div class="pq-footnote reveal">
+      <p>¿Y si lo tuyo no entra en ninguna de estas tres? Igual hablame — todo se conversa. <a href="https://wa.me/5493517424391?text=Hola!%20Tengo%20un%20proyecto%20que%20no%20encaja%20en%20las%20tres%20opciones%20de%20tu%20web" target="_blank" rel="noopener">Mandame un WhatsApp</a></p>
+    </div>
+  </div>
+</section>
+
+<!-- PLANES -->
+<section class="section" id="planes">
+  <div class="wrap">
+    <h2 class="section-title reveal" style="text-align:center;">Planes con nombre de perro</h2>
+    <p class="section-desc reveal" style="text-align:center;margin-left:auto;margin-right:auto;">Cada uno lleva el nombre de uno de mis cuatro perros. Tienen personalidades distintas, como los proyectos.</p>
+
+    <div class="plans-list">
+      <div class="plan reveal">
+        <svg class="plan-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="32" cy="54" rx="16" ry="7" fill="#D9A441" opacity=".2"/>
+          <ellipse cx="32" cy="46" rx="16" ry="9" fill="#D9A441"/>
+          <circle cx="32" cy="32" r="12" fill="#D9A441"/>
+          <ellipse cx="22" cy="26" rx="4" ry="7" fill="#D9A441" transform="rotate(-15 22 26)"/>
+          <ellipse cx="42" cy="26" rx="4" ry="7" fill="#D9A441" transform="rotate(15 42 26)"/>
+          <circle cx="27" cy="30" r="2" fill="#2B221C"/>
+          <circle cx="37" cy="30" r="2" fill="#2B221C"/>
+          <path d="M29 36 Q32 39 35 36" fill="none" stroke="#2B221C" stroke-width="2" stroke-linecap="round" opacity=".4"/>
+          <path d="M20 46 L16 52 M48 46 L52 52" stroke="#D9A441" stroke-width="2.5" stroke-linecap="round" opacity=".6"/>
+          <path d="M48 28 L56 24" stroke="#D9A441" stroke-width="3" stroke-linecap="round" opacity=".5"/>
+        </svg>
+        <div class="plan-info">
+          <div class="plan-head">
+            <span class="plan-name">Fulano</span>
+            <span class="plan-price">Desde USD 100</span>
+          </div>
+          <p class="plan-desc">Landing de una pagina, lista en 48 a 72 horas.</p>
+          <p class="plan-rec">Recomendado para: profesionales, pequeños comercios.</p>
+          <div class="plan-includes">
+            <span><svg class="paw"><use href="#paw"/></svg> 1 pagina</span>
+            <span><svg class="paw"><use href="#paw"/></svg> WhatsApp integrado</span>
+            <span><svg class="paw"><use href="#paw"/></svg> Entrega rapida</span>
+          </div>
+          <a class="btn btn-primary btn-sm" href="https://wa.me/5493517424391?text=Hola!%20Quiero%20saber%20mas%20del%20Plan%20Fulano" target="_blank" rel="noopener">Consultar</a>
+        </div>
+      </div>
+
+      <div class="plan reveal rd1">
+        <svg class="plan-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="32" cy="54" rx="18" ry="8" fill="#E85B4F" opacity=".12"/>
+          <ellipse cx="32" cy="46" rx="18" ry="10" fill="#E85B4F"/>
+          <circle cx="32" cy="30" r="14" fill="#E85B4F"/>
+          <ellipse cx="20" cy="24" rx="5" ry="9" fill="#D94F43" transform="rotate(-12 20 24)"/>
+          <ellipse cx="44" cy="24" rx="5" ry="9" fill="#D94F43" transform="rotate(12 44 24)"/>
+          <circle cx="27" cy="28" r="2.2" fill="#2B221C"/>
+          <circle cx="37" cy="28" r="2.2" fill="#2B221C"/>
+          <path d="M28 34 Q32 37 36 34" fill="none" stroke="#2B221C" stroke-width="2" stroke-linecap="round" opacity=".35"/>
+          <path d="M40 46 Q48 40 52 48" stroke="#E85B4F" stroke-width="3" stroke-linecap="round" opacity=".7"/>
+        </svg>
+        <div class="plan-info">
+          <div class="plan-head">
+            <span class="plan-name">Ronco</span>
+            <span class="plan-price">Desde USD 350</span>
+          </div>
+          <p class="plan-desc">Sitio completo con formulario, integracion de WhatsApp y redes, mas un mes de ajustes.</p>
+          <p class="plan-rec">Recomendado para: restaurantes, tiendas de servicio, profesionales que quieren algo completo.</p>
+          <div class="plan-includes">
+            <span><svg class="paw"><use href="#paw"/></svg> Varias secciones</span>
+            <span><svg class="paw"><use href="#paw"/></svg> Formulario de contacto</span>
+            <span><svg class="paw"><use href="#paw"/></svg> Redes integradas</span>
+            <span><svg class="paw"><use href="#paw"/></svg> 1 mes de ajustes</span>
+          </div>
+          <a class="btn btn-primary btn-sm" href="https://wa.me/5493517424391?text=Hola!%20Quiero%20saber%20mas%20del%20Plan%20Ronco" target="_blank" rel="noopener">Consultar</a>
+        </div>
+      </div>
+
+      <div class="plan reveal rd2">
+        <svg class="plan-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="32" cy="54" rx="19" ry="8" fill="#5E8C5A" opacity=".1"/>
+          <ellipse cx="32" cy="45" rx="19" ry="10" fill="#5E8C5A"/>
+          <circle cx="32" cy="28" r="14" fill="#5E8C5A"/>
+          <ellipse cx="20" cy="22" rx="5" ry="9" fill="#7DAA79" transform="rotate(-10 20 22)"/>
+          <ellipse cx="44" cy="22" rx="5" ry="9" fill="#7DAA79" transform="rotate(10 44 22)"/>
+          <circle cx="27" cy="26" r="2.2" fill="#2B221C"/>
+          <circle cx="37" cy="26" r="2.2" fill="#2B221C"/>
+          <path d="M26 32 Q32 36 38 32" fill="none" stroke="#2B221C" stroke-width="2" stroke-linecap="round" opacity=".35"/>
+          <path d="M12 44 Q16 34 22 40 Q18 38 14 42" fill="#7DAA79" opacity=".6"/>
+          <path d="M52 44 Q48 34 42 40 Q46 38 50 42" fill="#7DAA79" opacity=".6"/>
+        </svg>
+        <div class="plan-info">
+          <div class="plan-head">
+            <span class="plan-name">Malvina</span>
+            <span class="plan-price">Desde USD 800</span>
+          </div>
+          <p class="plan-desc">Tienda online o sistema a medida con panel de administracion.</p>
+          <p class="plan-rec">Recomendado para: emprendimientos con catalogo, negocios que necesitan gestion.</p>
+          <div class="plan-includes">
+            <span><svg class="paw"><use href="#paw"/></svg> Panel admin</span>
+            <span><svg class="paw"><use href="#paw"/></svg> Catalogo</span>
+            <span><svg class="paw"><use href="#paw"/></svg> Carrito / cobros</span>
+            <span><svg class="paw"><use href="#paw"/></svg> A tu medida</span>
+          </div>
+          <a class="btn btn-primary btn-sm" href="https://wa.me/5493517424391?text=Hola!%20Quiero%20saber%20mas%20del%20Plan%20Malvina" target="_blank" rel="noopener">Consultar</a>
+        </div>
+      </div>
+
+      <div class="plan reveal rd3">
+        <svg class="plan-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <ellipse cx="32" cy="52" rx="20" ry="9" fill="#635750" opacity=".1"/>
+          <rect x="16" y="38" width="32" height="14" rx="7" fill="#635750" opacity=".2"/>
+          <ellipse cx="32" cy="38" rx="14" ry="10" fill="#635750" opacity=".25"/>
+          <circle cx="32" cy="30" r="10" fill="#635750" opacity=".3"/>
+          <ellipse cx="26" cy="26" rx="3" ry="5" fill="#635750" opacity=".25" transform="rotate(-10 26 26)"/>
+          <ellipse cx="38" cy="26" rx="3" ry="5" fill="#635750" opacity=".25" transform="rotate(10 38 26)"/>
+          <circle cx="28" cy="29" r="1.5" fill="#2B221C" opacity=".5"/>
+          <circle cx="36" cy="29" r="1.5" fill="#2B221C" opacity=".5"/>
+          <path d="M32 44 C32 44 34 42 36 44 C34 46 30 46 28 44 C30 42 32 44 32 44Z" fill="#2B221C" opacity=".25"/>
+          <text x="44" y="16" font-family="Caveat" font-size="16" fill="#635750" opacity=".4">zzz</text>
+        </svg>
+        <div class="plan-info">
+          <div class="plan-head">
+            <span class="plan-name">Tini</span>
+            <span class="plan-price">USD 40 / mes</span>
+          </div>
+          <p class="plan-desc">Mantenimiento mensual: hosting, cambios menores, soporte.</p>
+          <p class="plan-rec">Para los que ya tienen su web y quieren que alguien la mantenga al dia.</p>
+          <div class="plan-includes">
+            <span><svg class="paw"><use href="#paw"/></svg> Hosting incluido</span>
+            <span><svg class="paw"><use href="#paw"/></svg> Cambios menores</span>
+            <span><svg class="paw"><use href="#paw"/></svg> Soporte mensual</span>
+          </div>
+          <a class="btn btn-primary btn-sm" href="https://wa.me/5493517424391?text=Hola!%20Quiero%20saber%20mas%20del%20Plan%20Tini%20de%20mantenimiento" target="_blank" rel="noopener">Consultar</a>
+        </div>
+      </div>
+    </div>
+
+    <div class="plans-prompt reveal">
+      <p>¿No sabes cual elegir? Decime de que es tu negocio y te recomiendo en un mensaje.</p>
+      <a class="btn btn-primary" href="https://wa.me/5493517424391?text=Hola!%20Tengo%20un%20negocio%20de%20...%20y%20no%20se%20que%20plan%20elegir" target="_blank" rel="noopener" style="margin-top:14px;">Me recomendás?</a>
+    </div>
+  </div>
+</section>
+
+<!-- COMO TRABAJO -->
+<section class="section section-alt" id="como-trabajo">
+  <div class="wrap">
+    <h2 class="section-title reveal" style="text-align:center;">Como trabajo</h2>
+    <p class="section-desc reveal" style="text-align:center;margin-left:auto;margin-right:auto;">Tres pasos, nada mas. Sin contratos largos, sin vueltas.</p>
+    <div class="process reveal">
+      <div class="process-step">
+        <span class="step-num">1.</span>
+        <h3>Hablamos</h3>
+        <p>Me contas de tu negocio. Cinco minutos por WhatsApp alcanzan para entender si puedo ayudarte.</p>
+      </div>
+      <span class="process-arrow">
+        <svg width="28" height="18" viewBox="0 0 28 18" fill="none"><path d="M4 9H22M22 9L16 3M22 9L16 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <div class="process-step">
+        <span class="step-num">2.</span>
+        <h3>Lo armo</h3>
+        <p>Preparo el sitio pensado para tu rubro, no una plantilla generica que le vendo a cualquiera.</p>
+      </div>
+      <span class="process-arrow">
+        <svg width="28" height="18" viewBox="0 0 28 18" fill="none"><path d="M4 9H22M22 9L16 3M22 9L16 15" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </span>
+      <div class="process-step">
+        <span class="step-num">3.</span>
+        <h3>Te lo entrego</h3>
+        <p>Online, probado, con ajustes incluidos hasta que quede bien. Nada de "despues lo vemos".</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- PORTFOLIO -->
+<section class="section" id="portfolio">
+  <div class="wrap">
+    <h2 class="section-title reveal" style="text-align:center;">Lo que ya arme</h2>
+    <p class="section-desc reveal" style="text-align:center;margin-left:auto;margin-right:auto;">Cada demo esta pensada para un rubro real. No son plantillas — son sitios que un cliente podria usar mañana.</p>
+    <div class="port-grid">
+
+      <div class="port-card reveal">
+        <div class="port-preview" style="background:#16273A;">
+          <span class="port-tag tag-site">Inmobiliaria</span>
+          <svg viewBox="0 0 100 80" fill="none"><path d="M15 55 L15 35 L50 12 L85 35 L85 55 Z" stroke="#9BC2D9" stroke-width="2.5"/><rect x="40" y="40" width="14" height="15" fill="#9BC2D9" opacity=".2" stroke="#9BC2D9" stroke-width="1.5"/><line x1="15" y1="55" x2="85" y2="55" stroke="#9BC2D9" stroke-width="2.5"/></svg>
+        </div>
+        <div class="port-info">
+          <h3>Vertice Propiedades</h3>
+          <p>Catalogo de propiedades con filtros y contacto directo por WhatsApp.</p>
+          <a class="port-link" href="/demos/inmobiliaria/index.html" target="_blank" rel="noopener">Ver demo <span>→</span></a>
+        </div>
+      </div>
+
+      <div class="port-card reveal rd1">
+        <div class="port-preview" style="background:#140F0A;">
+          <span class="port-tag tag-site">Gastronomia</span>
+          <svg viewBox="0 0 100 80" fill="none"><path d="M30 65 Q25 45 35 35 Q28 48 45 40 Q32 50 38 58 Z" fill="#E8742A" opacity=".8"/><path d="M50 65 Q43 40 55 28 Q48 42 62 35 Q50 48 55 58 Z" fill="#C4451A" opacity=".9"/><path d="M70 65 Q65 48 72 38 Q68 50 78 44 Q70 54 74 62 Z" fill="#E8B86D" opacity=".7"/><rect x="20" y="62" width="60" height="5" rx="1.5" fill="#6B5D52"/></svg>
+        </div>
+        <div class="port-info">
+          <h3>El Fogon del Valle</h3>
+          <p>Parrilla de lena con menu interactivo y reservas por WhatsApp.</p>
+          <a class="port-link" href="/demos/gastronomia/index.html" target="_blank" rel="noopener">Ver demo <span>→</span></a>
+        </div>
+      </div>
+
+      <div class="port-card reveal rd2">
+        <div class="port-preview" style="background:#F5EAE7;">
+          <span class="port-tag tag-ecom">Indumentaria</span>
+          <svg viewBox="0 0 100 80" fill="none"><rect x="25" y="25" width="30" height="42" rx="4" fill="#C97D6E"/><circle cx="40" cy="16" r="10" fill="#DEB8A0"/><ellipse cx="40" cy="8" rx="11" ry="9" fill="#3A2A22"/><rect x="32" y="64" width="7" height="14" rx="2" fill="#2A2022"/><rect x="42" y="64" width="7" height="14" rx="2" fill="#2A2022"/><path d="M60 30 Q52 45 50 70 Q50 74 75 74 Q100 74 100 70 Q98 45 90 30 Z" fill="#E8BDB4"/><circle cx="75" cy="20" r="9" fill="#DEB8A0"/></svg>
+        </div>
+        <div class="port-info">
+          <h3>TRAMA Indumentaria</h3>
+          <p>Lookbook editorial con coleccion filtrable y compra por WhatsApp.</p>
+          <a class="port-link" href="/demos/indumentaria/index.html" target="_blank" rel="noopener">Ver demo <span>→</span></a>
+        </div>
+      </div>
+
+      <div class="port-card reveal">
+        <div class="port-preview" style="background:#FBF2E0;">
+          <span class="port-tag tag-ecom">Tienda online</span>
+          <svg viewBox="0 0 100 80" fill="none"><rect x="22" y="28" width="40" height="28" rx="8" fill="#D4A653" opacity=".25"/><path d="M22 38 Q42 18 62 38" fill="none" stroke="#D4A653" stroke-width="2.5" opacity=".6"/><circle cx="42" cy="42" r="6" fill="#fff" opacity=".5"/><path d="M68 25 C68 21 73 19 75 22 C77 19 82 21 82 25 C82 30 75 33 75 33 C75 33 68 30 68 25Z" fill="#D4A0A0" opacity=".4"/></svg>
+        </div>
+        <div class="port-info">
+          <h3>Entre Mimos</h3>
+          <p>E-commerce de bebes con catalogo y lista de regalos.</p>
+          <a class="port-link" href="/demos/entremimos/index.html" target="_blank" rel="noopener">Ver demo <span>→</span></a>
+        </div>
+      </div>
+
+      <div class="port-card reveal rd1">
+        <div class="port-preview" style="background:#2C2420;">
+          <span class="port-tag tag-sys">Sistema / CRM</span>
+          <svg viewBox="0 0 100 80" fill="none"><rect x="15" y="18" width="70" height="44" rx="4" stroke="#A89B80" stroke-width="2"/><line x1="15" y1="30" x2="85" y2="30" stroke="#A89B80" stroke-width="1.5"/><rect x="22" y="36" width="24" height="4" rx="2" fill="#8BA888" opacity=".5"/><rect x="22" y="44" width="18" height="4" rx="2" fill="#8BA888" opacity=".35"/><rect x="22" y="52" width="28" height="4" rx="2" fill="#8BA888" opacity=".25"/><rect x="56" y="36" width="22" height="20" rx="3" fill="#D9A441" opacity=".25"/><circle cx="67" cy="46" r="5" stroke="#D9A441" stroke-width="1.5" fill="none"/></svg>
+        </div>
+        <div class="port-info">
+          <h3>CRM para retail</h3>
+          <p>Sistema con ventas, stock, caja, cuenta corriente. Multi-sucursal.</p>
+          <a class="port-link" href="https://app.flexcrm.com.ar" target="_blank" rel="noopener">Ver demo <span>→</span></a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- FAQ -->
+<section class="section section-alt" id="faq">
+  <div class="wrap">
+    <h2 class="section-title reveal" style="text-align:center;">Preguntas frecuentes</h2>
+    <p class="section-desc reveal" style="text-align:center;margin-left:auto;margin-right:auto;">Las que siempre me hacen. Si falta alguna, mandame un WhatsApp.</p>
+    <div class="faq-list reveal">
+
+      <div class="faq-q">
+        <button onclick="toggleFAQ(this)">Cuanto cuesta?</button>
+        <div class="faq-answer"><div class="faq-answer-inner">Desde USD 100. Pero cada proyecto es distinto, asi que te doy un numero exacto antes de arrancar. Nada de presupuestos abiertos ni sorpresas.</div></div>
+      </div>
+
+      <div class="faq-q">
+        <button onclick="toggleFAQ(this)">Necesito saber de tecnologia?</button>
+        <div class="faq-answer"><div class="faq-answer-inner">Para nada. Vos te ocupas del negocio, yo de la web. Te explico todo en criollo, sin palabras raras. Si algo no se entiende, la culpa es mia, no tuya.</div></div>
+      </div>
+
+      <div class="faq-q">
+        <button onclick="toggleFAQ(this)">Y si quiero cambios despues?</button>
+        <div class="faq-answer"><div class="faq-answer-inner">Si tenes el Plan Tini, los cambios chicos entran en la cuota mensual. Si no, te cotizo el cambio suelto. Siempre te aviso antes de hacer cualquier cosa que implique costo. No me gusta sorprender con la factura.</div></div>
+      </div>
+
+      <div class="faq-q">
+        <button onclick="toggleFAQ(this)">Como empezamos?</button>
+        <div class="faq-answer"><div class="faq-answer-inner">Me escribis por WhatsApp, charlamos cinco minutos, y si veo que puedo ayudarte te paso un presupuesto. Si te va bien, arrancamos. La mitad al inicio, la mitad cuando te entrego el sitio funcionando.</div></div>
+      </div>
+
+      <div class="faq-q">
+        <button onclick="toggleFAQ(this)">Que necesitas de mi?</button>
+        <div class="faq-answer"><div class="faq-answer-inner">Tu WhatsApp, fotos de tu negocio (o lo que quieras mostrar), y una charla de cinco minutos. Nada de llenar formularios eternos ni adjuntar documentos. Simple.</div></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- FORMULARIO CONTACTO -->
+<section class="section section-alt" id="contacto">
+  <div class="wrap">
+    <h2 class="section-title reveal" style="text-align:center;">Dejame tu consulta</h2>
+    <p class="section-desc reveal" style="text-align:center;margin-left:auto;margin-right:auto;">Completá y te respondo en menos de 24 horas. Sin formularios eternos.</p>
+    <form action="https://app.flexcrm.com.ar/api/landing/lead" method="POST" class="reveal" style="max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:14px;">
+      <input type="hidden" name="pagina" value="unfulanodev" />
+      <input type="text" name="nombre" required placeholder="Tu nombre *" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:none;transition:border .2s;" />
+      <input type="email" name="email" placeholder="tu@email.com" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:none;transition:border .2s;" />
+      <input type="tel" name="telefono" placeholder="Tu WhatsApp o teléfono" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:none;transition:border .2s;" />
+      <textarea name="mensaje" required rows="4" placeholder="Contame de qué es tu negocio y qué necesitás *" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:none;resize:vertical;transition:border .2s;"></textarea>
+      <button type="submit" class="btn btn-primary" style="width:100%;text-align:center;">Enviar consulta</button>
+      <p style="font-size:.8rem;color:var(--ink-soft);text-align:center;">O por WhatsApp al <a href="https://wa.me/5493517424391" target="_blank" rel="noopener" style="color:var(--coral);font-weight:600;">+54 9 351 742-4391</a></p>
+    </form>
+  </div>
+</section>
+
+<!-- CTA FINAL -->
+<section class="section">
+  <div class="wrap cta-section">
+    <h2 class="reveal">Charlamos sin compromiso</h2>
+    <p class="reveal">No tengo equipo de ventas ni te voy a llamar veinte veces. Me escribis, vemos si sirvo, y si no, todo bien.</p>
+    <div class="ctas reveal" style="justify-content:center;">
+      <a class="btn btn-primary" href="https://wa.me/5493517424391?text=Hola!%20Llegue%20a%20tu%20web%20y%20quiero%20charlar" target="_blank" rel="noopener">Escribime por WhatsApp</a>
+    </div>
+    <p class="cta-alt reveal">O mandame un mail a <a href="mailto:contacto@unfulanodev.com.ar">contacto@unfulanodev.com.ar</a></p>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="wrap">
+    <svg class="paw foot-paw" style="width:24px;height:20px;"><use href="#paw"/></svg>
+    <p class="foot-brand">un fulano dev</p>
+    <p class="foot-loc">Catamarca, Argentina</p>
+    <div class="foot-links">
+      <a href="https://wa.me/5493517424391" target="_blank" rel="noopener">WhatsApp</a>
+      <a href="mailto:contacto@unfulanodev.com.ar">contacto@unfulanodev.com.ar</a>
+      <a href="https://flexcrm.com.ar" target="_blank" rel="noopener">FlexCRM</a>
+      <a href="https://app.flexcrm.com.ar" target="_blank" rel="noopener">Acceso Clientes</a>
+    </div>
+    <p class="foot-demos">© 2026 un fulano dev · Todos los sitios del portfolio son demos con contenido de ejemplo.</p>
+  </div>
+</footer>
+
+<script>
+  document.documentElement.classList.add('js');
+
+  var navToggle = document.getElementById('navToggle');
+  var navLinks = document.getElementById('navLinks');
+  navToggle.addEventListener('click', function(e){
+    e.stopPropagation();
+    var open = navLinks.classList.toggle('open');
+    navToggle.setAttribute('aria-expanded', open);
+  });
+  document.addEventListener('click', function(e){
+    if (!e.target.closest('header') && navLinks.classList.contains('open')){
+      navLinks.classList.remove('open');
+      navToggle.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  var faqs = document.querySelectorAll('.faq-q');
+  function toggleFAQ(btn){
+    var parent = btn.closest('.faq-q');
+    var isOpen = parent.classList.contains('open');
+    faqs.forEach(function(f){ f.classList.remove('open'); });
+    if (!isOpen) parent.classList.add('open');
+  }
+
+  var reveals = document.querySelectorAll('.reveal');
+  var observer = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      if (entry.isIntersecting){
+        entry.target.classList.add('revealed');
+        observer.unobserve(entry.target);
+      }
+    });
+  }, {threshold:0.1, rootMargin:'0px 0px -40px 0px'});
+  reveals.forEach(function(el){ observer.observe(el); });
+</script>
+</body>
+</html>

@@ -3,408 +3,250 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FlexCRM — El CRM que crece con tu negocio | unfulanodev.com.ar</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<title>FlexCRM — El CRM multi-rubro para tu negocio</title>
+<meta name="description" content="FlexCRM: ventas, stock, caja, clientes. Multi-sucursal, multi-rubro. Probá gratis.">
+<meta property="og:title" content="FlexCRM — CRM multi-rubro">
+<meta property="og:description" content="Ventas, caja, stock y clientes en un solo lugar. Pensado para el retail argentino.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://flexcrm.com.ar">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='4' y='6' width='24' height='20' rx='4' fill='%236366f1'/><rect x='10' y='12' width='12' height='3' rx='1' fill='white' opacity='0.6'/><rect x='10' y='17' width='8' height='2' rx='1' fill='white' opacity='0.4'/></svg>">
 <style>
-:root{
-  --ink:#0a0a0f;--white:#fafafa;--ac:#6366f1;--ac2:#f97316;
-  --gray:#64748b;--light:#f1f5f9;--card:#fff;
-  --shadow:0 4px 24px rgba(0,0,0,.08);
+:root {
+  --ink: #0f172a; --white: #f8fafc; --ac: #6366f1; --ac2: #f97316;
+  --gray: #64748b; --light: #f1f5f9; --card: #fff;
+  --shadow: 0 4px 24px rgba(0,0,0,.08); --radius: 12px;
+  --font: system-ui, -apple-system, sans-serif;
 }
-*{margin:0;padding:0;box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{font-family:'Sora',sans-serif;color:var(--ink);background:var(--white);overflow-x:hidden}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { font-family: var(--font); color: var(--ink); background: var(--white); -webkit-font-smoothing: antialiased; }
+a { color: inherit; text-decoration: none; }
+.wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px; }
+h1, h2, h3 { text-wrap: balance; }
+.btn { display: inline-block; padding: 14px 32px; border-radius: 10px; font-weight: 700; font-size: 15px; transition: all .2s; cursor: pointer; border: none; }
+.btn-primary { background: var(--ac); color: #fff; }
+.btn-primary:hover { background: #4f46e5; transform: translateY(-1px); box-shadow: 0 8px 24px rgba(99,102,241,.3); }
+.btn-secondary { background: var(--ink); color: #fff; }
+.btn-secondary:hover { background: #1e293b; transform: translateY(-1px); }
 
 /* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;backdrop-filter:blur(12px);background:rgba(250,250,250,.85);border-bottom:1px solid rgba(0,0,0,.06);padding:0 40px;height:64px;display:flex;align-items:center;justify-content:space-between}
-.nav-logo{font-weight:800;font-size:20px;letter-spacing:-.5px}
-.nav-logo span{color:var(--ac)}
-.nav-links{display:flex;align-items:center;gap:32px;font-size:14px}
-.nav-links a{text-decoration:none;color:var(--gray);transition:color .2s}
-.nav-links a:hover{color:var(--ink)}
-.nav-cta{background:var(--ink);color:#fff;padding:10px 22px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px;transition:all .2s}
-.nav-cta:hover{background:var(--ac);transform:translateY(-1px)}
+nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; backdrop-filter: blur(12px); background: rgba(248,250,252,.9); border-bottom: 1px solid rgba(0,0,0,.06); height: 64px; display: flex; align-items: center; }
+.nav-row { display: flex; align-items: center; justify-content: space-between; width: 100%; }
+.nav-logo { font-weight: 800; font-size: 20px; color: var(--ink); }
+.nav-logo span { color: var(--ac); }
+.nav-links { display: flex; gap: 28px; font-size: 14px; align-items: center; }
+.nav-links a { color: var(--gray); transition: color .2s; }
+.nav-links a:hover { color: var(--ink); }
+.nav-btn { background: var(--ac); color: #fff !important; padding: 8px 20px; border-radius: 8px; font-weight: 600; }
+@media (max-width: 640px) { .nav-links { gap: 16px; font-size: 13px; } .nav-links a.hide-mob { display: none; } }
 
 /* HERO */
-.hero{min-height:100vh;display:flex;align-items:center;padding:100px 40px 60px;position:relative;overflow:hidden}
-.hero-bg{position:absolute;inset:0;z-index:0}
-.hero-bg::before{content:'';position:absolute;width:600px;height:600px;border-radius:50%;background:radial-gradient(circle,rgba(99,102,241,.12) 0%,transparent 70%);right:-100px;top:-100px}
-.hero-bg::after{content:'';position:absolute;width:400px;height:400px;border-radius:50%;background:radial-gradient(circle,rgba(249,115,22,.08) 0%,transparent 70%);left:10%;bottom:10%}
-.hero-inner{max-width:1100px;margin:0 auto;width:100%;position:relative;z-index:1;display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center}
-.hero-tag{display:inline-flex;align-items:center;gap:8px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:40px;padding:6px 16px;font-size:12px;font-weight:600;color:var(--ac);text-transform:uppercase;letter-spacing:.5px;margin-bottom:24px}
-.hero-tag::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--ac)}
-h1{font-size:clamp(38px,5vw,62px);font-weight:800;line-height:1.08;letter-spacing:-2px;margin-bottom:24px}
-h1 .accent{color:var(--ac)}
-h1 .accent2{color:var(--ac2)}
-.hero-sub{font-size:18px;color:var(--gray);line-height:1.7;margin-bottom:40px;font-weight:300}
-.hero-btns{display:flex;gap:16px;flex-wrap:wrap}
-.btn-primary{background:var(--ink);color:#fff;padding:16px 32px;border-radius:10px;text-decoration:none;font-weight:700;font-size:16px;transition:all .25s;display:inline-flex;align-items:center;gap:8px}
-.btn-primary:hover{background:var(--ac);transform:translateY(-2px);box-shadow:0 8px 24px rgba(99,102,241,.3)}
-.btn-secondary{background:transparent;color:var(--ink);padding:16px 32px;border-radius:10px;text-decoration:none;font-weight:600;font-size:16px;border:2px solid #e2e8f0;transition:all .25s}
-.btn-secondary:hover{border-color:var(--ac);color:var(--ac)}
+.hero { min-height: 100vh; display: flex; align-items: center; padding: 100px 0 60px; }
+.hero-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; align-items: center; }
+@media (max-width: 800px) { .hero-grid { grid-template-columns: 1fr; gap: 40px; } }
+.hero h1 { font-size: clamp(2rem, 4.5vw, 3rem); line-height: 1.1; margin-bottom: 16px; }
+.hero h1 span { color: var(--ac2); }
+.hero p { font-size: 1.1rem; color: var(--gray); line-height: 1.7; margin-bottom: 28px; max-width: 48ch; }
+.hero-btns { display: flex; gap: 12px; flex-wrap: wrap; }
+.hero-mock { background: var(--card); border-radius: var(--radius); padding: 28px; box-shadow: var(--shadow); border: 1px solid rgba(0,0,0,.06); }
+.mock-bar { display: flex; align-items: center; gap: 6px; margin-bottom: 20px; }
+.mock-bar .dot { width: 10px; height: 10px; border-radius: 50%; }
+.mock-bar .dot.r { background: #ef4444; } .mock-bar .dot.y { background: #f59e0b; } .mock-bar .dot.g { background: #22c55e; }
+.mock-bar span { margin-left: 8px; font-size: 12px; color: var(--gray); }
+.mock-kpi { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+.mock-kpi div { background: var(--light); padding: 14px; border-radius: 8px; }
+.mock-kpi .label { font-size: 11px; color: var(--gray); margin-bottom: 2px; }
+.mock-kpi .val { font-size: 16px; font-weight: 700; }
+.mock-kpi .val.g { color: #22c55e; } .mock-kpi .val.p { color: var(--ac); } .mock-kpi .val.o { color: var(--ac2); }
+.mock-chart { display: flex; gap: 8px; align-items: flex-end; height: 80px; }
+.mock-chart .bar { flex: 1; background: var(--ac); border-radius: 4px 4px 0 0; opacity: .5; min-width: 8px; }
+.mock-chart .bar.hi { opacity: .9; background: var(--ac2); }
 
-/* HERO MOCKUP */
-.hero-mockup{position:relative}
-.mockup-window{background:var(--ink);border-radius:16px;padding:0;overflow:hidden;box-shadow:0 32px 80px rgba(0,0,0,.25);transform:perspective(1000px) rotateY(-8deg) rotateX(2deg)}
-.mockup-bar{background:#1e293b;padding:12px 16px;display:flex;align-items:center;gap:8px}
-.dot{width:10px;height:10px;border-radius:50%}
-.dot.r{background:#ff5f57}.dot.y{background:#ffbd2e}.dot.g{background:#28ca41}
-.mockup-content{padding:20px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.mc{background:#1e293b;border-radius:8px;padding:14px;border:1px solid #334155}
-.mc-label{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;font-family:'JetBrains Mono',monospace}
-.mc-val{font-size:22px;font-weight:800;color:#f1f5f9}
-.mc-val.g{color:#4ade80}.mc-val.p{color:#818cf8}.mc-val.o{color:#fb923c}
-.mockup-chart{grid-column:1/-1;background:#1e293b;border-radius:8px;padding:14px;border:1px solid #334155}
-.bars{display:flex;align-items:flex-end;gap:6px;height:60px;margin-top:8px}
-.bar{flex:1;border-radius:4px 4px 0 0;background:#334155;transition:height .5s}
-.bar.hi{background:#6366f1;opacity:.9}
-.bar.mid{background:#818cf8;opacity:.7}
-
-/* STATS BAR */
-.stats-bar{background:var(--ink);color:#fff;padding:32px 40px}
-.stats-inner{max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:24px}
-.stat{text-align:center}
-.stat-n{font-size:36px;font-weight:800;color:var(--ac);font-family:'JetBrains Mono',monospace}
-.stat-l{font-size:13px;color:#94a3b8;margin-top:4px}
+/* SECTIONS */
+.sec { padding: 80px 0; }
+.sec-alt { background: var(--light); }
+.sec h2 { font-size: clamp(1.5rem, 3vw, 2rem); margin-bottom: 10px; text-align: center; }
+.sec > .wrap > p { font-size: 1.05rem; color: var(--gray); text-align: center; max-width: 60ch; margin: 0 auto 48px; }
 
 /* FEATURES */
-.section{padding:100px 40px}
-.section-inner{max-width:1100px;margin:0 auto}
-.section-tag{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--ac);margin-bottom:12px}
-.section-title{font-size:clamp(28px,3.5vw,44px);font-weight:800;letter-spacing:-1.5px;margin-bottom:16px}
-.section-sub{font-size:17px;color:var(--gray);max-width:560px;line-height:1.7;margin-bottom:56px}
-.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px}
-.feat{background:var(--card);border:1px solid #e2e8f0;border-radius:16px;padding:28px;transition:all .3s;cursor:default}
-.feat:hover{transform:translateY(-4px);box-shadow:0 16px 40px rgba(0,0,0,.08);border-color:#c7d2fe}
-.feat-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px}
-.feat-icon.a{background:#ede9fe}.feat-icon.b{background:#fef3c7}.feat-icon.c{background:#dcfce7}
-.feat-icon.d{background:#fce7f3}.feat-icon.e{background:#e0f2fe}.feat-icon.f{background:#fff7ed}
-.feat h3{font-size:16px;font-weight:700;margin-bottom:8px;letter-spacing:-.3px}
-.feat p{font-size:14px;color:var(--gray);line-height:1.65}
-
-/* MODULES */
-.modules-section{background:var(--light);padding:80px 40px}
-.modules-inner{max-width:1100px;margin:0 auto}
-.mods-grid{display:flex;flex-wrap:wrap;gap:10px;margin-top:32px}
-.mod-chip{background:#fff;border:1px solid #e2e8f0;border-radius:40px;padding:10px 20px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px;transition:all .2s;cursor:default}
-.mod-chip:hover{background:var(--ink);color:#fff;border-color:var(--ink)}
+.feat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+.feat { background: var(--card); border-radius: var(--radius); padding: 28px; border: 1px solid rgba(0,0,0,.06); transition: transform .2s, box-shadow .2s; }
+.feat:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.feat .icon { font-size: 32px; margin-bottom: 12px; }
+.feat h3 { font-size: 1.05rem; margin-bottom: 6px; }
+.feat p { font-size: .92rem; color: var(--gray); line-height: 1.6; }
 
 /* PLANS */
-.plans-section{padding:100px 40px}
-.plans-inner{max-width:1100px;margin:0 auto}
-.plans-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:48px}
-.plan{background:var(--card);border:2px solid #e2e8f0;border-radius:20px;padding:32px;position:relative;transition:all .3s}
-.plan.popular{border-color:var(--ac);transform:scale(1.03)}
-.plan-badge{position:absolute;top:-14px;left:50%;transform:translateX(-50%);background:var(--ac);color:#fff;padding:4px 18px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
-.plan-name{font-size:20px;font-weight:800;margin-bottom:4px}
-.plan-desc{font-size:13px;color:var(--gray);margin-bottom:20px}
-.plan-price{font-size:40px;font-weight:800;font-family:'JetBrains Mono',monospace;letter-spacing:-1px}
-.plan-price span{font-size:14px;font-weight:400;color:var(--gray);font-family:'Sora',sans-serif}
-.plan-features{margin:20px 0;list-style:none;display:flex;flex-direction:column;gap:10px}
-.plan-features li{display:flex;align-items:center;gap:10px;font-size:14px}
-.plan-features li::before{content:'✓';color:var(--ac);font-weight:800;flex-shrink:0}
-.plan-cta{width:100%;padding:14px;border-radius:10px;border:none;font-size:15px;font-weight:700;cursor:pointer;transition:all .2s;font-family:'Sora',sans-serif;text-decoration:none;display:block;text-align:center}
-.plan.popular .plan-cta{background:var(--ac);color:#fff}
-.plan.popular .plan-cta:hover{background:#4f46e5}
-.plan:not(.popular) .plan-cta{background:var(--ink);color:#fff}
-.plan:not(.popular) .plan-cta:hover{background:var(--ac)}
+.plans-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; max-width: 900px; margin: 0 auto; }
+.plan { background: var(--card); border-radius: var(--radius); padding: 32px 28px; border: 1px solid rgba(0,0,0,.06); text-align: center; transition: transform .2s; }
+.plan:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+.plan.popular { border: 2px solid var(--ac2); position: relative; }
+.plan.popular::before { content: 'Más elegido'; position: absolute; top: -12px; left: 50%; transform: translateX(-50%); background: var(--ac2); color: #fff; padding: 3px 16px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+.plan h3 { font-size: 1.2rem; margin-bottom: 4px; }
+.plan .price { font-size: 2.2rem; font-weight: 800; margin: 12px 0 4px; }
+.plan .price span { font-size: .9rem; font-weight: 400; color: var(--gray); }
+.plan .period { font-size: .8rem; color: var(--gray); margin-bottom: 20px; }
+.plan ul { text-align: left; margin-bottom: 24px; font-size: .9rem; color: var(--gray); line-height: 2; }
+.plan ul li::before { content: '✓ '; color: #22c55e; font-weight: 700; }
 
-/* CHAT SECTION */
-.chat-section{background:var(--ink);color:#fff;padding:100px 40px;position:relative;overflow:hidden}
-.chat-section::before{content:'';position:absolute;width:500px;height:500px;border-radius:50%;background:radial-gradient(circle,rgba(99,102,241,.2) 0%,transparent 70%);right:-100px;bottom:-100px}
-.chat-inner{max-width:1100px;margin:0 auto;display:grid;grid-template-columns:1fr 1fr;gap:60px;align-items:center;position:relative;z-index:1}
-.chat-demo{background:#1e293b;border-radius:16px;padding:20px;border:1px solid #334155}
-.chat-msg{display:flex;gap:10px;margin-bottom:14px}
-.chat-av{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0}
-.chat-av.a{background:#6366f1}.chat-av.b{background:#f97316}.chat-av.c{background:#22c55e}
-.chat-bubble{background:#334155;border-radius:0 10px 10px 10px;padding:10px 14px;max-width:240px}
-.chat-bubble p{font-size:13px;color:#e2e8f0;line-height:1.5}
-.chat-bubble .meta{font-size:10px;color:#64748b;margin-top:4px;font-family:'JetBrains Mono',monospace}
-.chat-msg.me{flex-direction:row-reverse}
-.chat-msg.me .chat-bubble{background:#4f46e5;border-radius:10px 0 10px 10px}
-
-/* CTA */
-.cta-section{padding:100px 40px;text-align:center;position:relative;overflow:hidden}
-.cta-section::before{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at center,rgba(99,102,241,.06) 0%,transparent 70%)}
-.cta-inner{max-width:700px;margin:0 auto;position:relative;z-index:1}
-.cta-section h2{font-size:clamp(32px,4vw,52px);font-weight:800;letter-spacing:-2px;margin-bottom:20px}
-.cta-section p{font-size:18px;color:var(--gray);margin-bottom:40px;font-weight:300}
+/* FORM */
+.form-section { padding: 60px 0; }
+.contact-form { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.contact-form input, .contact-form textarea, .contact-form select {
+  padding: 14px 18px; border-radius: 10px; border: 1.5px solid rgba(0,0,0,.1); font-size: .95rem;
+  font-family: inherit; background: var(--card); color: var(--ink); outline: none; transition: border .2s;
+}
+.contact-form input:focus, .contact-form textarea:focus { border-color: var(--ac); }
+.contact-form textarea { resize: vertical; min-height: 100px; }
 
 /* FOOTER */
-footer{background:var(--ink);color:#94a3b8;padding:40px;font-size:13px}
-.footer-inner{max-width:1100px;margin:0 auto;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
-footer a{color:#94a3b8;text-decoration:none;transition:color .2s}
-footer a:hover{color:#fff}
-.footer-logo{color:#fff;font-weight:800;font-size:16px}
-.footer-logo span{color:var(--ac)}
-
-/* RESPONSIVE */
-@media(max-width:900px){
-  .hero-inner,.chat-inner{grid-template-columns:1fr}
-  .hero-mockup{display:none}
-  .features-grid{grid-template-columns:1fr 1fr}
-  .plans-grid{grid-template-columns:1fr}
-  .plan.popular{transform:none}
-  nav .nav-links{display:none}
-}
-@media(max-width:600px){
-  .features-grid{grid-template-columns:1fr}
-  nav{padding:0 20px}
-  .hero,.section,.plans-section,.cta-section{padding:80px 20px}
-  .stats-bar{padding:32px 20px}
-  .stats-inner{justify-content:center;gap:32px}
-}
-
-/* ANIMATIONS */
-@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
-.hero-mockup{animation:float 4s ease-in-out infinite}
-@keyframes fadeUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-.hero-tag{animation:fadeUp .5s .1s both}
-h1{animation:fadeUp .5s .2s both}
-.hero-sub{animation:fadeUp .5s .3s both}
-.hero-btns{animation:fadeUp .5s .4s both}
+footer { padding: 40px 0; border-top: 1px solid rgba(0,0,0,.06); text-align: center; font-size: .85rem; color: var(--gray); }
+footer a { color: var(--ac); } footer a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
 
-<nav>
-  <div class="nav-logo">Flex<span>CRM</span></div>
+<nav><div class="wrap nav-row">
+  <a class="nav-logo" href="#">Flex<span>CRM</span></a>
   <div class="nav-links">
-    <a href="#features">Funciones</a>
-    <a href="#modules">Módulos</a>
+    <a href="#features" class="hide-mob">Funcionalidades</a>
     <a href="#plans">Planes</a>
     <a href="#contacto">Contacto</a>
+    <a class="nav-btn" href="https://app.flexcrm.com.ar">Ingresar</a>
   </div>
-</nav>
+</div></nav>
 
 <!-- HERO -->
-<section class="hero">
-  <div class="hero-bg"></div>
-  <div class="hero-inner">
-    <div>
-      <div class="hero-tag">SaaS · Multi-sucursal · Argentina</div>
-      <h1>El CRM que <span class="accent">crece</span> con tu <span class="accent2">negocio</span></h1>
-      <p class="hero-sub">Ventas, caja, stock, clientes y más — en un solo lugar. Sin complicaciones, sin límites artificiales. Pensado para el retail argentino.</p>
-      <div class="hero-btns">
-        <a href="#plans" class="btn-primary">Ver planes →</a>
-        <a href="#plans" class="btn-secondary">Ver planes</a>
-      </div>
-    </div>
-    <div class="hero-mockup">
-      <div class="mockup-window">
-        <div class="mockup-bar">
-          <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
-          <span style="margin-left:8px;font-size:11px;color:#64748b;font-family:'JetBrains Mono',monospace">unfulanodev.com.ar</span>
-        </div>
-        <div class="mockup-content">
-          <div class="mc"><div class="mc-label">Ventas hoy</div><div class="mc-val g">$84.200</div></div>
-          <div class="mc"><div class="mc-label">Clientes</div><div class="mc-val p">1.243</div></div>
-          <div class="mc"><div class="mc-label">Caja</div><div class="mc-val o">Abierta</div></div>
-          <div class="mockup-chart">
-            <div class="mc-label" style="color:#64748b">Últimos 7 días</div>
-            <div class="bars">
-              <div class="bar" style="height:40%"></div>
-              <div class="bar mid" style="height:60%"></div>
-              <div class="bar" style="height:35%"></div>
-              <div class="bar hi" style="height:80%"></div>
-              <div class="bar mid" style="height:55%"></div>
-              <div class="bar hi" style="height:90%"></div>
-              <div class="bar hi" style="height:75%"></div>
-            </div>
-          </div>
-        </div>
-      </div>
+<section class="hero"><div class="wrap hero-grid">
+  <div>
+    <h1>El CRM que <span>crece</span> con tu negocio</h1>
+    <p>Ventas, caja, stock, clientes, cuenta corriente. Multi-sucursal, multi-rubro. Sin límites artificiales. Todo en un solo lugar.</p>
+    <div class="hero-btns">
+      <a href="#plans" class="btn btn-primary">Ver planes</a>
+      <a href="https://app.flexcrm.com.ar" class="btn btn-secondary">Probar gratis</a>
     </div>
   </div>
-</section>
-
-<!-- STATS -->
-<div class="stats-bar">
-  <div class="stats-inner">
-    <div class="stat"><div class="stat-n">20+</div><div class="stat-l">módulos incluidos</div></div>
-    <div class="stat"><div class="stat-n">∞</div><div class="stat-l">productos y clientes</div></div>
-    <div class="stat"><div class="stat-n">multi</div><div class="stat-l">sucursal desde el día 1</div></div>
-    <div class="stat"><div class="stat-n">100%</div><div class="stat-l">datos propios, sin lock-in</div></div>
+  <div class="hero-mock">
+    <div class="mock-bar">
+      <div class="dot r"></div><div class="dot y"></div><div class="dot g"></div>
+      <span>app.flexcrm.com.ar</span>
+    </div>
+    <div class="mock-kpi">
+      <div><div class="label">Ventas hoy</div><div class="val g">$84.200</div></div>
+      <div><div class="label">Clientes</div><div class="val p">1.243</div></div>
+      <div><div class="label">Productos</div><div class="val o">458</div></div>
+      <div><div class="label">Caja</div><div class="val" style="color:#22c55e">Abierta</div></div>
+    </div>
+    <div class="mock-chart">
+      <div class="bar" style="height:40%"></div><div class="bar mid" style="height:55%"></div><div class="bar" style="height:35%"></div><div class="bar hi" style="height:80%"></div><div class="bar mid" style="height:60%"></div><div class="bar hi" style="height:90%"></div><div class="bar hi" style="height:70%"></div>
+    </div>
   </div>
-</div>
+</div></section>
 
 <!-- FEATURES -->
-<section class="section" id="features">
-  <div class="section-inner">
-    <div class="section-tag">Por qué FlexCRM</div>
-    <h2 class="section-title">Todo lo que tu negocio necesita, sin lo que no</h2>
-    <p class="section-sub">Diseñado para tiendas físicas, mayoristas y servicios. Cada función tiene un propósito real.</p>
-    <div class="features-grid">
-      <div class="feat"><div class="feat-icon a">🛒</div><h3>Punto de Venta</h3><p>POS táctil con búsqueda por código de barras, múltiples métodos de pago y ticket imprimible. Funciona offline.</p></div>
-      <div class="feat"><div class="feat-icon b">💰</div><h3>Caja con arqueo</h3><p>Apertura, movimientos, retiros y cierre con comprobante. Desglose por método de pago. Historial completo.</p></div>
-      <div class="feat"><div class="feat-icon c">👥</div><h3>Clientes y fidelización</h3><p>Ficha completa, historial de compras, cuenta corriente y sistema de puntos configurable por empresa.</p></div>
-      <div class="feat"><div class="feat-icon d">🔄</div><h3>Transferencias de stock</h3><p>Movimiento de mercadería entre sucursales con estado (borrador → enviado → recibido) y trazabilidad.</p></div>
-      <div class="feat"><div class="feat-icon e">📋</div><h3>Presupuestos</h3><p>Cotizaciones con PDF exportable, vencimiento configurable y conversión directa a venta con un click.</p></div>
-      <div class="feat"><div class="feat-icon f">💸</div><h3>Control de gastos</h3><p>Categorías, gastos recurrentes, desglose mensual y alertas de gastos pendientes. Todo en caja si corresponde.</p></div>
-    </div>
+<section class="sec sec-alt" id="features"><div class="wrap">
+  <h2>Todo lo que necesitás para gestionar tu negocio</h2>
+  <p>Desde el punto de venta hasta el reporte mensual. Sin módulos que no usás, sin complicaciones.</p>
+  <div class="feat-grid">
+    <div class="feat"><div class="icon">🛒</div><h3>Punto de Venta</h3><p>Vendé rápido con búsqueda por código, nombre o categoría. Carrito, descuentos y cobro en segundos.</p></div>
+    <div class="feat"><div class="icon">💰</div><h3>Caja</h3><p>Apertura, cierre, movimientos, arqueo. Controlá efectivo, débito, crédito, QR y transferencias.</p></div>
+    <div class="feat"><div class="icon">📦</div><h3>Stock</h3><p>Control por sucursal, variantes (talle, color, sabor), alertas de stock bajo, transferencias.</p></div>
+    <div class="feat"><div class="icon">👥</div><h3>Clientes</h3><p>Ficha completa, historial de compras, cuenta corriente, saldo a favor, fidelización por puntos.</p></div>
+    <div class="feat"><div class="icon">📊</div><h3>Reportes</h3><p>Dashboard con KPIs, ventas por período, ranking de productos, comisiones por vendedor.</p></div>
+    <div class="feat"><div class="icon">🏪</div><h3>Multi-sucursal</h3><p>Manejá varios locales desde un mismo lugar. Stock y caja independientes por sucursal.</p></div>
+    <div class="feat"><div class="icon">🏷️</div><h3>Multi-rubro</h3><p>Indumentaria, panadería, ferretería, farmacia. Se adapta a lo que vendés, no al revés.</p></div>
+    <div class="feat"><div class="icon">📄</div><h3>Facturación ARCA</h3><p>Factura electrónica A, B y C. Integrado con AFIP. Sin sistemas externos.</p></div>
+    <div class="feat"><div class="icon">🔒</div><h3>Seguridad</h3><p>Roles por usuario, 2FA, bloqueo por intentos, cierre de sesión por inactividad.</p></div>
   </div>
-</section>
-
-<!-- CHAT SECTION -->
-<section class="chat-section" id="chat">
-  <div class="chat-inner">
-    <div>
-      <div class="section-tag" style="color:#818cf8">Nuevo</div>
-      <h2 class="section-title" style="color:#fff;letter-spacing:-1.5px">Chat entre sucursales</h2>
-      <p style="font-size:17px;color:#94a3b8;line-height:1.7;margin-bottom:32px">Comunicación interna en tiempo real. El equipo de Rosario le avisa al de Buenos Aires que el envío ya salió. Sin WhatsApp, sin confusiones.</p>
-      <ul style="list-style:none;display:flex;flex-direction:column;gap:12px">
-        <li style="display:flex;gap:12px;align-items:flex-start;font-size:15px;color:#cbd5e1"><span style="color:#6366f1;font-size:18px">✓</span> Mensajes por sucursal o a todos</li>
-        <li style="display:flex;gap:12px;align-items:flex-start;font-size:15px;color:#cbd5e1"><span style="color:#6366f1;font-size:18px">✓</span> Badge con cantidad de mensajes sin leer</li>
-        <li style="display:flex;gap:12px;align-items:flex-start;font-size:15px;color:#cbd5e1"><span style="color:#6366f1;font-size:18px">✓</span> Historial por empresa, privado y seguro</li>
-      </ul>
-    </div>
-    <div class="chat-demo">
-      <div style="font-size:11px;color:#64748b;margin-bottom:14px;font-family:'JetBrains Mono',monospace">CANAL: Todas las sucursales</div>
-      <div class="chat-msg">
-        <div class="chat-av a">MA</div>
-        <div><div class="chat-bubble"><p>Queda poco de talle 6 en vestidos blancos, ¿mandan más?</p><div class="meta">María · Suc. Centro · 10:14</div></div></div>
-      </div>
-      <div class="chat-msg me">
-        <div class="chat-av b">LR</div>
-        <div><div class="chat-bubble"><p>Sí! Transferencia armada, sale mañana 📦</p><div class="meta">Lucas · Suc. Norte · 10:22</div></div></div>
-      </div>
-      <div class="chat-msg">
-        <div class="chat-av c">CA</div>
-        <div><div class="chat-bubble"><p>Copio — agrego 3 talles 8 también al bulto</p><div class="meta">Carmen · Admin · 10:25</div></div></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- MODULES -->
-<section class="modules-section" id="modules">
-  <div class="modules-inner">
-    <div class="section-tag">Módulos</div>
-    <h2 class="section-title" style="letter-spacing:-1.5px">Un sistema completo. Habilitás lo que necesitás.</h2>
-    <p class="section-sub">Cada módulo puede activarse o desactivarse según el rubro y plan de tu empresa.</p>
-    <div class="mods-grid">
-      <div class="mod-chip">🛒 Punto de Venta</div>
-      <div class="mod-chip">💰 Caja y Arqueo</div>
-      <div class="mod-chip">👥 Clientes</div>
-      <div class="mod-chip">📦 Productos y Stock</div>
-      <div class="mod-chip">📋 Ventas</div>
-      <div class="mod-chip">📒 Cuenta Corriente</div>
-      <div class="mod-chip">📄 Presupuestos</div>
-      <div class="mod-chip">🚚 Pedidos Pendientes</div>
-      <div class="mod-chip">🎁 Lista de Regalos</div>
-      <div class="mod-chip">🔄 Transferencias</div>
-      <div class="mod-chip">🏭 Proveedores</div>
-      <div class="mod-chip">💸 Gastos</div>
-      <div class="mod-chip">📈 Reportes</div>
-      <div class="mod-chip">💬 Chat sucursales</div>
-      <div class="mod-chip">🔍 Auditoría</div>
-      <div class="mod-chip">📋 Pipeline Comercial</div>
-      <div class="mod-chip">📄 ARCA Facturación</div>
-      <div class="mod-chip">🛒 Sincronizar Tienda</div>
-      <div class="mod-chip">🔗 Webhooks</div>
-      <div class="mod-chip">👥 RRHH</div>
-    </div>
-  </div>
-</section>
+</div></section>
 
 <!-- PLANS -->
-<section class="plans-section" id="plans">
-  <div class="plans-inner">
-    <div style="text-align:center">
-      <div class="section-tag" style="display:inline-block">Precios</div>
-      <h2 class="section-title" style="letter-spacing:-1.5px">Sin sorpresas. Sin letra chica.</h2>
-      <p class="section-sub" style="margin:0 auto 0">Todos los planes incluyen soporte, actualizaciones y datos ilimitados.</p>
+<section class="sec" id="plans"><div class="wrap">
+  <h2>Planes simples, sin letra chica</h2>
+  <p style="text-align:center;">Elegí el que mejor se adapte a tu negocio. Todos incluyen soporte por WhatsApp.</p>
+  <div class="plans-grid">
+    <div class="plan">
+      <h3>Básico</h3>
+      <div class="price">USD 15<span>/mes</span></div>
+      <div class="period">facturación mensual</div>
+      <ul>
+        <li>Hasta 3 usuarios</li>
+        <li>1 sucursal</li>
+        <li>POS, Caja, Clientes</li>
+        <li>Ventas, Productos, Stock</li>
+        <li>Cuenta Corriente</li>
+        <li>Soporte por WhatsApp</li>
+      </ul>
+      <a href="https://wa.me/5493517424391?text=Hola!%20Quiero%20el%20plan%20Basico%20de%20FlexCRM" target="_blank" rel="noopener" class="btn btn-secondary" style="width:100%;text-align:center">Comenzar</a>
     </div>
-    <div class="plans-grid">
-      <div class="plan">
-        <div class="plan-name">Básico</div>
-        <div class="plan-desc">Para empezar con lo esencial</div>
-        <div class="plan-price">$0<span>/mes</span></div>
-        <ul class="plan-features">
-          <li>1 sucursal</li>
-          <li>3 usuarios</li>
-          <li>POS, Caja, Ventas</li>
-          <li>Clientes y Stock</li>
-          <li>Gastos y Reportes</li>
-        </ul>
-        <a href="#contacto" class="plan-cta">Consultar</a>
-      </div>
-      <div class="plan popular">
-        <div class="plan-badge">⭐ Más popular</div>
-        <div class="plan-name">Pro</div>
-        <div class="plan-desc">Para negocios en crecimiento</div>
-        <div class="plan-price">$29<span>/mes</span></div>
-        <ul class="plan-features">
-          <li>3 sucursales</li>
-          <li>10 usuarios</li>
-          <li>Todo el Básico</li>
-          <li>Transferencias, Presupuestos</li>
-          <li>Cuenta Corriente</li>
-          <li>Auditoría completa</li>
-          <li>Chat entre sucursales</li>
-        </ul>
-        <a href="#contacto" class="plan-cta">Consultar</a>
-      </div>
-      <div class="plan">
-        <div class="plan-name">Premium</div>
-        <div class="plan-desc">Para operaciones exigentes</div>
-        <div class="plan-price">$59<span>/mes</span></div>
-        <ul class="plan-features">
-          <li>Sucursales ilimitadas</li>
-          <li>Usuarios ilimitados</li>
-          <li>Todo lo del Pro</li>
-          <li>Lista de Regalos</li>
-          <li>Módulos por rubro</li>
-          <li>Soporte prioritario</li>
-          <li>API access</li>
-        </ul>
-        <a href="#contacto" class="plan-cta">Consultar</a>
-      </div>
+    <div class="plan popular">
+      <h3>Pro</h3>
+      <div class="price">USD 40<span>/mes</span></div>
+      <div class="period">facturación mensual</div>
+      <ul>
+        <li>Hasta 10 usuarios</li>
+        <li>Hasta 3 sucursales</li>
+        <li>Todo lo del plan Básico</li>
+        <li>Presupuestos, Pendientes</li>
+        <li>Transferencias entre sucursales</li>
+        <li>Reportes avanzados</li>
+        <li>Facturación ARCA</li>
+        <li>Soporte prioritario</li>
+      </ul>
+      <a href="https://wa.me/5493517424391?text=Hola!%20Quiero%20el%20plan%20Pro%20de%20FlexCRM" target="_blank" rel="noopener" class="btn btn-primary" style="width:100%;text-align:center">Comenzar</a>
+    </div>
+    <div class="plan">
+      <h3>Enterprise</h3>
+      <div class="price">USD 90<span>/mes</span></div>
+      <div class="period">facturación mensual</div>
+      <ul>
+        <li>Usuarios ilimitados</li>
+        <li>Sucursales ilimitadas</li>
+        <li>Todo lo del plan Pro</li>
+        <li>Lista de regalos</li>
+        <li>Pipeline comercial</li>
+        <li>Chat entre sucursales</li>
+        <li>Webhooks + API</li>
+        <li>Soporte dedicado</li>
+      </ul>
+      <a href="https://wa.me/5493517424391?text=Hola!%20Quiero%20el%20plan%20Enterprise%20de%20FlexCRM" target="_blank" rel="noopener" class="btn btn-secondary" style="width:100%;text-align:center">Comenzar</a>
     </div>
   </div>
-</section>
+</div></section>
 
-<!-- CTA -->
-<section class="cta-section">
-  <div class="cta-inner">
-    <h2>Listo para ordenar tu negocio?</h2>
-    <p>Creá tu empresa, configurá tu sucursal y empezá a vender hoy. Sin tarjeta de crédito.</p>
-    <a href="#contacto" class="btn-primary" style="font-size:18px;padding:18px 40px">Solicitar demo →</a>
-  </div>
-</section>
+<!-- CONTACT FORM -->
+<section class="sec sec-alt" id="contacto"><div class="wrap">
+  <h2>¿Tenés dudas? Escribinos</h2>
+  <p style="text-align:center;">Completá el formulario o mandanos un WhatsApp. Respondemos en el día.</p>
+  <form action="https://app.flexcrm.com.ar/api/landing/lead" method="POST" class="contact-form" style="max-width:480px;margin:0 auto;">
+    <input type="hidden" name="pagina" value="flexcrm" />
+    <input type="text" name="nombre" required placeholder="Tu nombre *" />
+    <input type="email" name="email" placeholder="tu@email.com" />
+    <input type="tel" name="telefono" placeholder="WhatsApp o teléfono" />
+    <select name="empresa_interes" style="padding:14px 18px;border-radius:10px;border:1.5px solid rgba(0,0,0,.1);font-size:.95rem;font-family:inherit;background:var(--card);color:var(--ink);">
+      <option value="">¿Qué te interesa?</option>
+      <option value="flexcrm">FlexCRM</option>
+      <option value="web">Página web</option>
+      <option value="tienda">Tienda online</option>
+      <option value="otro">Otro</option>
+    </select>
+    <textarea name="mensaje" required placeholder="Contanos de tu negocio y qué necesitás *"></textarea>
+    <button type="submit" class="btn btn-primary" style="width:100%;text-align:center">Enviar consulta</button>
+    <p style="font-size:.8rem;color:var(--gray);text-align:center;margin-top:8px;">O escribinos al <a href="https://wa.me/5493517424391" target="_blank" rel="noopener" style="color:var(--ac);font-weight:600;">+54 9 351 742-4391</a></p>
+  </form>
+</div></section>
 
-<!-- CONTACTO -->
-<section class="section" id="contacto" style="background:var(--light)">
-  <div class="section-inner" style="text-align:center">
-    <div class="section-tag" style="display:inline-block">Contacto</div>
-    <h2 class="section-title" style="letter-spacing:-1.5px">Hablemos de tu negocio</h2>
-    <p class="section-sub" style="margin:0 auto 0">Contanos qué necesitás y te armamos el plan perfecto.</p>
-    <div style="display:flex;flex-wrap:wrap;gap:40px;justify-content:center;margin-top:48px">
-      <div style="text-align:center">
-        <div style="font-size:32px;margin-bottom:8px">📧</div>
-        <div style="font-weight:700;font-size:16px;margin-bottom:4px">Email</div>
-        <a href="mailto:info@unfulanodev.com.ar" style="color:var(--ac);text-decoration:none;font-size:15px">info@unfulanodev.com.ar</a>
-      </div>
-      <div style="text-align:center">
-        <div style="font-size:32px;margin-bottom:8px">📱</div>
-        <div style="font-weight:700;font-size:16px;margin-bottom:4px">WhatsApp</div>
-        <a href="https://wa.me/540000000000" style="color:var(--ac);text-decoration:none;font-size:15px" target="_blank">+54 9 11 0000-0000</a>
-      </div>
-    </div>
-  </div>
-</section>
-
+<!-- FOOTER -->
 <footer>
-  <div class="footer-inner">
-    <div class="footer-logo">Flex<span>CRM</span></div>
-    <div style="display:flex;gap:24px">
-      <a href="#features">Funciones</a>
-      <a href="#plans">Planes</a>
-    </div>
-    <div>© 2026 FlexCRM. Hecho en Argentina 🇦🇷 · unfulanodev.com.ar</div>
+  <div class="wrap">
+    <p style="font-weight:700;font-size:1rem;margin-bottom:4px;">Flex<span style="color:var(--ac)">CRM</span></p>
+    <p style="margin-bottom:12px;">© 2026 FlexCRM. Hecho en Argentina.</p>
+    <p style="margin-bottom:8px;">
+      <a href="mailto:contacto@unfulanodev.com.ar">contacto@unfulanodev.com.ar</a> ·
+      <a href="https://wa.me/5493517424391" target="_blank" rel="noopener">WhatsApp</a> ·
+      <a href="https://unfulanodev.com.ar" target="_blank" rel="noopener">unfulanodev.com.ar</a>
+    </p>
   </div>
 </footer>
-
 </body>
 </html>

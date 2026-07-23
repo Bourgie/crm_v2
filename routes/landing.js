@@ -26,11 +26,13 @@ function notifyNewLead(nombre, telefono, email, empresa, mensaje) {
   });
 }
 
-// Public landing page webhook — no auth
+// Public landing page webhook — no auth, accepts JSON and form-urlencoded
 router.post('/lead', (req, res) => {
-  const { nombre, telefono, email, mensaje, empresa } = req.body;
-  if (!nombre || !telefono) {
-    return res.status(400).json({ error: 'Nombre y teléfono requeridos' });
+  const { nombre, telefono, email, mensaje, empresa_interes, pagina } = req.body;
+  const redirect = req.headers['content-type']?.includes('json') ? false : true;
+  if (!nombre || !(mensaje || telefono)) {
+    if (redirect) return res.redirect('/gracias.html?error=1');
+    return res.status(400).json({ error: 'Nombre y al menos un contacto requeridos' });
   }
   try {
     const { master } = require('../db_master');
@@ -39,26 +41,28 @@ router.post('/lead', (req, res) => {
 
     master.prepare(`INSERT INTO landing_leads (id,nombre,telefono,email,mensaje,empresa_interes,pagina,leido,fecha)
       VALUES (?,?,?,?,?,?,?,0,?)`).run(
-      id, nombre.trim(), telefono.trim(), (email || '').trim(),
-      (mensaje || '').trim(), (empresa || '').trim(),
-      req.headers['referer'] || req.headers['origin'] || '', fecha
+      id, nombre.trim(), (telefono || '').trim(), (email || '').trim(),
+      (mensaje || '').trim(), (empresa_interes || '').trim(),
+      pagina || req.headers['referer'] || req.headers['origin'] || '', fecha
     );
 
     // Also create a prospecto automatically
     const pid = 'pros_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
     master.prepare(`INSERT INTO prospectos (id,nombre,telefono,email,empresa_interes,origen,estado,notas,fecha_creacion)
       VALUES (?,?,?,?,?,?,?,?,?)`).run(
-      pid, nombre.trim(), telefono.trim(), (email || '').trim(),
-      (empresa || '').trim(), 'landing', 'nuevo',
-      'Lead desde landing page: ' + (mensaje || 'Sin mensaje'), fecha
+      pid, nombre.trim(), (telefono || '').trim(), (email || '').trim(),
+      (empresa_interes || '').trim(), pagina || 'landing', 'nuevo',
+      'Lead desde landing: ' + (mensaje || 'Sin mensaje'), fecha
     );
 
     // Async: send email notification to superadmin
-    notifyNewLead(nombre, telefono, email, empresa, mensaje);
+    notifyNewLead(nombre, telefono || '', email || '', empresa_interes || '', mensaje || '');
 
+    if (redirect) return res.redirect('/gracias.html');
     res.json({ ok: true, id });
   } catch (e) {
     console.error('[Landing] Error:', e.message);
+    if (redirect) return res.redirect('/gracias.html?error=1');
     res.status(500).json({ error: 'Error del servidor' });
   }
 });
