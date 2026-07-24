@@ -6,6 +6,7 @@ const { authMiddleware, requireRol } = require('../middleware/auth');
 router.use(authMiddleware);
 
 const TIPOS_FACTURA = { 'A': 1, 'B': 6, 'C': 11 };
+const TIPOS_NOTA_CREDITO = { 'A': 3, 'B': 8, 'C': 13 };
 
 function getAfipConfig(cfg) {
   const opts = {
@@ -111,6 +112,70 @@ router.post('/ventas/:id/facturar', requireRol('admin', 'supervisor', 'cajero'),
   } catch (e) {
     console.error('[ARCA] Error:', e.message);
     res.status(500).json({ error: 'Error al facturar: ' + e.message });
+  }
+});
+
+// ── Nota de Crédito (anula factura electrónica) ──
+router.post('/ventas/:id/nota-credito', requireRol('admin', 'supervisor'), async (req, res) => {
+  const db = _getDB(req);
+  const { monto, motivo } = req.body;
+  const venta = db.findOne('ventas', req.params.id);
+  if (!venta) return res.status(404).json({ error: 'Venta no encontrada' });
+  if (!venta.facturada || !venta.factura_cae) return res.status(400).json({ error: 'La venta no está facturada electrónicamente' });
+  if (venta.factura_nc_cae) return res.status(400).json({ error: 'Ya tiene una nota de crédito emitida' });
+
+  const cfg = db.getConfig();
+  if (!cfg.arca_access_token) return res.status(400).json({ error: 'Configurá ARCA en Ajustes' });
+
+  const tipo = venta.factura_tipo || 'B';
+  try {
+    const Afip = require('@afipsdk/afip.js');
+    const afip = new Afip(getAfipConfig(cfg));
+    const ptoVta = parseInt(cfg.arca_punto_venta) || 1;
+    const cbteTipo = TIPOS_NOTA_CREDITO[tipo] || 8;
+
+    const lastVoucher = await afip.ElectronicBilling.getLastVoucher(ptoVta, cbteTipo);
+    const voucherNumber = lastVoucher + 1;
+
+    const ivaPct = parseFloat(cfg.arca_iva_pct) || 21;
+    const montoTotal = parseFloat(monto || venta.total);
+    const impTotal = Math.round(montoTotal * 100) / 100;
+    const impNeto = Math.round(impTotal / (1 + ivaPct / 100) * 100) / 100;
+    const impIVA = Math.round((impTotal - impNeto) * 100) / 100;
+
+    const docTipo = venta.factura_doc_tipo || 99;
+    const docNro = venta.factura_doc_nro || 0;
+    const fecha = new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0];
+
+    const data = {
+      CantReg: 1, PtoVta: ptoVta, CbteTipo: cbteTipo, Concepto: 1,
+      DocTipo: docTipo, DocNro: docNro,
+      CbteDesde: voucherNumber, CbteHasta: voucherNumber,
+      CbteFch: parseInt(fecha.replace(/-/g, '')),
+      ImpTotal: impTotal, ImpTotConc: 0, ImpNeto, ImpOpEx: 0, ImpIVA, ImpTrib: 0,
+      MonId: 'PES', MonCotiz: 1,
+      CondicionIVAReceptorId: tipo === 'A' ? 1 : 5,
+      Iva: [{ Id: getIvaId(cfg), BaseImp: impNeto, Importe: impIVA }],
+      CbtesAsoc: [{ Tipo: TIPOS_FACTURA[tipo], PtoVta: ptoVta, Nro: venta.factura_numero, Cuit: parseInt(cfg.arca_cuit) || 20409378472 }],
+    };
+
+    const resp = await afip.ElectronicBilling.createVoucher(data);
+
+    db.update('ventas', req.params.id, {
+      factura_nc_cae: resp.CAE,
+      factura_nc_numero: voucherNumber,
+      factura_nc_fecha_vto: resp.CAEFchVto,
+      factura_nc_monto: impTotal,
+      factura_nc_motivo: motivo || '',
+    });
+
+    db.audit(req.user, venta.suc_id, 'ventas', 'nota_credito',
+      `Nota de Crédito ${tipo} #${voucherNumber} — CAE: ${resp.CAE} — Anula factura #${venta.factura_numero}`, req.params.id);
+
+    res.json({ ok: true, cae: resp.CAE, vencimiento: resp.CAEFchVto, numero: voucherNumber, tipo: 'NC-' + tipo });
+  } catch (e) {
+    console.error('[ARCA] Error Nota Crédito:', e.message);
+    res.status(500).json({ error: 'Error al generar nota de crédito: ' + e.message });
   }
 });
 
