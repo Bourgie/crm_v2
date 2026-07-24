@@ -594,6 +594,9 @@ export default function Superadmin() {
                   <div className="kpi-card"><K label="Vencidas" value={dash.vencidas} sub="requieren renovación" /></div>
                   <div className="kpi-card"><K label="Solicitudes plan" value={dash.solicitudes_pendientes} sub="pendientes de aprobar" /></div>
                   <div className="kpi-card"><K label="Usuarios totales" value={dash.total_usuarios} /></div>
+                  <div className="kpi-card" style={{ borderLeft: '3px solid var(--ok)' }}><K label="Ventas totales" value={'$' + Math.round(dash.total_ventas_monto || 0).toLocaleString('es-AR')} sub={(dash.total_ventas || 0) + ' transacciones'} /></div>
+                  <div className="kpi-card" style={{ borderLeft: '3px solid var(--ac2)' }}><K label="Ticket promedio" value={'$' + (dash.ticket_promedio || 0).toLocaleString('es-AR')} sub={dash.total_clientes + ' clientes'} /></div>
+                  <div className="kpi-card" style={{ borderLeft: '3px solid var(--ac)' }}><K label="Ventas este mes" value={'$' + Math.round(dash.ventas_monto_mes || 0).toLocaleString('es-AR')} sub={(dash.ventas_mes || 0) + ' ventas — ticket $' + (dash.ticket_promedio_mes || 0).toLocaleString('es-AR')} /></div>
                   <div className="kpi-card" style={{ borderLeft: '3px solid var(--warn)' }}><K label="Prospectos" value={prospectos.length} sub="CRM leads" /></div>
                   <div className="kpi-card" style={{ borderLeft: '3px solid var(--ac2)' }}><K label="Landing leads" value={leads.length} sub={leads.filter(l => !l.leido).length + ' sin leer'} /></div>
                   {dash?.vencimientos_prox > 0 && (

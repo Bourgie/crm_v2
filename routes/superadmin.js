@@ -271,15 +271,26 @@ router.get('/dashboard', superAuth, (req, res) => {
   }
 
   // Usage stats
-  let totalUsuarios = 0, totalVentas = 0;
+  let totalUsuarios = 0, totalVentas = 0, totalVentasMonto = 0, totalClientes = 0;
+  let ventasMes = 0, ventasMontoMes = 0;
+  const mesActualKey = hoy.substr(0,7);
   for (const e of empresas) {
     if (!e.activo) continue;
     try {
       const db = getEmpresaDB(e.codigo);
       totalUsuarios += db.find('usuarios').filter(u => u.activo !== false).length;
-      totalVentas   += db.all('ventas').filter(v => !v.anulada).length;
+      const ventas = db.all('ventas').filter(v => !v.anulada);
+      totalVentas += ventas.length;
+      totalVentasMonto += ventas.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
+      totalClientes += db.find('clientes').filter(c => c.activo !== false).length;
+      // Ventas del mes actual
+      const ventasDelMes = ventas.filter(v => v.fecha && v.fecha.substr(0,7) === mesActualKey);
+      ventasMes += ventasDelMes.length;
+      ventasMontoMes += ventasDelMes.reduce((s, v) => s + (parseFloat(v.total) || 0), 0);
     } catch(err) {}
   }
+  const ticketPromedio = totalVentas > 0 ? Math.round(totalVentasMonto / totalVentas) : 0;
+  const ticketPromedioMes = ventasMes > 0 ? Math.round(ventasMontoMes / ventasMes) : 0;
 
   res.json({
     empresas_total: empresas.length, empresas_activas: activas,
@@ -288,6 +299,9 @@ router.get('/dashboard', superAuth, (req, res) => {
     mrr, nuevas_mes: nuevasMes,
     solicitudes_pendientes,
     total_usuarios: totalUsuarios, total_ventas: totalVentas,
+    total_ventas_monto: totalVentasMonto, total_clientes: totalClientes,
+    ventas_mes: ventasMes, ventas_monto_mes: ventasMontoMes,
+    ticket_promedio: ticketPromedio, ticket_promedio_mes: ticketPromedioMes,
     vencimientos_prox: getVencimientosProximos(30),
     growth, timestamp: new Date().toISOString()
   });

@@ -212,7 +212,34 @@ appLoader.startup();
 
 // ── Health check (defined here, mounted after rate limiter below) ──
 function healthHandler(req, res) {
-  res.json({ ok: true, version: require('./package.json').version, env: process.env.NODE_ENV || 'development', ts: new Date().toISOString() });
+  const result = {
+    ok: true,
+    version: require('./package.json').version,
+    env: process.env.NODE_ENV || 'development',
+    ts: new Date().toISOString(),
+    uptime: Math.floor(process.uptime()),
+    memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
+  };
+  // DB check
+  try {
+    const { master } = require('./db_master');
+    result.db = { master: master.prepare("SELECT COUNT(*) as n FROM empresas").get().n + ' empresas' };
+  } catch(e) { result.db = { error: e.message }; }
+  // SMTP check
+  try {
+    const smtpHost = process.env.SMTP_HOST || (() => {
+      const { getGlobalConfig } = require('./db_master');
+      return getGlobalConfig('smtp_host');
+    })();
+    result.smtp = smtpHost ? { configured: true, host: smtpHost } : { configured: false };
+  } catch(e) { result.smtp = { error: e.message }; }
+  // Tenant DBs count
+  try {
+    const fs = require('fs'), path = require('path');
+    const files = fs.readdirSync(path.join(__dirname, 'data')).filter(f => f.startsWith('empresa_') && f.endsWith('.db'));
+    result.tenants = files.length;
+  } catch(e) { /* ignore */ }
+  res.json(result);
 }
 
 // ── CSRF token endpoint ──
