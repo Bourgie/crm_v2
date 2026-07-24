@@ -165,6 +165,72 @@ master.exec(`
     orden INTEGER DEFAULT 0,
     activo INTEGER DEFAULT 1
   );
+
+  CREATE TABLE IF NOT EXISTS mantenimiento_items (
+    id TEXT PRIMARY KEY,
+    tipo TEXT DEFAULT 'dominio',
+    nombre TEXT NOT NULL,
+    descripcion TEXT,
+    fecha_vencimiento TEXT,
+    proveedor TEXT,
+    url TEXT,
+    notas TEXT,
+    estado TEXT DEFAULT 'activo',
+    creado TEXT,
+    actualizado TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS apps_disponibles (
+    id TEXT PRIMARY KEY,
+    slug TEXT UNIQUE NOT NULL,
+    nombre TEXT NOT NULL,
+    version TEXT NOT NULL,
+    descripcion TEXT,
+    descripcion_larga TEXT,
+    categoria TEXT NOT NULL DEFAULT 'general',
+    icono TEXT DEFAULT '📦',
+    screenshots TEXT DEFAULT '[]',
+    precio_base REAL DEFAULT 0,
+    periodicidad TEXT DEFAULT 'unico',
+    precio_mensual REAL DEFAULT 0,
+    precio_anual REAL DEFAULT 0,
+    trial_dias INTEGER DEFAULT 0,
+    modulos_requeridos TEXT DEFAULT '[]',
+    roles_permitidos TEXT DEFAULT '[]',
+    activa INTEGER DEFAULT 1,
+    es_oficial INTEGER DEFAULT 1,
+    autor TEXT DEFAULT 'FlexCRM',
+    fecha_publicacion TEXT,
+    orden INTEGER DEFAULT 99,
+    tags TEXT DEFAULT '[]',
+    data TEXT DEFAULT '{}'
+  );
+
+  CREATE TABLE IF NOT EXISTS apps_instaladas (
+    id TEXT PRIMARY KEY,
+    empresa_id TEXT NOT NULL,
+    app_slug TEXT NOT NULL,
+    app_id TEXT NOT NULL,
+    version_instalada TEXT NOT NULL,
+    activa INTEGER DEFAULT 1,
+    fecha_instalacion TEXT,
+    fecha_ultima_actualizacion TEXT,
+    config TEXT DEFAULT '{}',
+    billing_status TEXT DEFAULT 'active',
+    trial_hasta TEXT,
+    UNIQUE(empresa_id, app_slug)
+  );
+
+  CREATE TABLE IF NOT EXISTS app_event_log (
+    id TEXT PRIMARY KEY,
+    empresa_id TEXT,
+    app_slug TEXT,
+    evento TEXT,
+    version_desde TEXT,
+    version_hasta TEXT,
+    fecha TEXT,
+    realizado_por TEXT
+  );
 `);
 
 // Migration: add email and data columns to existing superadmin
@@ -467,5 +533,146 @@ function seedDefaultRubroAtributos() {
 // Seed default rubro attributes on load
 seedDefaultRubroAtributos();
 
+// ── Apps (ecosistema) ──
+function getAppsDisponibles(categoria) {
+  let rows;
+  if (categoria) {
+    rows = master.prepare("SELECT * FROM apps_disponibles WHERE activa=1 AND categoria=? ORDER BY orden").all(categoria);
+  } else {
+    rows = master.prepare("SELECT * FROM apps_disponibles WHERE activa=1 ORDER BY categoria, orden").all();
+  }
+  return rows.map(a => ({
+    ...a,
+    screenshots: JSON.parse(a.screenshots || '[]'),
+    modulos_requeridos: JSON.parse(a.modulos_requeridos || '[]'),
+    roles_permitidos: JSON.parse(a.roles_permitidos || '[]'),
+    tags: JSON.parse(a.tags || '[]'),
+    data: JSON.parse(a.data || '{}'),
+  }));
+}
+function getAppDisponible(slug) {
+  const a = master.prepare("SELECT * FROM apps_disponibles WHERE slug=?").get(slug);
+  if (!a) return null;
+  return {
+    ...a,
+    screenshots: JSON.parse(a.screenshots || '[]'),
+    modulos_requeridos: JSON.parse(a.modulos_requeridos || '[]'),
+    roles_permitidos: JSON.parse(a.roles_permitidos || '[]'),
+    tags: JSON.parse(a.tags || '[]'),
+    data: JSON.parse(a.data || '{}'),
+  };
+}
+function upsertAppDisponible(data) {
+  const existing = master.prepare("SELECT id FROM apps_disponibles WHERE slug=?").get(data.slug);
+  if (existing) {
+    master.prepare(`UPDATE apps_disponibles SET nombre=?,version=?,descripcion=?,descripcion_larga=?,categoria=?,icono=?,
+      screenshots=?,precio_base=?,periodicidad=?,precio_mensual=?,precio_anual=?,trial_dias=?,
+      modulos_requeridos=?,roles_permitidos=?,activa=?,es_oficial=?,autor=?,tags=?,orden=?,data=?
+      WHERE slug=?`).run(
+      data.nombre, data.version, data.descripcion || null, data.descripcion_larga || null,
+      data.categoria || 'general', data.icono || '📦',
+      JSON.stringify(data.screenshots || []), data.precio_base || 0, data.periodicidad || 'unico',
+      data.precio_mensual || 0, data.precio_anual || 0, data.trial_dias || 0,
+      JSON.stringify(data.modulos_requeridos || []), JSON.stringify(data.roles_permitidos || []),
+      data.activa !== false ? 1 : 0, data.es_oficial !== false ? 1 : 0,
+      data.autor || 'FlexCRM', JSON.stringify(data.tags || []), data.orden || 99,
+      JSON.stringify(data.data || {}), data.slug
+    );
+  } else {
+    const id = data.id || 'app_' + Date.now();
+    master.prepare(`INSERT INTO apps_disponibles (id,slug,nombre,version,descripcion,descripcion_larga,categoria,icono,
+      screenshots,precio_base,periodicidad,precio_mensual,precio_anual,trial_dias,
+      modulos_requeridos,roles_permitidos,activa,es_oficial,autor,fecha_publicacion,tags,orden,data)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+      id, data.slug, data.nombre, data.version, data.descripcion || null, data.descripcion_larga || null,
+      data.categoria || 'general', data.icono || '📦',
+      JSON.stringify(data.screenshots || []), data.precio_base || 0, data.periodicidad || 'unico',
+      data.precio_mensual || 0, data.precio_anual || 0, data.trial_dias || 0,
+      JSON.stringify(data.modulos_requeridos || []), JSON.stringify(data.roles_permitidos || []),
+      data.activa !== false ? 1 : 0, data.es_oficial !== false ? 1 : 0,
+      data.autor || 'FlexCRM', new Date().toISOString(), JSON.stringify(data.tags || []), data.orden || 99,
+      JSON.stringify(data.data || {})
+    );
+  }
+}
+function getAppsInstaladas(empresaId) {
+  return master.prepare("SELECT * FROM apps_instaladas WHERE empresa_id=? ORDER BY fecha_instalacion").all(empresaId)
+    .map(i => ({ ...i, config: JSON.parse(i.config || '{}') }));
+}
+function getAppInstalada(empresaId, appSlug) {
+  const i = master.prepare("SELECT * FROM apps_instaladas WHERE empresa_id=? AND app_slug=?").get(empresaId, appSlug);
+  if (!i) return null;
+  return { ...i, config: JSON.parse(i.config || '{}') };
+}
+function installApp(empresaId, appSlug, appId, version) {
+  const existing = master.prepare("SELECT id FROM apps_instaladas WHERE empresa_id=? AND app_slug=?").get(empresaId, appSlug);
+  if (existing) {
+    master.prepare("UPDATE apps_instaladas SET activa=1, version_instalada=?, fecha_instalacion=? WHERE id=?")
+      .run(version, new Date().toISOString(), existing.id);
+  } else {
+    master.prepare(`INSERT INTO apps_instaladas (id,empresa_id,app_slug,app_id,version_instalada,activa,fecha_instalacion,billing_status)
+      VALUES (?,?,?,?,?,1,?,?)`).run(
+      'ai_' + Date.now(), empresaId, appSlug, appId, version, new Date().toISOString(), 'active'
+    );
+  }
+}
+function uninstallApp(empresaId, appSlug) {
+  master.prepare("DELETE FROM apps_instaladas WHERE empresa_id=? AND app_slug=?").run(empresaId, appSlug);
+}
+function updateAppStatus(empresaId, appSlug, activa) {
+  master.prepare("UPDATE apps_instaladas SET activa=? WHERE empresa_id=? AND app_slug=?").run(activa ? 1 : 0, empresaId, appSlug);
+}
+function updateAppConfig(empresaId, appSlug, config) {
+  master.prepare("UPDATE apps_instaladas SET config=? WHERE empresa_id=? AND app_slug=?").run(JSON.stringify(config), empresaId, appSlug);
+}
+function logAppEvent(empresaId, appSlug, evento, versionDesde, versionHasta, realizadoPor) {
+  master.prepare("INSERT INTO app_event_log (id,empresa_id,app_slug,evento,version_desde,version_hasta,fecha,realizado_por) VALUES (?,?,?,?,?,?,?,?)")
+    .run('ael_' + Date.now(), empresaId, appSlug, evento, versionDesde || null, versionHasta || null, new Date().toISOString(), realizadoPor || null);
+}
+function getAppStats() {
+  const totalApps = master.prepare("SELECT COUNT(*) as n FROM apps_disponibles WHERE activa=1").get().n;
+  const totalInstalaciones = master.prepare("SELECT COUNT(*) as n FROM apps_instaladas WHERE activa=1").get().n;
+  const porApp = master.prepare("SELECT app_slug, COUNT(*) as n FROM apps_instaladas WHERE activa=1 GROUP BY app_slug ORDER BY n DESC").all();
+  const porCategoria = master.prepare("SELECT a.categoria, COUNT(ai.id) as n FROM apps_instaladas ai JOIN apps_disponibles a ON a.slug=ai.app_slug WHERE ai.activa=1 GROUP BY a.categoria ORDER BY n DESC").all();
+  return { totalApps, totalInstalaciones, porApp, porCategoria };
+}
+
+// Seed _hello-world test app
+const hw = master.prepare("SELECT id FROM apps_disponibles WHERE slug=?").get('_hello-world');
+if (!hw) {
+  upsertAppDisponible({
+    id: 'app_hw', slug: '_hello-world', nombre: 'Hello World (test)', version: '1.0.0',
+    descripcion: 'App de prueba para validar el ecosistema de apps.',
+    categoria: 'general', icono: '👋', es_oficial: 1, activa: 1, orden: 0,
+    precio_mensual: 0, trial_dias: 0,
+    modulos_requeridos: [], roles_permitidos: ['admin', 'supervisor'],
+    tags: ['test']
+  });
+}
+
+// ── Mantenimiento ──
+function getMantenimientoItems() {
+  return master.prepare("SELECT * FROM mantenimiento_items ORDER BY fecha_vencimiento ASC").all();
+}
+function createMantenimientoItem(data) {
+  const id = 'mt_' + Date.now();
+  const ahora = new Date().toISOString();
+  master.prepare("INSERT INTO mantenimiento_items (id,tipo,nombre,descripcion,fecha_vencimiento,proveedor,url,notas,estado,creado,actualizado) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+    .run(id, data.tipo||'dominio', data.nombre, data.descripcion||'', data.fecha_vencimiento||null, data.proveedor||'', data.url||'', data.notas||'', data.estado||'activo', ahora, ahora);
+  return id;
+}
+function updateMantenimientoItem(id, data) {
+  const ahora = new Date().toISOString();
+  master.prepare("UPDATE mantenimiento_items SET tipo=?,nombre=?,descripcion=?,fecha_vencimiento=?,proveedor=?,url=?,notas=?,estado=?,actualizado=? WHERE id=?")
+    .run(data.tipo||'dominio', data.nombre, data.descripcion||'', data.fecha_vencimiento||null, data.proveedor||'', data.url||'', data.notas||'', data.estado||'activo', ahora, id);
+}
+function deleteMantenimientoItem(id) {
+  master.prepare("DELETE FROM mantenimiento_items WHERE id=?").run(id);
+}
+function getVencimientosProximos(dias) {
+  const limite = new Date(Date.now() + (dias||30)*86400000).toISOString().substr(0,10);
+  return master.prepare("SELECT COUNT(*) as n FROM mantenimiento_items WHERE fecha_vencimiento IS NOT NULL AND fecha_vencimiento <= ? AND estado = 'activo'").get(limite).n || 0;
+}
+
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
-module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos, saAudit, saPurgeAuditLog, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo };
+module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos, saAudit, saPurgeAuditLog, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos };

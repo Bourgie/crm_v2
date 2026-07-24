@@ -9,6 +9,7 @@ const { master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa,
         getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats,
         getGlobalConfig, setGlobalConfig, getAllGlobalConfig,
         getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo,
+        getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos,
         getAppsDisponibles, getAppDisponible, upsertAppDisponible,
         getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig,
         logAppEvent, getAppStats } = require('../db_master');
@@ -287,6 +288,7 @@ router.get('/dashboard', superAuth, (req, res) => {
     mrr, nuevas_mes: nuevasMes,
     solicitudes_pendientes,
     total_usuarios: totalUsuarios, total_ventas: totalVentas,
+    vencimientos_prox: getVencimientosProximos(30),
     growth, timestamp: new Date().toISOString()
   });
 });
@@ -1186,6 +1188,35 @@ router.get('/apps/registradas', superAuth, (req, res) => {
     const appLoader = require('../lib/app-loader');
     res.json(appLoader.getRegisteredApps());
   } catch(e) { res.json([]); }
+});
+
+// ══════════════════════════════════════
+// MANTENIMIENTO
+// ══════════════════════════════════════
+router.get('/mantenimiento', superAuth, (req, res) => {
+  res.json(getMantenimientoItems());
+});
+
+router.post('/mantenimiento', superAuth, (req, res) => {
+  const { tipo, nombre, descripcion, fecha_vencimiento, proveedor, url, notas } = req.body;
+  if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+  const id = createMantenimientoItem({ tipo, nombre, descripcion, fecha_vencimiento, proveedor, url, notas });
+  saAudit(req.sadmin.id, 'crear_mantenimiento', null, `Item: ${nombre}`);
+  res.json({ id, ok: true });
+});
+
+router.put('/mantenimiento/:id', superAuth, (req, res) => {
+  const { tipo, nombre, descripcion, fecha_vencimiento, proveedor, url, notas, estado } = req.body;
+  if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+  updateMantenimientoItem(req.params.id, { tipo, nombre, descripcion, fecha_vencimiento, proveedor, url, notas, estado });
+  saAudit(req.sadmin.id, 'editar_mantenimiento', null, `Item: ${nombre}`);
+  res.json({ ok: true });
+});
+
+router.delete('/mantenimiento/:id', superAuth, (req, res) => {
+  deleteMantenimientoItem(req.params.id);
+  saAudit(req.sadmin.id, 'eliminar_mantenimiento', null, `Item: ${req.params.id}`);
+  res.json({ ok: true });
 });
 
 module.exports = router;

@@ -29,6 +29,7 @@ const SIDEBAR = [
   ['modulos', '🧩 Módulos'],
   ['email', '📧 Email'],
   ['atributos', '🏷️ Atributos'],
+  ['mantenimiento', '🔧 Mantenimiento'],
   ['landing', '🌐 Landing'],
   ['soporte', '🆘 Soporte'],
   ['audit', '📋 Auditoría'],
@@ -117,6 +118,20 @@ export default function Superadmin() {
   const [atributoSaving, setAtributoSaving] = useState(false)
   const [atributoFiltroRubro, setAtributoFiltroRubro] = useState('')
 
+  const [mtItems, setMtItems] = useState([])
+  const [mtModal, setMtModal] = useState(null)
+  const [mtForm, setMtForm] = useState({ tipo:'dominio', nombre:'', descripcion:'', fecha_vencimiento:'', proveedor:'', url:'', notas:'' })
+  const [mtSaving, setMtSaving] = useState(false)
+
+  const [appsData, setAppsData] = useState([])
+  const [appsInstaladas, setAppsInstaladas] = useState([])
+  const [appsStats, setAppsStats] = useState(null)
+  const [appsFiltroCat, setAppsFiltroCat] = useState('')
+  const [appsFiltroEmp, setAppsFiltroEmp] = useState('')
+  const [appModal, setAppModal] = useState(null)
+  const [appForm, setAppForm] = useState({ slug:'', nombre:'', version:'1.0.0', descripcion:'', descripcion_larga:'', categoria:'general', icono:'📦', precio_mensual:'0', precio_anual:'0', trial_dias:'0', modulos_requeridos:'', roles_permitidos:'', tags:'', activa:true })
+  const [appSaving, setAppSaving] = useState(false)
+
   useEffect(() => {
     saApi('GET', '/me').then(r => { setLogged(true); setUser(r); loadAll() }).catch(() => {})
   }, [])
@@ -170,7 +185,7 @@ export default function Superadmin() {
   }, [])
 
   function loadAll() {
-    loadDash(); loadEmpresas(); loadPlanes(); loadModulos(); loadSolicitudes(); loadAudit(); loadProspectos(); loadLanding(); loadTickets(); loadEmailConfig(); loadAtributos();
+    loadDash(); loadEmpresas(); loadPlanes(); loadModulos(); loadSolicitudes(); loadAudit(); loadProspectos(); loadLanding(); loadTickets(); loadEmailConfig(); loadAtributos(); loadMantenimiento();
     try { const imp = JSON.parse(sessionStorage.getItem('SA_IMP') || 'null'); if (imp) setImpersonating(imp) } catch {}
   }
 
@@ -185,6 +200,27 @@ export default function Superadmin() {
   async function loadTickets() { try { const r = await saApi('GET', '/solicitudes-soporte'); setTickets(r) } catch {} }
   async function loadEmailConfig() { try { const r = await saApi('GET', '/email-config'); setEmailConfig(r) } catch {} }
   async function loadAtributos() { try { const r = await saApi('GET', '/rubros-atributos'); setAtributos(r) } catch {} }
+  async function loadMantenimiento() { try { const r = await saApi('GET', '/mantenimiento'); setMtItems(r) } catch {} }
+
+  async function saveMt() {
+    if (!mtForm.nombre.trim()) { alert('Nombre requerido'); return }
+    setMtSaving(true)
+    try {
+      const body = { ...mtForm, estado: 'activo' }
+      if (mtModal === 'new') { await saApi('POST', '/mantenimiento', body); alert('✅ Item creado') }
+      else { await saApi('PUT', '/mantenimiento/' + mtModal.id, body); alert('✅ Item actualizado') }
+      setMtModal(null); loadMantenimiento()
+    } catch(e) { alert(e.message) }
+    finally { setMtSaving(false) }
+  }
+
+  function openNewMt() { setMtForm({ tipo:'dominio', nombre:'', descripcion:'', fecha_vencimiento:'', proveedor:'', url:'', notas:'' }); setMtModal('new') }
+  function openEditMt(m) { setMtForm({ tipo:m.tipo, nombre:m.nombre, descripcion:m.descripcion||'', fecha_vencimiento:m.fecha_vencimiento||'', proveedor:m.proveedor||'', url:m.url||'', notas:m.notas||'' }); setMtModal(m) }
+  async function deleteMt(id) { if (!confirm('Eliminar item de mantenimiento?')) return; try { await saApi('DELETE', '/mantenimiento/' + id); loadMantenimiento() } catch(e) { alert(e.message) } }
+
+  async function loadApps() { try { const r = await saApi('GET', '/apps'); setAppsData(r) } catch {} }
+  async function loadAppsInstaladas() { try { const r = await saApi('GET', '/apps/instaladas'); setAppsInstaladas(r) } catch {} }
+  async function loadAppsStats() { try { const r = await saApi('GET', '/apps/stats'); setAppsStats(r) } catch {} }
 
   async function saveEmailConfig() {
     setEmailSaving(true)
@@ -296,6 +332,83 @@ export default function Superadmin() {
     input.onchange = async () => { const file = input.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = async () => { try { await saApi('POST', '/empresas/' + codigo + '/import', { data_base64: reader.result.split(',')[1] || reader.result }); alert('✅ Base de datos importada') } catch (e) { alert(e.message) } }; reader.readAsDataURL(file) }
     input.click()
   }
+
+  // ── App CRUD ──
+  function openNewApp() {
+    setAppForm({ slug:'', nombre:'', version:'1.0.0', descripcion:'', descripcion_larga:'', categoria:'general', icono:'📦', precio_mensual:'0', precio_anual:'0', trial_dias:'0', modulos_requeridos:'', roles_permitidos:'', tags:'', activa:true })
+    setAppModal('new')
+  }
+
+  function openEditApp(a) {
+    setAppForm({
+      slug: a.slug, nombre: a.nombre || '', version: a.version || '1.0.0',
+      descripcion: a.descripcion || '', descripcion_larga: a.descripcion_larga || '',
+      categoria: a.categoria || 'general', icono: a.icono || '📦',
+      precio_mensual: String(a.precio_mensual || 0), precio_anual: String(a.precio_anual || 0),
+      trial_dias: String(a.trial_dias || 0),
+      modulos_requeridos: Array.isArray(a.modulos_requeridos) ? a.modulos_requeridos.join(', ') : '',
+      roles_permitidos: Array.isArray(a.roles_permitidos) ? a.roles_permitidos.join(', ') : '',
+      tags: Array.isArray(a.tags) ? a.tags.join(', ') : '',
+      activa: a.activa !== false,
+    })
+    setAppModal(a)
+  }
+
+  async function saveApp() {
+    if (!appForm.slug.trim() || !appForm.nombre.trim()) { alert('Slug y Nombre requeridos'); return }
+    setAppSaving(true)
+    try {
+      const body = {
+        slug: appForm.slug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, ''),
+        nombre: appForm.nombre.trim(),
+        version: appForm.version.trim(),
+        descripcion: appForm.descripcion,
+        descripcion_larga: appForm.descripcion_larga,
+        categoria: appForm.categoria,
+        icono: appForm.icono,
+        precio_mensual: parseFloat(appForm.precio_mensual) || 0,
+        precio_anual: parseFloat(appForm.precio_anual) || 0,
+        trial_dias: parseInt(appForm.trial_dias) || 0,
+        periodicidad: parseFloat(appForm.precio_mensual) > 0 ? 'mensual' : 'unico',
+        modulos_requeridos: appForm.modulos_requeridos.split(',').map(s => s.trim()).filter(Boolean),
+        roles_permitidos: appForm.roles_permitidos.split(',').map(s => s.trim()).filter(Boolean),
+        tags: appForm.tags.split(',').map(s => s.trim()).filter(Boolean),
+        activa: appForm.activa,
+      }
+      await saApi('POST', '/apps', body)
+      alert('✅ App guardada')
+      setAppModal(null); loadApps()
+    } catch(e) { alert(e.message) }
+    finally { setAppSaving(false) }
+  }
+
+  async function instalarAppEnEmpresa(appSlug, empresaId) {
+    try {
+      await saApi('POST', '/apps/instalar', { app_slug: appSlug, empresa_id: empresaId })
+      alert('✅ App instalada')
+      loadAppsInstaladas(); loadAppsStats()
+    } catch(e) { alert(e.message) }
+  }
+
+  async function desinstalarApp(instId) {
+    if (!confirm('¿Desinstalar esta app de la empresa?')) return
+    try { await saApi('DELETE', '/apps/instaladas/' + instId); loadAppsInstaladas(); loadAppsStats() }
+    catch(e) { alert(e.message) }
+  }
+
+  async function toggleAppInstStatus(instId, activa) {
+    try { await saApi('PUT', '/apps/instaladas/' + instId + '/status', { activa: !activa }); loadAppsInstaladas() }
+    catch(e) { alert(e.message) }
+  }
+
+  // Filter apps and installations
+  const appsFiltradas = appsData.filter(a => !appsFiltroCat || a.categoria === appsFiltroCat)
+  const appsInstFiltradas = appsFiltroEmp
+    ? appsInstaladas.filter(i => i.empresa_id === appsFiltroEmp || i.empresa_codigo === appsFiltroEmp)
+    : appsInstaladas
+
+  const APP_CATS = ['general','finanzas','ventas','reportes','logistica','rrhh','integracion','automatizacion','industria']
+  const CAT_LABELS = { general:'General', finanzas:'💰 Finanzas', ventas:'🚀 Ventas', reportes:'📊 Reportes', logistica:'📦 Logística', rrhh:'👥 RRHH', integracion:'🔌 Integraciones', automatizacion:'🤖 Automatización', industria:'🏭 Industria' }
 
   async function savePlan() {
     if (!planForm.codigo.trim() || !planForm.nombre.trim()) { alert('Código y nombre requeridos'); return }
@@ -483,6 +596,9 @@ export default function Superadmin() {
                   <div className="kpi-card"><K label="Usuarios totales" value={dash.total_usuarios} /></div>
                   <div className="kpi-card" style={{ borderLeft: '3px solid var(--warn)' }}><K label="Prospectos" value={prospectos.length} sub="CRM leads" /></div>
                   <div className="kpi-card" style={{ borderLeft: '3px solid var(--ac2)' }}><K label="Landing leads" value={leads.length} sub={leads.filter(l => !l.leido).length + ' sin leer'} /></div>
+                  {dash?.vencimientos_prox > 0 && (
+                    <div className="kpi-card" style={{ borderLeft: '3px solid var(--bad)' }}><K label="Vencimientos" value={dash.vencimientos_prox} sub="en 30 días — ver Mantenimiento" /></div>
+                  )}
                 </div>
                 {dash.growth && dash.growth.length > 0 && (
                   <div className="card" style={{ marginBottom: 20 }}>
@@ -764,6 +880,54 @@ export default function Superadmin() {
             </div>
           )}
 
+          {/* ═══════ MANTENIMIENTO ═══════ */}
+          {tab === 'mantenimiento' && (
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase' }}>🔧 Mantenimiento</h3>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={openNewMt}>+ Nuevo item</button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={loadMantenimiento}>↻</button>
+                </div>
+              </div>
+              <p style={{ fontSize: 12, color: 'var(--mu)', marginBottom: 16 }}>Dominios, servidores, APIs, certificados con fecha de vencimiento. Todo lo que necesita seguimiento.</p>
+              <div style={{ overflowX: 'auto' }}>
+                <table>
+                  <thead><tr><th>Item</th><th>Tipo</th><th>Vence</th><th>Proveedor</th><th>URL</th><th></th></tr></thead>
+                  <tbody>
+                    {mtItems.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}>Sin items de mantenimiento</td></tr>}
+                    {mtItems.map(m => {
+                      const vence = m.fecha_vencimiento ? new Date(m.fecha_vencimiento) : null
+                      const dias = vence ? Math.ceil((vence - new Date()) / 86400000) : null
+                      const vencido = dias !== null && dias < 0
+                      const pronto = dias !== null && dias >= 0 && dias <= 30
+                      return (
+                        <tr key={m.id} style={{ background: vencido ? 'rgba(239,68,68,.06)' : pronto ? 'rgba(245,158,11,.06)' : 'transparent' }}>
+                          <td style={{ fontWeight: 600 }}>{m.nombre}</td>
+                          <td><span className={`badge ${m.tipo === 'dominio' ? 'badge-blue' : m.tipo === 'servidor' ? 'badge-purple' : m.tipo === 'api' ? 'badge-green' : m.tipo === 'certificado' ? 'badge-orange' : 'badge-gray'}`}>{m.tipo}</span></td>
+                          <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                            {m.fecha_vencimiento ? (
+                              <span style={{ color: vencido ? 'var(--bad)' : pronto ? 'var(--warn)' : 'var(--mu)', fontWeight: vencido ? 700 : 400 }}>
+                                {new Date(m.fecha_vencimiento).toLocaleDateString('es-AR')}
+                                {dias !== null && <span style={{ fontSize: 10, marginLeft: 4 }}>({vencido ? Math.abs(dias) + 'd atras' : dias + 'd'})</span>}
+                              </span>
+                            ) : <span style={{ color: 'var(--mu)' }}>—</span>}
+                          </td>
+                          <td style={{ fontSize: 12, color: 'var(--mu)' }}>{m.proveedor || '—'}</td>
+                          <td style={{ fontSize: 12 }}>{m.url ? <a href={m.url} target="_blank" rel="noopener" style={{ color: 'var(--ac)' }}>{m.url.replace(/https?:\/\//,'').substring(0, 30)}</a> : '—'}</td>
+                          <td style={{ whiteSpace: 'nowrap' }}>
+                            <button type="button" className="btn btn-icon btn-sm" onClick={() => openEditMt(m)}>✏️</button>
+                            <button type="button" className="btn btn-icon btn-sm" onClick={() => deleteMt(m.id)}>🗑️</button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           {/* ═══════ LANDING ═══════ */}
           {tab === 'landing' && (
             <div className="card">
@@ -888,6 +1052,121 @@ export default function Superadmin() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          {/* ═══════ APPS ═══════ */}
+          {tab === 'apps' && (
+            <div>
+              {/* Stats */}
+              {appsStats && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
+                  <div style={{ background:'var(--bg)', border:'1px solid var(--bd)', borderRadius:10, padding:14 }}>
+                    <div style={{ fontSize:11,color:'var(--mu)',textTransform:'uppercase',marginBottom:4 }}>Apps en catálogo</div>
+                    <div style={{ fontSize:24,fontWeight:800 }}>{appsStats.totalApps}</div>
+                  </div>
+                  <div style={{ background:'var(--bg)', border:'1px solid var(--bd)', borderRadius:10, padding:14 }}>
+                    <div style={{ fontSize:11,color:'var(--mu)',textTransform:'uppercase',marginBottom:4 }}>Instalaciones activas</div>
+                    <div style={{ fontSize:24,fontWeight:800 }}>{appsStats.totalInstalaciones}</div>
+                  </div>
+                  <div style={{ background:'var(--bg)', border:'1px solid var(--bd)', borderRadius:10, padding:14 }}>
+                    <div style={{ fontSize:11,color:'var(--mu)',textTransform:'uppercase',marginBottom:4 }}>Apps más instaladas</div>
+                    <div style={{ fontSize:13 }}>
+                      {appsStats.porApp.slice(0,3).map(a => (
+                        <div key={a.app_slug} style={{ display:'flex',justifyContent:'space-between' }}><span>{a.nombre || a.app_slug}</span><span style={{fontWeight:700}}>{a.n}</span></div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Catálogo + Instalaciones (2 cols) */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                {/* Catálogo */}
+                <div className="card" style={{ padding: 16 }}>
+                  <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12 }}>
+                    <h3 style={{ fontSize:13,fontWeight:700,color:'var(--mu)',textTransform:'uppercase' }}>📦 Catálogo</h3>
+                    <div style={{ display:'flex',gap:6 }}>
+                      <select value={appsFiltroCat} onChange={e => setAppsFiltroCat(e.target.value)} style={{ fontSize:11,padding:'3px 6px',borderRadius:6,border:'1px solid var(--bd)' }}>
+                        <option value="">Todas</option>
+                        {APP_CATS.map(c => <option key={c} value={c}>{CAT_LABELS[c] || c}</option>)}
+                      </select>
+                      <button type="button" className="btn btn-sm btn-primary" onClick={openNewApp} style={{ fontSize:11 }}>+ Nueva</button>
+                    </div>
+                  </div>
+                  <div style={{ display:'flex',flexDirection:'column',gap:8 }}>
+                    {appsFiltradas.map(a => (
+                      <div key={a.slug} style={{ display:'flex',alignItems:'center',gap:10,padding:'8px 10px',background:'var(--sf)',borderRadius:8,border:'1px solid var(--bd)' }}>
+                        <span style={{ fontSize:20 }}>{a.icono || '📦'}</span>
+                        <div style={{ flex:1,minWidth:0 }}>
+                          <div style={{ fontSize:13,fontWeight:700 }}>{a.nombre} <span style={{ fontSize:11,color:'var(--mu)',fontWeight:400 }}>v{a.version}</span></div>
+                          <div style={{ fontSize:11,color:'var(--mu)' }}>
+                            {CAT_LABELS[a.categoria] || a.categoria}
+                            {a.precio_mensual > 0 && <span style={{ marginLeft:6,color:'var(--ok)',fontWeight:600 }}>${a.precio_mensual}/mes</span>}
+                            {a.precio_mensual === 0 && a.precio_base === 0 && <span style={{ marginLeft:6,color:'var(--ok)',fontWeight:600 }}>Gratis</span>}
+                          </div>
+                        </div>
+                        {!a.activa && <span style={{ fontSize:10,color:'var(--bad)',fontWeight:600 }}>INACTIVA</span>}
+                        <button type="button" className="btn btn-sm btn-secondary" onClick={() => openEditApp(a)} style={{ fontSize:10 }}>Editar</button>
+                      </div>
+                    ))}
+                    {appsFiltradas.length === 0 && <div style={{ textAlign:'center',color:'var(--mu)',padding:20 }}>Sin apps en esta categoría</div>}
+                  </div>
+                </div>
+
+                {/* Instalaciones */}
+                <div className="card" style={{ padding: 16 }}>
+                  <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12 }}>
+                    <h3 style={{ fontSize:13,fontWeight:700,color:'var(--mu)',textTransform:'uppercase' }}>📥 Instalaciones</h3>
+                    <div style={{ display:'flex',gap:6 }}>
+                      <select value={appsFiltroEmp} onChange={e => setAppsFiltroEmp(e.target.value)} style={{ fontSize:11,padding:'3px 6px',borderRadius:6,border:'1px solid var(--bd)' }}>
+                        <option value="">Todas las empresas</option>
+                        {empresas.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                      </select>
+                      <button type="button" className="btn btn-sm btn-secondary" onClick={() => { loadAppsInstaladas(); loadAppsStats() }} style={{ fontSize:11 }}>↻</button>
+                    </div>
+                  </div>
+                  <div style={{ display:'flex',flexDirection:'column',gap:8 }}>
+                    {appsInstFiltradas.slice(0, 30).map(i => (
+                      <div key={i.id} style={{ display:'flex',alignItems:'center',gap:8,padding:'6px 10px',background:'var(--sf)',borderRadius:8,border:'1px solid var(--bd)' }}>
+                        <span style={{ fontSize:16 }}>{i.app_icono || '📦'}</span>
+                        <div style={{ flex:1,minWidth:0 }}>
+                          <div style={{ fontSize:12,fontWeight:700 }}>{i.app_nombre || i.app_slug}</div>
+                          <div style={{ fontSize:10,color:'var(--mu)' }}>{i.empresa_nombre || i.empresa_id} · v{i.version_instalada}</div>
+                        </div>
+                        {!i.activa && <span style={{ fontSize:10,color:'var(--bad)',fontWeight:600 }}>PAUSADA</span>}
+                        <button type="button" className="btn btn-sm" style={{ fontSize:10,background: i.activa ? 'var(--bad)' : 'var(--ok)',color:'#fff',border:'none',borderRadius:6,padding:'2px 8px' }}
+                          onClick={() => toggleAppInstStatus(i.id, i.activa)}>
+                          {i.activa ? 'Pausar' : 'Activar'}
+                        </button>
+                        <button type="button" className="btn btn-sm btn-secondary" onClick={() => desinstalarApp(i.id)} style={{ fontSize:10,color:'var(--bad)' }}>✕</button>
+                      </div>
+                    ))}
+                    {appsInstFiltradas.length === 0 && <div style={{ textAlign:'center',color:'var(--mu)',padding:20 }}>Sin instalaciones</div>}
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick Install */}
+              <div className="card" style={{ marginTop: 16, padding: 16 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 12 }}>⚡ Instalación rápida</h3>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <select id="qinstall-app" style={{ fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--bd)', flex: 1 }}>
+                    <option value="">Seleccionar app...</option>
+                    {appsData.filter(a => a.activa).map(a => <option key={a.slug} value={a.slug}>{a.nombre}</option>)}
+                  </select>
+                  <select id="qinstall-emp" style={{ fontSize: 12, padding: '6px 10px', borderRadius: 8, border: '1px solid var(--bd)', flex: 1 }}>
+                    <option value="">Seleccionar empresa...</option>
+                    {empresas.filter(e => e.activo).map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                  </select>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => {
+                    const appSlug = document.getElementById('qinstall-app').value
+                    const empId = document.getElementById('qinstall-emp').value
+                    if (!appSlug || !empId) { alert('Seleccioná app y empresa'); return }
+                    instalarAppEnEmpresa(appSlug, empId)
+                  }} style={{ fontSize: 12 }}>Instalar</button>
+                </div>
               </div>
             </div>
           )}
@@ -1059,6 +1338,79 @@ export default function Superadmin() {
             <div className="modal-footer">
               <button type="button" className="btn btn-secondary" onClick={() => setAtributoModal(null)}>Cancelar</button>
               <button type="button" className="btn btn-primary" onClick={saveAtributo} disabled={atributoSaving}>{atributoSaving ? '⏳' : '💾 Guardar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Mantenimiento */}
+      {mtModal && (
+        <div className="modal-overlay" onClick={() => setMtModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+            <div className="modal-header"><h3>{mtModal === 'new' ? '+ Nuevo item' : 'Editar item'}</h3><button type="button" onClick={() => setMtModal(null)} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--mu)'}}>×</button></div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="fr">
+                <div style={{ flex:1 }}><label style={{ display:'block',marginBottom:4,fontSize:11,fontWeight:600 }}>Tipo</label><select value={mtForm.tipo} onChange={e => setMtForm(p => ({...p,tipo:e.target.value}))} style={S.select}>
+                  <option value="dominio">🌐 Dominio</option>
+                  <option value="servidor">🖥️ Servidor</option>
+                  <option value="api">🔌 API / Token</option>
+                  <option value="certificado">🔒 Certificado SSL</option>
+                  <option value="otro">📌 Otro</option>
+                </select></div>
+                <div style={{ flex:1 }}><label style={{ display:'block',marginBottom:4,fontSize:11,fontWeight:600 }}>Nombre *</label><input value={mtForm.nombre} onChange={e => setMtForm(p => ({...p,nombre:e.target.value}))} placeholder="Ej: flexcrm.com.ar" style={S.input} /></div>
+              </div>
+              <div><label style={{ display:'block',marginBottom:4,fontSize:11,fontWeight:600 }}>Descripción</label><input value={mtForm.descripcion} onChange={e => setMtForm(p => ({...p,descripcion:e.target.value}))} placeholder="Detalle del item..." style={S.input} /></div>
+              <div className="fr">
+                <div style={{ flex:1 }}><label style={{ display:'block',marginBottom:4,fontSize:11,fontWeight:600 }}>Fecha vencimiento</label><input type="date" value={mtForm.fecha_vencimiento} onChange={e => setMtForm(p => ({...p,fecha_vencimiento:e.target.value}))} style={S.input} /></div>
+                <div style={{ flex:1 }}><label style={{ display:'block',marginBottom:4,fontSize:11,fontWeight:600 }}>Proveedor</label><input value={mtForm.proveedor} onChange={e => setMtForm(p => ({...p,proveedor:e.target.value}))} placeholder="Ej: Cloudflare, Fly.io" style={S.input} /></div>
+              </div>
+              <div className="fr">
+                <div style={{ flex:1 }}><label style={{ display:'block',marginBottom:4,fontSize:11,fontWeight:600 }}>URL</label><input value={mtForm.url} onChange={e => setMtForm(p => ({...p,url:e.target.value}))} placeholder="https://..." style={S.input} /></div>
+              </div>
+              <div><label style={{ display:'block',marginBottom:4,fontSize:11,fontWeight:600 }}>Notas</label><textarea value={mtForm.notas} onChange={e => setMtForm(p => ({...p,notas:e.target.value}))} rows={2} style={{...S.textarea, width:'100%'}} /></div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setMtModal(null)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={saveMt} disabled={mtSaving}>{mtSaving ? '⏳' : '💾 Guardar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: App */}
+      {appModal && (
+        <div className="modal-overlay" onClick={() => setAppModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 550 }}>
+            <div className="modal-header"><h3>{appModal === 'new' ? 'Nueva app' : 'Editar app: ' + appModal.slug}</h3><button type="button" onClick={() => setAppModal(null)} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--mu)'}}>×</button></div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <div className="fr">
+                <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Slug *</label><input value={appForm.slug} onChange={e => setAppForm(p => ({ ...p, slug: e.target.value }))} placeholder="mi-app" disabled={appModal !== 'new'} style={{...S.input, fontFamily:'monospace'}} /></div>
+                <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Nombre *</label><input value={appForm.nombre} onChange={e => setAppForm(p => ({ ...p, nombre: e.target.value }))} placeholder="Mi App" style={S.input} /></div>
+                <div style={{ width:100 }}><label className="" style={{ display:'block',marginBottom:4 }}>Versión</label><input value={appForm.version} onChange={e => setAppForm(p => ({ ...p, version: e.target.value }))} style={S.input} /></div>
+              </div>
+              <div className="fr">
+                <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Categoría</label><select value={appForm.categoria} onChange={e => setAppForm(p => ({ ...p, categoria: e.target.value }))} style={S.select}>{APP_CATS.map(c => <option key={c} value={c}>{CAT_LABELS[c] || c}</option>)}</select></div>
+                <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Icono</label><input value={appForm.icono} onChange={e => setAppForm(p => ({ ...p, icono: e.target.value }))} placeholder="📦" style={S.input} /></div>
+              </div>
+              <div className="fr">
+                <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Precio mensual ($)</label><input type="number" value={appForm.precio_mensual} onChange={e => setAppForm(p => ({ ...p, precio_mensual: e.target.value }))} min="0" placeholder="0" style={S.input} /></div>
+                <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Precio anual ($)</label><input type="number" value={appForm.precio_anual} onChange={e => setAppForm(p => ({ ...p, precio_anual: e.target.value }))} min="0" placeholder="0" style={S.input} /></div>
+                <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Trial (días)</label><input type="number" value={appForm.trial_dias} onChange={e => setAppForm(p => ({ ...p, trial_dias: e.target.value }))} min="0" style={S.input} /></div>
+              </div>
+              <div><label className="" style={{ display:'block',marginBottom:4 }}>Descripción corta</label><input value={appForm.descripcion} onChange={e => setAppForm(p => ({ ...p, descripcion: e.target.value }))} placeholder="Descripción breve..." style={S.input} /></div>
+              <div><label className="" style={{ display:'block',marginBottom:4 }}>Descripción larga (markdown)</label><textarea value={appForm.descripcion_larga} onChange={e => setAppForm(p => ({ ...p, descripcion_larga: e.target.value }))} rows={3} style={S.textarea} /></div>
+              <div className="fr">
+                <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Módulos requeridos (coma)</label><input value={appForm.modulos_requeridos} onChange={e => setAppForm(p => ({ ...p, modulos_requeridos: e.target.value }))} placeholder="productos, ventas" style={S.input} /></div>
+                <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Roles permitidos (coma)</label><input value={appForm.roles_permitidos} onChange={e => setAppForm(p => ({ ...p, roles_permitidos: e.target.value }))} placeholder="admin, supervisor" style={S.input} /></div>
+              </div>
+              <div className="fr">
+                <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Tags (coma)</label><input value={appForm.tags} onChange={e => setAppForm(p => ({ ...p, tags: e.target.value }))} placeholder="costos, finanzas" style={S.input} /></div>
+                <div style={{ display:'flex',alignItems:'center',gap:8 }}><label className="" style={{ display:'flex',alignItems:'center',gap:6,cursor:'pointer' }}><input type="checkbox" checked={appForm.activa} onChange={e => setAppForm(p => ({ ...p, activa: e.target.checked }))} /> Activa</label></div>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setAppModal(null)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" onClick={saveApp} disabled={appSaving}>{appSaving ? '⏳ Guardando...' : '💾 Guardar'}</button>
             </div>
           </div>
         </div>
