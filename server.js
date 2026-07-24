@@ -47,8 +47,16 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-// ── Compression (Gzip/Brotli) ──
-app.use(compression());
+// ── Compression (Gzip/Brotli) — skip auth/csrf paths to mitigate BREACH ──
+app.use(compression({
+  filter: (req, res) => {
+    // Skip compression on paths that set auth cookies or CSRF tokens
+    const path = req.originalUrl || req.url || '';
+    if (/^\/api\/auth\//.test(path)) return false;
+    if (/^\/api\/csrf-token/.test(path)) return false;
+    return compression.filter(req, res);
+  },
+}));
 
 // ── HPP (HTTP Parameter Pollution) protection ──
 app.use(hpp());
@@ -151,7 +159,14 @@ app.use(express.urlencoded({ extended: true }));
 
 // ── Static files ──
 app.use(express.static(path.join(__dirname, 'public')));
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landing.html')));
+
+// Route root based on hostname
+app.get('/', (req, res) => {
+  const host = (req.hostname || '').toLowerCase();
+  if (host.startsWith('app.')) return res.redirect('/app/login');
+  if (host.startsWith('admin.')) return res.redirect('/admin');
+  res.sendFile(path.join(__dirname, 'public', 'landing.html'));
+});
 const reactDir = path.join(__dirname, 'public', 'app');
 const fs = require('fs');
 if (fs.existsSync(reactDir)) {
@@ -165,6 +180,10 @@ if (fs.existsSync(reactDir)) {
 // ── Initialize master DB (once) ──
 require('./db_master');
 
+// ── Initialize App Loader (ecosistema de apps) ──
+const appLoader = require('./lib/app-loader');
+appLoader.startup();
+
 // ── Health check (defined here, mounted after rate limiter below) ──
 function healthHandler(req, res) {
   res.json({ ok: true, version: require('./package.json').version, env: process.env.NODE_ENV || 'development', ts: new Date().toISOString() });
@@ -172,6 +191,20 @@ function healthHandler(req, res) {
 
 // ── CSRF token endpoint ──
 app.get('/api/csrf-token', csrfTokenEndpoint);
+
+// ── CSP violation report endpoint (public, no auth) ──
+app.post('/api/csp-report', express.json({ type: 'application/csp-report', limit: '64kb' }), (req, res) => {
+  const report = req.body && req.body['csp-report'];
+  if (report) {
+    console.warn('[CSP-VIOLATION]', JSON.stringify({
+      blockedUri: report['blocked-uri'],
+      violatedDirective: report['violated-directive'],
+      documentUri: report['document-uri'],
+      referrer: report.referrer,
+    }));
+  }
+  res.status(204).end();
+});
 
 // ── Empresa tenant middleware — runs on all /api/* routes ──
 app.use('/api', (req, res, next) => {
@@ -275,6 +308,12 @@ app.use('/api/tareas',        require('./routes/tareas'));
 app.use('/api/arca',          arcaRouter);
 app.use('/api/superadmin',    superadminRouter);
 app.use('/api/landing',       require('./routes/landing'));
+
+// ── App ecosystem (dinámico primero, estático después) ──
+// El middleware dinámico solo enruta si el slug es una app registrada;
+// si no, pasa al siguiente (routes/apps.js)
+app.use('/api/apps/:slug',    appLoader.appLoaderMiddleware);
+app.use('/api/apps',          require('./routes/apps'));
 
 // ── Version check (public, no auth) ──
 app.get('/api/version', (req, res) => res.json({ version: 'v74', built: '2026-05-08' }));
