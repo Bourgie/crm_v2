@@ -58,7 +58,7 @@ router.post('/lead', (req, res) => {
     // Async: send email notification to superadmin
     notifyNewLead(nombre, telefono || '', email || '', empresa_interes || '', mensaje || '');
 
-    if (redirect) return res.redirect('/gracias.html');
+    if (redirect) return res.redirect('/gracias.html?from=' + encodeURIComponent(pagina || 'flexcrm'));
     res.json({ ok: true, id });
   } catch (e) {
     console.error('[Landing] Error:', e.message);

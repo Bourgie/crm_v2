@@ -16,10 +16,23 @@ body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; c
 </head>
 <body>
 <div class="card">
-  <div style="font-size:48px;margin-bottom:16px">✅</div>
-  <h1>¡Gracias!</h1>
-  <p>Recibimos tu consulta. Te vamos a contactar en menos de 24 horas.</p>
-  <a href="#" onclick="window.close();return false;" style="display:none">Cerrar</a>
+  <div style="font-size:48px;margin-bottom:16px" id="icon">✅</div>
+  <h1 id="title">¡Gracias!</h1>
+  <p id="message">Recibimos tu consulta. Te vamos a contactar en menos de 24 horas.</p>
+  <a id="backLink" href="https://flexcrm.com.ar">Volver al inicio</a>
 </div>
+<script>
+  const params = new URLSearchParams(window.location.search);
+  const from = params.get('from');
+  const error = params.get('error');
+  if (error) {
+    document.getElementById('icon').textContent = '⚠️';
+    document.getElementById('title').textContent = 'Ups';
+    document.getElementById('message').textContent = 'Hubo un error al enviar tu consulta. Intentá de nuevo o escribinos por WhatsApp.';
+  }
+  if (from === 'unfulanodev') {
+    document.getElementById('backLink').href = 'https://unfulanodev.com.ar';
+  }
+</script>
 </body>
 </html>
