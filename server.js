@@ -92,7 +92,12 @@ app.use((req, res, next) => {
 // ── CORS ──
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
   ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
-  : ['http://localhost:3000', 'http://127.0.0.1:3000'];
+  : [
+      'http://localhost:3000', 'http://127.0.0.1:3000',
+      'https://unfulanodev.com.ar', 'https://www.unfulanodev.com.ar',
+      'https://flexcrm.com.ar', 'https://www.flexcrm.com.ar',
+      'https://app.flexcrm.com.ar', 'https://admin.flexcrm.com.ar',
+    ];
 
 app.use(cors({
   origin: function(origin, callback) {
