@@ -5,10 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>FlexCRM</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💼</text></svg>" />
-  <script type="module" crossorigin src="/app/assets/index-D2akR35I.js"></script>
+  <script type="module" crossorigin src="/app/assets/index-Cycoelwt.js"></script>
   <link rel="stylesheet" crossorigin href="/app/assets/index-GzlxiGNz.css">
 </head>
 <body>
   <div id="root"></div>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+  </script>
 </body>
 </html>

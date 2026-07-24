@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sin conexión — FlexCRM</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: system-ui, -apple-system, sans-serif; background: #f8fafc; color: #0f172a; display: flex; align-items: center; justify-content: center; min-height: 100vh; text-align: center; }
+.card { background: #fff; border-radius: 16px; padding: 48px 40px; max-width: 420px; box-shadow: 0 4px 32px rgba(0,0,0,.06); border: 1px solid rgba(0,0,0,.06); }
+.card h1 { font-size: 1.6rem; margin-bottom: 12px; }
+.card p { font-size: .95rem; color: #64748b; line-height: 1.6; margin-bottom: 24px; }
+.card button { padding: 12px 28px; background: #6366f1; color: #fff; border-radius: 10px; border: none; font-weight: 600; font-size: .95rem; cursor: pointer; }
+.card button:hover { background: #4f46e5; }
+.status { font-size: 13px; color: #64748b; margin-top: 16px; }
+.online { color: #22c55e; }
+.offline { color: #f97316; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div style="font-size:48px;margin-bottom:16px">📡</div>
+  <h1>Sin conexión</h1>
+  <p>Parece que no tenés internet. Algunas funciones pueden estar limitadas. Las ventas y cobros que hagas se guardarán y sincronizarán cuando vuelva la conexión.</p>
+  <button onclick="location.reload()">Intentar de nuevo</button>
+  <div class="status" id="status">Verificando conexión...</div>
+</div>
+<script>
+(function check() {
+  fetch('/api/health').then(r => r.json()).then(() => {
+    document.getElementById('status').innerHTML = '<span class="online">✅ Conectado — redirigiendo...</span>';
+    setTimeout(() => location.href = '/app/dashboard', 1000);
+  }).catch(() => {
+    document.getElementById('status').innerHTML = '<span class="offline">🔴 Sin conexión</span>';
+    setTimeout(check, 5000);
+  });
+})();
+</script>
+</body>
+</html>
