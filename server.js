@@ -171,6 +171,14 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const signupLimiter = rateLimit({
+  windowMs: 30 * 60 * 1000,
+  max: 5,
+  message: { error: 'Demasiados registros. Esperá 30 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // ── Body parsing ──
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -284,6 +292,7 @@ app.get('/api/config/public', (req, res) => {
 app.use('/api/auth/login', loginLimiter);
 app.use('/api/auth/forgot-password', forgotPasswordLimiter);
 app.use('/api/auth/reset-password', resetPasswordLimiter);
+app.use('/api/auth/signup', signupLimiter);
 app.use('/api/webhooks/receptor/:token', webhookReceptorLimiter);
 app.use('/api', apiLimiter);
 

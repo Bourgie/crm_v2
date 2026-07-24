@@ -5,6 +5,7 @@ import { RequireAuth } from './components/RequireAuth'
 import { Dashboard } from './pages/Dashboard'
 
 const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })))
+const Signup = lazy(() => import('./pages/Signup').then(m => ({ default: m.Signup })))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then(m => ({ default: m.ForgotPassword })))
 const ResetPassword = lazy(() => import('./pages/ResetPassword').then(m => ({ default: m.ResetPassword })))
 const Clientes = lazy(() => import('./pages/Clientes').then(m => ({ default: m.Clientes })))
@@ -30,6 +31,10 @@ const Sucursales = lazy(() => import('./pages/Sucursales').then(m => ({ default:
 const RRHH = lazy(() => import('./pages/RRHH'))
 const Superadmin = lazy(() => import('./pages/Superadmin'))
 
+// App ecosystem
+const AppShell = lazy(() => import('./components/AppShell'))
+const Marketplace = lazy(() => import('./pages/Marketplace'))
+
 function L({ children }) {
   return <Suspense fallback={<div className="p-8 text-center text-gray-400">Cargando...</div>}>{children}</Suspense>
 }
@@ -40,6 +45,7 @@ export default function App() {
       <Route path="/admin" element={<L><Superadmin /></L>} />
       <Route path="/app/superadmin" element={<Navigate to="/admin" replace />} />
       <Route path="/app/login" element={<L><Login /></L>} />
+      <Route path="/app/signup" element={<L><Signup /></L>} />
       <Route path="/app/forgot-password" element={<L><ForgotPassword /></L>} />
       <Route path="/app/reset-password" element={<L><ResetPassword /></L>} />
       <Route path="/app" element={<RequireAuth><Layout /></RequireAuth>}>
@@ -66,6 +72,9 @@ export default function App() {
         <Route path="2fa"            element={<L><Setup2FA /></L>} />
         <Route path="proveedores"    element={<L><Proveedores /></L>} />
         <Route path="rrhh"           element={<L><RRHH /></L>} />
+        {/* App ecosystem routes */}
+        <Route path="apps/:slug"     element={<L><AppShell /></L>} />
+        <Route path="marketplace"    element={<L><Marketplace /></L>} />
       </Route>
       <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
     </Routes>

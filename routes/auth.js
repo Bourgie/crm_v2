@@ -397,6 +397,96 @@ router.post('/usuarios', authMiddleware, requireRol('admin'), validate(createUse
   res.json(safe);
 });
 
+// ── Public signup (auto-provisión de empresa + trial) ──
+router.post('/signup', async (req, res) => {
+  const { empresa_nombre, email, password, rubro } = req.body;
+  if (!empresa_nombre || !email || !password) {
+    return res.status(400).json({ error: 'Nombre del negocio, email y contraseña requeridos' });
+  }
+  if (password.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+  if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) return res.status(400).json({ error: 'La contraseña debe incluir una mayúscula y un número' });
+
+  const { getEmpresaDB, uid } = require('../db_sqlite');
+  const { master, getEmpresa, createEmpresa } = require('../db_master');
+
+  // Auto-generate tenant code from business name
+  let codigo = empresa_nombre.toLowerCase()
+    .replace(/[áàâãä]/g, 'a').replace(/[éèêë]/g, 'e').replace(/[íìîï]/g, 'i')
+    .replace(/[óòôõö]/g, 'o').replace(/[úùûü]/g, 'u').replace(/ñ/g, 'n')
+    .replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '').substring(0, 30) || 'empresa';
+  // Check uniqueness
+  let finalCodigo = codigo;
+  let counter = 1;
+  while (getEmpresa(finalCodigo) || master.prepare("SELECT id FROM empresas WHERE codigo=?").get(finalCodigo)) {
+    finalCodigo = codigo + '_' + counter;
+    counter++;
+  }
+
+  // Check email not already used by another company admin
+  try {
+    const existing = master.prepare("SELECT codigo FROM empresas WHERE LOWER(admin_email)=LOWER(?)").get(email.trim().toLowerCase());
+    if (existing) return res.status(400).json({ error: 'Ya existe una empresa registrada con ese email.' });
+  } catch(e) { /* non-critical */ }
+
+  // Create empresa in master DB
+  const trialDays = 14;
+  const vencimiento = new Date(Date.now() + trialDays * 86400000).toISOString().substr(0, 10);
+  const empresaId = createEmpresa({
+    codigo: finalCodigo, nombre: empresa_nombre, rubro: rubro || 'general',
+    plan_id: 'plan_trial', admin_email: email,
+    vencimiento, usuarios_max: 5, sucursales_max: 1,
+  });
+
+  // Initialize tenant DB
+  const empDB = getEmpresaDB(finalCodigo);
+  empDB.setConfig({
+    rubro: rubro || 'general', nombre: empresa_nombre,
+    modulos_habilitados: JSON.stringify(['pos', 'caja', 'clientes', 'ventas', 'productos', 'ctacte', 'presupuestos', 'reportes']),
+  });
+
+  // Create admin user
+  const hash = await bcrypt.hash(password, 10);
+  const adminId = 'u' + uid();
+  const usuario = email.split('@')[0].replace(/[^a-z0-9_]/g, '_').substring(0, 20);
+  empDB.insert('usuarios', {
+    id: adminId, nombre: 'Admin', usuario: usuario,
+    email: email.trim().toLowerCase(), password: hash,
+    rol: 'admin', roles: JSON.stringify(['admin']), activo: true,
+    creado: new Date().toISOString(), password_changed_at: new Date().toISOString(),
+  });
+
+  // Auto-create empleado
+  const empId = uid();
+  empDB.insert('empleados', {
+    id: empId, nombre: 'Admin', apellido: null, email: email.trim().toLowerCase(),
+    fecha_ingreso: new Date().toISOString().substr(0, 10), activo: 1,
+    usuario_id: adminId, creado: new Date().toISOString(),
+  });
+
+  // Create default sucursal
+  empDB.insert('sucursales', {
+    id: uid(), nombre: empresa_nombre, dir: '', activo: true,
+    creado: new Date().toISOString(),
+  });
+
+  console.log('[Signup] Nueva empresa:', finalCodigo, '—', email);
+
+  // Generate JWT
+  const token = jwt.sign(
+    { id: adminId, rol: 'admin', empresa: finalCodigo, nombre: 'Admin' },
+    getSecret(), { expiresIn: '24h' }
+  );
+
+  res.json({ ok: true, token, empresa: finalCodigo, nombre: 'Admin', empresa_nombre, mensaje: `Prueba gratuita de ${trialDays} días activada` });
+});
+
+// ── Check if tenant code is available ──
+router.get('/signup/check-codigo/:codigo', (req, res) => {
+  const { getEmpresa } = require('../db_master');
+  const exists = getEmpresa(req.params.codigo) != null;
+  res.json({ disponible: !exists, codigo: req.params.codigo });
+});
+
 // PUT /api/auth/usuarios/:id
 router.put('/usuarios/:id', authMiddleware, requireRol('admin'), async (req, res) => {
   const db = _getDB(req);

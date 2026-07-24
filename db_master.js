@@ -310,6 +310,11 @@ var planCount = master.prepare("SELECT COUNT(*) as n FROM planes").get().n;
 if(planCount === 0) {
   const PLANES_DEFAULT = [
     {
+      id:'plan_trial', codigo:'trial', nombre:'Prueba (14 días)', precio:0, orden:0,
+      modulos:JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','reportes']),
+      limites:JSON.stringify({usuarios_max:5, sucursales_max:1})
+    },
+    {
       id:'plan_basic', codigo:'basic', nombre:'Básico', precio:15, orden:1,
       modulos:JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','proveedores','gastos','reportes']),
       limites:JSON.stringify({usuarios_max:3, sucursales_max:1})
@@ -329,6 +334,10 @@ if(planCount === 0) {
   PLANES_DEFAULT.forEach(p => stmtPlan.run(p.id,p.codigo,p.nombre,p.precio,p.modulos,p.limites,p.orden));
   console.log('✓ Planes por defecto sembrados:', PLANES_DEFAULT.length);
 }
+
+// Ensure plan_trial always exists
+master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,modulos,limites,orden) VALUES ('plan_trial','trial','Prueba (14 dias)',0,?,?,0)")
+  .run(JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','reportes']), JSON.stringify({usuarios_max:5, sucursales_max:1}));
 
 // Seed default modules
 var modCount = master.prepare("SELECT COUNT(*) as n FROM modulos").get().n;
