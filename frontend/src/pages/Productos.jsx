@@ -15,7 +15,8 @@ const TALLES = ['XS','S','M','L','XL','XXL','XXXL','0','1','2','3','4','6','8','
 const CATEGORIAS = ['Remera','Camiseta','Pantalón','Vestido','Falda','Calza','Campera','Enterito','Conjunto','Accesorio','Calzado','Otro']
 
 // Stock para mostrar: usa stock_actual (por suc) o stock_total. Nunca el objeto stock_suc.
-function getStock(p) {
+function getStock(p, sucId) {
+  if (sucId && p.stock_suc && typeof p.stock_suc[sucId] === 'number') return p.stock_suc[sucId]
   if (typeof p.stock_actual === 'number') return p.stock_actual
   if (typeof p.stock === 'number') return p.stock
   if (typeof p.stock_total === 'number') return p.stock_total
@@ -202,13 +203,24 @@ export function Productos() {
 
   function openNew() { setForm(EMPTY); setTab('datos'); setModal('new') }
   function openEdit(p) {
-    setForm({
+    const base = {
       nombre: p.nombre || '', sku: p.sku || '', categoria: p.categoria || '',
-      talle: p.talle || '', color: p.color || '', temporada: p.temporada || '',
       costo: p.costo ?? '', precio_l1: p.precio_l1 ?? '', precio_l2: p.precio_l2 ?? '',
       precio_l3: p.precio_l3 ?? '', stock_min: p.stock_min ?? 0, stock_max: p.stock_max ?? 0,
       favorito: !!p.favorito, activo: p.activo !== false,
-    })
+    }
+    // Load dynamic rubro attributes from product data
+    for (const attr of rubroAtributos) {
+      const key = attr.atributo_key
+      base[key] = p.data ? (() => { try { return JSON.parse(p.data)[key] } catch { return '' } })() : (p[key] || '')
+    }
+    // Fallback for legacy talle/color/temporada
+    if (rubroAtributos.length === 0) {
+      base.talle = p.talle || ''
+      base.color = p.color || ''
+      base.temporada = p.temporada || ''
+    }
+    setForm(base)
     setTab('datos')
     setModal(p)
   }
@@ -436,7 +448,7 @@ export function Productos() {
                     <td style={{ fontSize: 12 }}>{p.categoria || '—'}</td>
                     <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(p.precio_l1)}</td>
                     <td style={{ textAlign: 'center' }}>
-                      <buttontype="button" 
+                      <button
                         type="button" className="btn btn-sm"
                         style={{ fontWeight: 700, color: stockColor(p), background: 'transparent', border: `1.5px solid ${stockColor(p)}`, minWidth: 50 }}
                         onClick={(e) => { e.stopPropagation(); setStockModal({ prod: p, suc_id: sucSesion, actual: getStock(p) }); setStockDelta('') }}
