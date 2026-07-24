@@ -479,7 +479,27 @@ function ModalCorteParcial({ open, onClose, estado }) {
 }
 
 // ── Helper: imprimir ticket ──────────────────────────────────────
-import { imprimirTicket } from '../utils/comprobante'
+import { imprimirTicket, imprimirTicketTermica, isSupported, isConnected, connectPrinter, disconnectPrinter } from '../utils/comprobante'
+let _printerStatus = { connected: false, name: '' }
+export function getPrinterStatus() { return _printerStatus }
+export async function conectarImpresora() {
+  try {
+    const r = await connectPrinter()
+    _printerStatus = { connected: true, name: r.name || 'Impresora' }
+    return _printerStatus
+  } catch(e) {
+    _printerStatus = { connected: false, name: '' }
+    throw e
+  }
+}
+
+async function imprimir(venta, pagos, cfg) {
+  if (isConnected()) {
+    try { await imprimirTicketTermica(venta, pagos, cfg) } catch { imprimirTicket(venta, pagos, cfg) }
+  } else {
+    imprimirTicket(venta, pagos, cfg)
+  }
+}
 // (imported from shared utility)
 
 // ── Modal Editar Venta (antes de cobrar) ──────────────────────
@@ -788,7 +808,7 @@ export function Caja() {
       toast('Comprobante emitido', 'ok')
       try {
         const vtaFull = await api('GET', '/ventas/' + venta.id)
-        imprimirTicket(vtaFull, [{ id: 'ctacte', monto: String(venta.total) }], cfg)
+        imprimir(vtaFull, [{ id: 'ctacte', monto: String(venta.total) }], cfg)
       } catch { /* non-fatal */ }
       load()
     } catch (e) { toast(e.message, 'err') }
@@ -837,6 +857,21 @@ export function Caja() {
                 <button type="button" className="btn btn-secondary" onClick={() => abrirCorteParcial()}>📋 Corte parcial</button>
                 <button type="button" className="btn btn-danger" onClick={() => setModalCierre(true)}>🔒 Cerrar caja</button>
               </>}
+              {isSupported() && (
+                <button type="button" className={`btn btn-sm ${isConnected() ? 'btn-secondary' : 'btn-primary'}`}
+                  onClick={async () => {
+                    if (isConnected()) { disconnectPrinter(); toast('Impresora desconectada'); }
+                    else {
+                      try { const r = await conectarImpresora(); toast('Conectado: ' + r.name, 'ok') }
+                      catch(e) { toast(e.message, 'err') }
+                    }
+                  }}
+                  style={{ fontSize: 11 }}
+                  title={isConnected() ? 'Impresora conectada. Click para desconectar.' : 'Conectar impresora térmica USB'}
+                >
+                  🖨️ {isConnected() ? 'Conectada' : 'Impresora'}
+                </button>
+              )}
           </div>
         </div>
       </div>
@@ -1099,7 +1134,7 @@ export function Caja() {
                       }
                       try {
                         const vtaFull = await api('GET', '/ventas/' + ventaId)
-                        imprimirTicket({ ...vtaFull, _comprobante: tipo, _cae: facturaInfo?.cae, _cae_vto: facturaInfo?.vencimiento }, modalCompTipo.pagos, cfg)
+                        imprimir({ ...vtaFull, _comprobante: tipo, _cae: facturaInfo?.cae, _cae_vto: facturaInfo?.vencimiento }, modalCompTipo.pagos, cfg)
                       } catch { /* non-fatal */ }
                     }}>
                     {label}
