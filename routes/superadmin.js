@@ -8,7 +8,10 @@ const { master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa,
         getPlanes, getPlan, getModulos, saAudit,
         getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats,
         getGlobalConfig, setGlobalConfig, getAllGlobalConfig,
-        getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo } = require('../db_master');
+        getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo,
+        getAppsDisponibles, getAppDisponible, upsertAppDisponible,
+        getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig,
+        logAppEvent, getAppStats } = require('../db_master');
 const { getEmpresaDB } = require('../db_sqlite');
 const { validate, superadminLoginSchema } = require('../middleware/validate');
 
@@ -389,15 +392,15 @@ router.post('/empresas', superAuth, (req, res) => {
 });
 
 router.put('/empresas/:id', superAuth, (req, res) => {
-  const e = master.prepare("SELECT * FROM empresas WHERE id=?").get(req.params.id);
+  const e = master.prepare("SELECT * FROM empresas WHERE id=? OR codigo=?").get(req.params.id, req.params.id);
   if(!e) return res.status(404).json({error:'No encontrado'});
   const { nombre, rubro, plan_id, activo, vencimiento, usuarios_max, sucursales_max, modulos_extra, modulos_bloqueados } = req.body;
   master.prepare(`UPDATE empresas SET nombre=?,rubro=?,plan_id=?,activo=?,vencimiento=?,
     usuarios_max=?,sucursales_max=?,modulos_extra=?,modulos_bloqueados=? WHERE id=?`)
     .run(nombre||e.nombre, rubro||e.rubro, plan_id||e.plan_id, activo!=null?activo:e.activo,
       vencimiento||e.vencimiento, usuarios_max||e.usuarios_max, sucursales_max||e.sucursales_max,
-      JSON.stringify(modulos_extra||[]), JSON.stringify(modulos_bloqueados||[]), req.params.id);
-  saAudit(req.sadmin.id, 'editar_empresa', req.params.id, `Edit: ${nombre||e.nombre}`);
+      JSON.stringify(modulos_extra||[]), JSON.stringify(modulos_bloqueados||[]), e.id);
+  saAudit(req.sadmin.id, 'editar_empresa', e.id, `Edit: ${nombre||e.nombre}`);
   res.json({ok:true});
 });
 
@@ -1013,6 +1016,176 @@ router.put('/rubros-atributos/:id', superAuth, (req, res) => {
   updateRubroAtributo(req.params.id, { rubro, atributo_key, atributo_label, tipo, opciones, orden, activo });
   saAudit(req.sadmin.id, 'editar_atributo_rubro', null, `Atributo ${req.params.id}`);
   res.json({ ok: true });
+});
+
+// ══════════════════════════════════════
+// APPS (ecosistema)
+// ══════════════════════════════════════
+
+// ── Catálogo: listar todas las apps ──
+router.get('/apps', superAuth, (req, res) => {
+  try {
+    const categoria = req.query.categoria || null;
+    const apps = getAppsDisponibles(categoria);
+    res.json(apps);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Catálogo: crear/actualizar app ──
+router.post('/apps', superAuth, (req, res) => {
+  try {
+    const { slug, nombre, version, descripcion, descripcion_larga, categoria, icono,
+            screenshots, precio_base, periodicidad, precio_mensual, precio_anual, trial_dias,
+            modulos_requeridos, roles_permitidos, activa, autor, tags, orden, data } = req.body;
+    if (!slug || !nombre || !version) return res.status(400).json({ error: 'slug, nombre y version requeridos' });
+    upsertAppDisponible({
+      slug, nombre, version, descripcion: descripcion || '', descripcion_larga: descripcion_larga || '',
+      categoria: categoria || 'general', icono: icono || '📦',
+      screenshots: screenshots || [], precio_base: precio_base || 0,
+      periodicidad: periodicidad || 'unico', precio_mensual: precio_mensual || 0,
+      precio_anual: precio_anual || 0, trial_dias: trial_dias || 0,
+      modulos_requeridos: modulos_requeridos || [],
+      roles_permitidos: roles_permitidos || [],
+      activa: activa !== false, autor: autor || 'FlexCRM',
+      tags: tags || [], orden: orden || 99, data: data || {},
+    });
+    saAudit(req.sadmin.id, 'app_upsert', null, `App: ${nombre} (${slug})`);
+    res.json({ ok: true, slug });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Catálogo: actualizar app ──
+router.put('/apps/:slug', superAuth, (req, res) => {
+  try {
+    const existing = getAppDisponible(req.params.slug);
+    if (!existing) return res.status(404).json({ error: 'App no encontrada' });
+    const data = { ...existing, ...req.body };
+    upsertAppDisponible(data);
+    saAudit(req.sadmin.id, 'app_update', null, `App actualizada: ${req.params.slug}`);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Instalaciones: listar todas (cross-empresa) ──
+router.get('/apps/instaladas', superAuth, (req, res) => {
+  try {
+    const empresaId = req.query.empresa_id || null;
+    if (empresaId) {
+      const inst = getAppsInstaladas(empresaId);
+      const enriched = inst.map(i => {
+        const app = getAppDisponible(i.app_slug);
+        return { ...i, app_nombre: app?.nombre || i.app_slug, app_icono: app?.icono || '📦', app_categoria: app?.categoria || 'general' };
+      });
+      return res.json(enriched);
+    }
+    // Todas las instalaciones
+    const all = master.prepare(`
+      SELECT ai.*, e.nombre as empresa_nombre, e.codigo as empresa_codigo,
+             ad.nombre as app_nombre, ad.icono as app_icono, ad.categoria as app_categoria
+      FROM apps_instaladas ai
+      JOIN empresas e ON e.id = ai.empresa_id
+      LEFT JOIN apps_disponibles ad ON ad.slug = ai.app_slug
+      ORDER BY ai.fecha_instalacion DESC
+    `).all();
+    res.json(all);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Instalar app en una empresa (forzado desde superadmin) ──
+router.post('/apps/instalar', superAuth, (req, res) => {
+  try {
+    const { empresa_id, app_slug } = req.body;
+    if (!empresa_id || !app_slug) return res.status(400).json({ error: 'empresa_id y app_slug requeridos' });
+
+    const app = getAppDisponible(app_slug);
+    if (!app) return res.status(404).json({ error: 'App no encontrada en el catálogo' });
+    if (!app.activa) return res.status(400).json({ error: 'App no disponible (inactiva)' });
+
+    const empresa = master.prepare("SELECT * FROM empresas WHERE id=?").get(empresa_id);
+    if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+    installApp(empresa_id, app_slug, app.id, app.version);
+    logAppEvent(empresa_id, app_slug, 'installed', null, app.version, req.sadmin.usuario);
+    saAudit(req.sadmin.id, 'app_instalar', empresa_id, `App ${app_slug} instalada en ${empresa.nombre}`);
+
+    // Limpiar caché
+    try {
+      const appLoader = require('../lib/app-loader');
+      appLoader.clearTenantCache(empresa.codigo, app_slug);
+    } catch(e) {}
+
+    res.json({ ok: true, mensaje: `App "${app.nombre}" instalada en ${empresa.nombre}.` });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Desinstalar app de una empresa ──
+router.delete('/apps/instaladas/:id', superAuth, (req, res) => {
+  try {
+    const inst = master.prepare("SELECT * FROM apps_instaladas WHERE id=?").get(req.params.id);
+    if (!inst) return res.status(404).json({ error: 'Instalación no encontrada' });
+
+    const empresa = master.prepare("SELECT * FROM empresas WHERE id=?").get(inst.empresa_id);
+    const app = getAppDisponible(inst.app_slug);
+
+    uninstallApp(inst.empresa_id, inst.app_slug);
+    logAppEvent(inst.empresa_id, inst.app_slug, 'uninstalled', inst.version_instalada, null, req.sadmin.usuario);
+    saAudit(req.sadmin.id, 'app_desinstalar', inst.empresa_id,
+      `App ${inst.app_slug} desinstalada de ${empresa?.nombre || inst.empresa_id}`);
+
+    if (empresa) {
+      try {
+        const appLoader = require('../lib/app-loader');
+        appLoader.clearTenantCache(empresa.codigo, inst.app_slug);
+      } catch(e) {}
+    }
+
+    res.json({ ok: true, mensaje: 'App desinstalada.' });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Activar/desactivar app en empresa ──
+router.put('/apps/instaladas/:id/status', superAuth, (req, res) => {
+  try {
+    const { activa } = req.body;
+    const inst = master.prepare("SELECT * FROM apps_instaladas WHERE id=?").get(req.params.id);
+    if (!inst) return res.status(404).json({ error: 'Instalación no encontrada' });
+
+    updateAppStatus(inst.empresa_id, inst.app_slug, activa ? 1 : 0);
+    logAppEvent(inst.empresa_id, inst.app_slug, activa ? 'activated' : 'deactivated', null, null, req.sadmin.usuario);
+
+    if (!activa) {
+      const empresa = master.prepare("SELECT codigo FROM empresas WHERE id=?").get(inst.empresa_id);
+      if (empresa) {
+        try {
+          const appLoader = require('../lib/app-loader');
+          appLoader.clearTenantCache(empresa.codigo, inst.app_slug);
+        } catch(e) {}
+      }
+    }
+
+    res.json({ ok: true, activa: !!activa });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Stats de apps ──
+router.get('/apps/stats', superAuth, (req, res) => {
+  try {
+    const stats = getAppStats();
+    // Enriquecer con nombres
+    stats.porApp = stats.porApp.map(a => {
+      const app = getAppDisponible(a.app_slug);
+      return { ...a, nombre: app?.nombre || a.app_slug, icono: app?.icono || '📦' };
+    });
+    res.json(stats);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Liste app registradas en el loader ──
+router.get('/apps/registradas', superAuth, (req, res) => {
+  try {
+    const appLoader = require('../lib/app-loader');
+    res.json(appLoader.getRegisteredApps());
+  } catch(e) { res.json([]); }
 });
 
 module.exports = router;
