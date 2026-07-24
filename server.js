@@ -90,29 +90,33 @@ app.use((req, res, next) => {
 });
 
 // ── CORS ──
-const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim())
-  : [
-      'http://localhost:3000', 'http://127.0.0.1:3000',
-      'https://unfulanodev.com.ar', 'https://www.unfulanodev.com.ar',
-      'https://flexcrm.com.ar', 'https://www.flexcrm.com.ar',
-      'https://app.flexcrm.com.ar', 'https://admin.flexcrm.com.ar',
-    ];
+const ALLOWED_ORIGINS = [
+  'http://localhost:3000', 'http://127.0.0.1:3000',
+  'https://unfulanodev.com.ar', 'https://www.unfulanodev.com.ar',
+  'https://flexcrm.com.ar', 'https://www.flexcrm.com.ar',
+  'https://app.flexcrm.com.ar', 'https://admin.flexcrm.com.ar',
+];
 
-// ── CORS bypass for landing/webhook endpoints (public forms, no auth) ──
-app.use('/api/landing', (req, res, next) => {
-  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type');
-  if (req.method === 'OPTIONS') return res.sendStatus(200);
-  next();
-});
+if (process.env.ALLOWED_ORIGINS) {
+  process.env.ALLOWED_ORIGINS.split(',').map(s => s.trim()).forEach(o => ALLOWED_ORIGINS.push(o));
+}
+
+function isOriginAllowed(origin) {
+  if (!origin) return true;
+  if (ALLOWED_ORIGINS.includes(origin)) return true;
+  // Allow any .com.ar domain and Cloudflare Pages preview domains
+  if (origin.endsWith('.com.ar') || origin.endsWith('.pages.dev')) return true;
+  // Allow all LAN IPs in development
+  if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/i.test(origin)) return true;
+  return false;
+}
+
+// Landing routes: allow any origin (public forms)
+app.use('/api/landing', cors({ origin: true, credentials: false }));
 
 app.use(cors({
   origin: function(origin, callback) {
-    if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
-    // Allow all LAN IPs in development
-    if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/i.test(origin)) return callback(null, true);
+    if (isOriginAllowed(origin)) return callback(null, true);
     callback(new Error('CORS: origen no permitido'));
   },
   credentials: true,
