@@ -99,6 +99,15 @@ const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
       'https://app.flexcrm.com.ar', 'https://admin.flexcrm.com.ar',
     ];
 
+// ── CORS bypass for landing/webhook endpoints (public forms, no auth) ──
+app.use('/api/landing', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
 app.use(cors({
   origin: function(origin, callback) {
     if (!origin || ALLOWED_ORIGINS.includes(origin)) return callback(null, true);
