@@ -16,7 +16,6 @@ const ROLES_ALL = [
 ]
 const ROLE_COLORS = { admin:'badge-red', supervisor:'badge-blue', cajero:'badge-yellow', vendedor:'badge-gray', readonly:'badge-gray' }
 const EMPTY_USR = { nombre:'', usuario:'', email:'', password:'', roles:['vendedor'], suc_sesiones_permitidas:[] }
-const EMP_FIELDS = { emp_apellido:'Apellido', emp_dni:'DNI', emp_cuil:'CUIL', emp_tel:'Teléfono', emp_fecha_ingreso:'Fecha ingreso', emp_puesto:'Puesto', emp_salario:'Salario ($)', emp_obra_social:'Obra social' }
 
 export function Usuarios() {
   const { api } = useApi()
@@ -86,10 +85,6 @@ export function Usuarios() {
       const ORDER = ['admin','supervisor','cajero','vendedor','readonly']
       const rolPrincipal = ORDER.find(r => form.roles.includes(r)) || form.roles[0] || 'vendedor'
       const body = {...form, rol: rolPrincipal, roles: form.roles}
-      if (!body.crear_empleado) {
-        Object.keys(EMP_FIELDS).forEach(k => delete body[k])
-        delete body.crear_empleado
-      }
       if (!body.password) delete body.password
       if (modal==='new') { await api('POST','/auth/usuarios',body); toast('Usuario creado','ok') }
       else { await api('PUT','/auth/usuarios/'+modal.id,body); toast('Usuario actualizado','ok') }
@@ -186,38 +181,6 @@ export function Usuarios() {
           </div>
           <div style={{fontSize:11,color:'var(--mu)',marginTop:4}}>Sin seleccionar = acceso a todas las sucursales</div>
         </div>
-        {modal==='new' && <>
-          <div style={{borderTop:'1px solid var(--bd)',paddingTop:12,marginTop:8}}>
-            <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',padding:'6px 10px',borderRadius:6,background:form.crear_empleado?'rgba(249,115,22,.08)':'transparent'}}>
-              <input type="checkbox" checked={!!form.crear_empleado} onChange={e=>setForm(p=>({...p,crear_empleado:e.target.checked}))} style={{width:16,height:16}}/>
-              🔄 También crear ficha de empleado
-            </label>
-          </div>
-          {form.crear_empleado && (
-            <div style={{marginTop:8,padding:10,background:'var(--sf)',borderRadius:8,border:'1px solid var(--bd)'}}>
-              <div className="fr">
-                {Object.entries(EMP_FIELDS).slice(0,2).map(([k,l])=>(
-                  <Field key={k} label={l}><input value={form[k]||''} onChange={set(k)} placeholder={l}/></Field>
-                ))}
-              </div>
-              <div className="fr">
-                {Object.entries(EMP_FIELDS).slice(2,4).map(([k,l])=>(
-                  <Field key={k} label={l}><input value={form[k]||''} onChange={set(k)} placeholder={l}/></Field>
-                ))}
-              </div>
-              <div className="fr">
-                {Object.entries(EMP_FIELDS).slice(4,6).map(([k,l])=>(
-                  <Field key={k} label={l}><input value={form[k]||''} onChange={set(k)} placeholder={l}/></Field>
-                ))}
-              </div>
-              <div className="fr">
-                {Object.entries(EMP_FIELDS).slice(6,8).map(([k,l])=>(
-                  <Field key={k} label={l}><input value={form[k]||''} onChange={set(k)} placeholder={l}/></Field>
-                ))}
-              </div>
-            </div>
-          )}
-        </>}
       </Modal>
 
       {/* Reset password modal */}

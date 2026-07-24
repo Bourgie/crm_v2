@@ -48,6 +48,7 @@ function EmpleadosTab({ api, toast, allSucs }) {
 
   const linkedUserIds = new Set(list.filter(e => e.usuario_id).map(e => e.usuario_id))
 
+  function openNew() { setForm({ nombre: '', apellido: '', dni: '', cuil: '', tel: '', email: '', direccion: '', fecha_ingreso: '', puesto: '', salario: '', obra_social: '', suc_id: '', notas: '', vincular_usuario_id: '' }); setModal('new') }
   function openEdit(e) { setForm({ nombre: e.nombre, apellido: e.apellido||'', dni: e.dni||'', cuil: e.cuil||'', tel: e.tel||'', email: e.email||'', direccion: e.direccion||'', fecha_ingreso: e.fecha_ingreso||'', puesto: e.puesto||'', salario: String(e.salario||''), obra_social: e.obra_social||'', suc_id: e.suc_id||'', notas: e.notas||'', vincular_usuario_id: e.usuario_id||'' }); setModal(e) }
 
   const set = (f) => (e) => setForm(p => ({ ...p, [f]: e.target.value }))
@@ -58,8 +59,13 @@ function EmpleadosTab({ api, toast, allSucs }) {
     try {
       const body = { ...form }
       if (!body.vincular_usuario_id) delete body.vincular_usuario_id
-      await api('PUT', '/rrhh/empleados/' + modal.id, body)
-      toast('Empleado actualizado', 'ok')
+      if (modal === 'new') {
+        await api('POST', '/rrhh/empleados', body)
+        toast('Empleado creado', 'ok')
+      } else {
+        await api('PUT', '/rrhh/empleados/' + modal.id, body)
+        toast('Empleado actualizado', 'ok')
+      }
       setModal(null); load()
     } catch (e) { toast(e.message, 'err') }
     finally { setSaving(false) }
@@ -76,6 +82,7 @@ function EmpleadosTab({ api, toast, allSucs }) {
     <div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <input value={search} onChange={e => setSearch(e.target.value)} placeholder="🔍 Buscar nombre, apellido o DNI..." style={{ flex: 1, minWidth: 180 }} />
+        <button type="button" className="btn btn-primary btn-sm" onClick={openNew}>+ Nuevo empleado</button>
       </div>
 
       {filtered.length === 0 ? <div style={{ padding: 20, textAlign: 'center', color: 'var(--mu)', fontSize: 13 }}>{search ? 'Sin resultados' : 'Sin empleados cargados'}</div> : (
@@ -106,7 +113,7 @@ function EmpleadosTab({ api, toast, allSucs }) {
         <div className="modal-overlay" onClick={() => setModal(null)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
             <div className="modal-header">
-              <h3>Editar empleado</h3>
+              <h3>{modal === 'new' ? '+ Nuevo empleado' : 'Editar empleado'}</h3>
               <button type="button" className="modal-close" onClick={() => setModal(null)}>✕</button>
             </div>
             <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

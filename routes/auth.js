@@ -378,23 +378,21 @@ router.post('/usuarios', authMiddleware, requireRol('admin'), validate(createUse
     suc_sesiones_permitidas: Array.isArray(suc_sesiones_permitidas) ? suc_sesiones_permitidas : (suc_id ? [suc_id] : []),
     activo: true, creado: new Date().toISOString()
   });
-  // Optionally create empleado
-  if (req.body.crear_empleado) {
-    const empId = uid();
-    db.insert('empleados', {
-      id: empId, nombre: nombre, apellido: req.body.emp_apellido || null,
-      dni: req.body.emp_dni || null, cuil: req.body.emp_cuil || null,
-      tel: req.body.emp_tel || null, email: email || null,
-      direccion: req.body.emp_direccion || null,
-      fecha_ingreso: req.body.emp_fecha_ingreso || null,
-      puesto: req.body.emp_puesto || null,
-      salario: parseFloat(req.body.emp_salario) || 0,
-      obra_social: req.body.emp_obra_social || null,
-      suc_id: suc_id || null, activo: 1, notas: null,
-      usuario_id: userId, creado: new Date().toISOString(),
-    });
-    db.audit(req.user, suc_id, 'rrhh', 'crear_empleado', `Empleado creado desde usuario ${nombre}`, empId);
-  }
+  // Auto-create empleado record
+  const empId = uid();
+  db.insert('empleados', {
+    id: empId, nombre: nombre, apellido: null,
+    dni: null, cuil: null,
+    tel: null, email: email || null,
+    direccion: null,
+    fecha_ingreso: new Date().toISOString().substr(0, 10),
+    puesto: null,
+    salario: 0,
+    obra_social: null,
+    suc_id: suc_id || null, activo: 1, notas: null,
+    usuario_id: userId, creado: new Date().toISOString(),
+  });
+  db.audit(req.user, suc_id, 'rrhh', 'crear_empleado', `Empleado creado desde usuario ${nombre}`, empId);
   const { password: _, ...safe } = r;
   res.json(safe);
 });
