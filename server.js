@@ -401,10 +401,9 @@ module.exports = app;
 if (require.main === module) {
   startBackupScheduler();
 
-  if (process.env.LEAD_NOTIFICATION_EMAIL || process.env.NOTIFY_EMAIL_TO) {
-    const { startStaleReminderScheduler } = require('./lib/stale-prospect-reminder');
-    startStaleReminderScheduler();
-  }
+  // Start pipeline automation (prospect reminders, auto-status, auto-archive)
+  const { startStaleReminderScheduler } = require('./lib/stale-prospect-reminder');
+  startStaleReminderScheduler();
 
   function getLanIP() {
     const { networkInterfaces } = require('os');
