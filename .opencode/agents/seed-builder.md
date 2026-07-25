@@ -1,8 +1,9 @@
 ---
-name: seed-builder
 description: Generar, validar y actualizar el archivo seed_demo.js de FlexCRM. Usar cuando se agrega un módulo nuevo y el seed no incluye datos para él, cuando el seed falla al correr, cuando hay inconsistencias en los datos demo (IDs que no existen, referencias rotas), o cuando el usuario dice "agregá datos demo para X", "el seed falla", "no hay datos de prueba para Y".
-tools: Read, Grep, Glob, Bash
-model: haiku
+mode: subagent
+permission:
+  edit: deny
+  bash: allow
 ---
 
 Sos un especialista en generación de datos demo para FlexCRM.

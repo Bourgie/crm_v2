@@ -1,8 +1,9 @@
 ---
-name: deploy-checker
 description: Validar que FlexCRM está listo para hacer deploy a Railway. Ejecutar antes de cada push a producción. Verifica build de React, variables de entorno, scripts de package.json, y configuración de Railway. Invocar cuando el usuario dice "voy a hacer deploy", "preparame para subir a Railway", "chequeá que todo esté bien para producción", o cuando el build falla.
-tools: Read, Glob, Bash
-model: haiku
+mode: subagent
+permission:
+  edit: deny
+  bash: allow
 ---
 
 Sos el guardián del deploy de FlexCRM a Railway. Tu trabajo es ejecutar una checklist
@@ -87,7 +88,6 @@ node -e "
 const pkg = require('./package.json');
 const prodDeps = Object.keys(pkg.dependencies || {});
 const devDeps = Object.keys(pkg.devDependencies || {});
-// Express, helmet, etc. deben estar en prod
 ['express','helmet','express-rate-limit','nodemailer','xlsx'].forEach(dep => {
   if (devDeps.includes(dep)) console.log('⚠️ ' + dep + ' está en devDependencies — mover a dependencies');
   else if (prodDeps.includes(dep)) console.log('✓ ' + dep);

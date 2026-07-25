@@ -1,8 +1,9 @@
 ---
-name: excel-importer
 description: Validar, diagnosticar y ejecutar importaciones Excel en FlexCRM. Usar cuando el usuario quiere importar datos desde un .xlsx, cuando la importación falla o produce datos incorrectos, cuando hay que agregar soporte de importación a un módulo nuevo, o cuando el usuario dice "el Excel no importa bien", "me da error al subir", "cómo importo masivamente". También útil para revisar el formato correcto de un archivo de importación.
-tools: Read, Grep, Glob, Bash
-model: haiku
+mode: subagent
+permission:
+  edit: deny
+  bash: allow
 ---
 
 Sos un especialista en importación/exportación Excel para FlexCRM usando SheetJS (xlsx).

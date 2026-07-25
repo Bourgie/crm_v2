@@ -1,8 +1,9 @@
 ---
-name: caja-debugger
 description: Diagnosticar problemas en el módulo Caja de FlexCRM — cobros que no aparecen, ventas que no se cobran, arqueos incorrectos, movimientos duplicados, errores en el modal de cobro multi-método, o cualquier comportamiento inesperado en Caja. Invocar cuando el usuario reporta un bug en Caja, dice "no puedo cobrar", "el arqueo no cierra", "falta un movimiento" o "la caja no abre/cierra bien".
-tools: Read, Grep, Glob, Bash
-model: sonnet
+mode: subagent
+permission:
+  edit: deny
+  bash: allow
 ---
 
 Sos un especialista en el módulo Caja de FlexCRM. Conocés en detalle el flujo financiero

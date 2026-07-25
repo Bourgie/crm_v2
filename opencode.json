@@ -14,58 +14,6 @@
       "description": "Usa DeepSeek v4 Pro de NVIDIA para tareas que requieran el modelo profundo",
       "mode": "primary",
       "model": "openai/deepseek-ai/deepseek-v4-pro"
-    },
-    "architect": {
-      "description": "Diseñar solución técnica antes de implementar — analiza, decide y documenta el diseño sin tocar código",
-      "file": ".claude/agents/architect.md"
-    },
-    "caja-debugger": {
-      "description": "Diagnosticar bugs en el módulo Caja — cobros, arqueos, movimientos duplicados",
-      "file": ".claude/agents/caja-debugger.md"
-    },
-    "code-reviewer": {
-      "description": "Revisar calidad, seguridad y convenciones del código FlexCRM antes de commit o merge",
-      "file": ".claude/agents/code-reviewer.md"
-    },
-    "changelog-writer": {
-      "description": "Generar changelog de release desde git history — versión técnica y versión cliente",
-      "file": ".claude/agents/changelog-writer.md"
-    },
-    "deploy-checker": {
-      "description": "Validar que FlexCRM está listo para deploy a Railway — build, variables de entorno, config",
-      "file": ".claude/agents/deploy-checker.md"
-    },
-    "excel-importer": {
-      "description": "Validar, diagnosticar y ejecutar importaciones Excel con SheetJS",
-      "file": ".claude/agents/excel-importer.md"
-    },
-    "migration-planner": {
-      "description": "Planificar y generar scripts de migración de schema SQLite multi-tenant",
-      "file": ".claude/agents/migration-planner.md"
-    },
-    "orchestrator": {
-      "description": "Descomponer tareas grandes en subtareas y asignarlas a los agentes correctos",
-      "file": ".claude/agents/orchestrator.md"
-    },
-    "pendientes-flow": {
-      "description": "Depurar el flujo completo del módulo Pendientes — estados, entregas, stock, cobros",
-      "file": ".claude/agents/pendientes-flow.md"
-    },
-    "seed-builder": {
-      "description": "Generar y actualizar seed_demo.js con datos demo coherentes",
-      "file": ".claude/agents/seed-builder.md"
-    },
-    "tenant-auditor": {
-      "description": "Auditar seguridad multi-tenant — fugas de datos, req.db, suc_id no validado",
-      "file": ".claude/agents/tenant-auditor.md"
-    },
-    "test-writer": {
-      "description": "Escribir tests para endpoints y componentes — prioriza seguridad y lógica financiera",
-      "file": ".claude/agents/test-writer.md"
-    },
-    "vanilla-to-react": {
-      "description": "Comparar app vanilla vs React para detectar funcionalidades faltantes en la migración",
-      "file": ".claude/agents/vanilla-to-react.md"
     }
   }
 }
