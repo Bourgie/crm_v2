@@ -538,6 +538,16 @@ export default function Superadmin() {
           <div className="topbar-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>🏢 FlexCRM <span className="badge badge-orange" style={{ fontSize: 10 }}>Super Admin</span></div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <button type="button" className="btn btn-sm btn-secondary" onClick={async () => {
+            try {
+              const response = await fetch(API + '/backup/download', { method: 'POST', credentials: 'include' });
+              if (!response.ok) throw new Error('Error');
+              const blob = await response.blob();
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a'); a.href = url; a.download = 'flexcrm-full-' + new Date().toISOString().substr(0,10) + '.zip'; a.click();
+              URL.revokeObjectURL(url);
+            } catch(e) { alert('Error al descargar backup'); }
+          }} title="Descargar backup completo (todas las DBs)">💾 Backup</button>
           <span style={{ fontSize: 12, color: 'var(--mu)' }}>{user?.nombre || ''}</span>
           <button type="button" className="btn btn-sm btn-secondary" onClick={() => setPassModal(true)}>🔒</button>
           <button type="button" className="btn btn-sm btn-secondary" onClick={saLogout}>Salir</button>

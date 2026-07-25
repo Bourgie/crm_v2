@@ -1210,6 +1210,20 @@ router.get('/apps/registradas', superAuth, (req, res) => {
 });
 
 // ══════════════════════════════════════
+// BACKUP GLOBAL
+// ══════════════════════════════════════
+router.post('/backup/download', superAuth, (req, res) => {
+  try {
+    const { makeFullBackup } = require('./backup');
+    const result = makeFullBackup();
+    saAudit(req.sadmin.id, 'backup_global', null, `Backup: ${result.name} — ${(result.size/1024).toFixed(1)}KB`);
+    res.download(result.path, result.name);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ══════════════════════════════════════
 // MANTENIMIENTO
 // ══════════════════════════════════════
 router.get('/mantenimiento', superAuth, (req, res) => {
