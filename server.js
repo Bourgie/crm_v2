@@ -37,7 +37,7 @@ app.use(helmet({
       scriptSrc: ["'self'"],
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       imgSrc: ["'self'", "data:"],
-      connectSrc: ["'self'", "ws:", "wss:"],
+      connectSrc: ["'self'", "https://api.mercadolibre.com", "https://auth.mercadolibre.com.ar"],
       fontSrc: ["'self'", "data:", "https://fonts.googleapis.com", "https://fonts.gstatic.com"],
       objectSrc: ["'none'"],
       frameAncestors: ["'none'"],
@@ -95,6 +95,7 @@ const ALLOWED_ORIGINS = [
   'https://unfulanodev.com.ar', 'https://www.unfulanodev.com.ar',
   'https://flexcrm.com.ar', 'https://www.flexcrm.com.ar',
   'https://app.flexcrm.com.ar', 'https://admin.flexcrm.com.ar',
+  'https://flexcrm.up.railway.app',
 ];
 
 if (process.env.ALLOWED_ORIGINS) {
@@ -102,10 +103,11 @@ if (process.env.ALLOWED_ORIGINS) {
 }
 
 function isOriginAllowed(origin) {
+  // Allow missing Origin (non-browser clients like curl, tests, n8n, webhooks)
   if (!origin) return true;
   if (ALLOWED_ORIGINS.includes(origin)) return true;
-  // Allow any .com.ar domain and Cloudflare Pages preview domains
-  if (origin.endsWith('.com.ar') || origin.endsWith('.pages.dev')) return true;
+  // Allow Cloudflare Pages preview domains (pinned prefix)
+  if (/^https:\/\/[a-z0-9-]+\.pages\.dev$/.test(origin)) return true;
   // Allow all LAN IPs in development
   if (process.env.NODE_ENV !== 'production' && /^https?:\/\/(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/i.test(origin)) return true;
   return false;
@@ -215,30 +217,8 @@ function healthHandler(req, res) {
   const result = {
     ok: true,
     version: require('./package.json').version,
-    env: process.env.NODE_ENV || 'development',
     ts: new Date().toISOString(),
-    uptime: Math.floor(process.uptime()),
-    memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB',
   };
-  // DB check
-  try {
-    const { master } = require('./db_master');
-    result.db = { master: master.prepare("SELECT COUNT(*) as n FROM empresas").get().n + ' empresas' };
-  } catch(e) { result.db = { error: e.message }; }
-  // SMTP check
-  try {
-    const smtpHost = process.env.SMTP_HOST || (() => {
-      const { getGlobalConfig } = require('./db_master');
-      return getGlobalConfig('smtp_host');
-    })();
-    result.smtp = smtpHost ? { configured: true, host: smtpHost } : { configured: false };
-  } catch(e) { result.smtp = { error: e.message }; }
-  // Tenant DBs count
-  try {
-    const fs = require('fs'), path = require('path');
-    const files = fs.readdirSync(path.join(__dirname, 'data')).filter(f => f.startsWith('empresa_') && f.endsWith('.db'));
-    result.tenants = files.length;
-  } catch(e) { /* ignore */ }
   res.json(result);
 }
 
@@ -373,7 +353,10 @@ app.use('/api/apps',          require('./routes/apps'));
 app.get('/api/version', (req, res) => res.json({ version: 'v74', built: '2026-05-08' }));
 
 // ── 404 for unknown API routes ──
-app.use('/api/*', (req, res) => res.status(404).json({ error: 'Ruta no encontrada' }));
+app.use('/api/*', (req, res) => {
+  if (req.headers.accept?.includes('text/html')) return res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
+  res.status(404).json({ error: 'Ruta no encontrada' });
+});
 
 // ── React SPA index path ──
 const reactIndex = path.join(reactDir, 'index.html');
@@ -408,6 +391,7 @@ app.use((err, req, res, next) => {
   if (err.message && err.message.startsWith('CORS:')) {
     return res.status(403).json({ error: err.message });
   }
+  if (req.headers.accept?.includes('text/html')) return res.status(500).sendFile(path.join(__dirname, 'public', '500.html'));
   res.status(500).json({ error: process.env.NODE_ENV === 'production' ? 'Error interno del servidor' : err.message });
 });
 

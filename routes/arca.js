@@ -179,4 +179,20 @@ router.post('/ventas/:id/nota-credito', requireRol('admin', 'supervisor'), async
   }
 });
 
+// ── Consultar CAE ──
+router.get('/consultar-cae/:cae', requireRol('admin', 'supervisor'), async (req, res) => {
+  try {
+    const cfg = _getDB(req).getConfig();
+    if (!cfg.arca_access_token) return res.status(400).json({ error: 'Configurá ARCA en Ajustes' });
+    const Afip = require('@afipsdk/afip.js');
+    const afip = new Afip(getAfipConfig(cfg));
+    const ptoVta = parseInt(cfg.arca_punto_venta) || 1;
+    const info = await afip.ElectronicBilling.getVoucherInfo(req.params.cae);
+    res.json({ ok: true, comprobante: info });
+  } catch (e) {
+    console.error('[ARCA] Error consulta CAE:', e.message);
+    res.status(500).json({ error: 'Error al consultar CAE: ' + e.message });
+  }
+});
+
 module.exports = router;
