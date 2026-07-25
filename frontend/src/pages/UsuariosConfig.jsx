@@ -637,6 +637,98 @@ export function Config() {
             </details>
 
             <details style={{marginBottom:12,border:'1px solid var(--bd)',borderRadius:8,padding:'12px 16px',background:'var(--sf)'}}>
+              <summary style={{fontWeight:600,cursor:'pointer',fontSize:14}}>📄 ARCA (AFIP) — Facturación Electrónica paso a paso</summary>
+              <div style={{marginTop:10,fontSize:13,color:'var(--mu)',lineHeight:1.7}}>
+                <p style={{fontWeight:600,color:'var(--tx)',marginBottom:8}}>¿Qué necesitás antes de empezar?</p>
+                <ul style={{paddingLeft:20,marginBottom:12}}>
+                  <li>Estar inscripto en AFIP con tu CUIT</li>
+                  <li>Tener al menos un <strong>punto de venta</strong> habilitado para facturación electrónica</li>
+                  <li>Crear una cuenta gratuita en <a href="https://app.afipsdk.com" target="_blank" rel="noopener" style={{color:'var(--ac)'}}>app.afipsdk.com</a></li>
+                  <li><strong>Solo para producción:</strong> certificado digital y clave privada emitidos por AFIP</li>
+                </ul>
+
+                <div style={{background:'var(--bg)',borderRadius:8,padding:'12px 14px',marginBottom:12,border:'1px solid var(--bd)'}}>
+                  <p style={{fontWeight:600,color:'var(--tx)',marginBottom:6}}>Paso 1 — Obtené tu Access Token</p>
+                  <p>Entrá a <a href="https://app.afipsdk.com" target="_blank" rel="noopener" style={{color:'var(--ac)'}}>app.afipsdk.com</a> y registrate con tu email. Una vez adentro:</p>
+                  <ol style={{paddingLeft:20,margin:'6px 0'}}>
+                    <li>Andá a la sección <strong>"Aplicaciones"</strong></li>
+                    <li>Hacé clic en <strong>"Nueva aplicación"</strong> y poné <strong>"FlexCRM"</strong> como nombre</li>
+                    <li>Copiá el <strong>Access Token</strong> que aparece (es un texto largo de letras y números)</li>
+                  </ol>
+                  <p style={{fontSize:11,color:'var(--mu)',marginTop:6}}>El plan gratuito de Afip SDK incluye hasta 100 comprobantes por mes. Para más volumen, tienen planes pagos.</p>
+                </div>
+
+                <div style={{background:'var(--bg)',borderRadius:8,padding:'12px 14px',marginBottom:12,border:'1px solid var(--bd)'}}>
+                  <p style={{fontWeight:600,color:'var(--tx)',marginBottom:6}}>Paso 2 — Conseguí tus datos fiscales</p>
+                  <p>Estos datos los tenés de cuando te diste de alta en AFIP. Si no los recordás, podés consultarlos en:</p>
+                  <ul style={{paddingLeft:20,margin:'6px 0'}}>
+                    <li><strong>CUIT:</strong> Constancia de inscripción de AFIP o en tu factura de servicios</li>
+                    <li><strong>Punto de venta:</strong> El número que AFIP te habilitó (del 1 al 9999). Lo ves ingresando con clave fiscal a AFIP → Comprobantes en línea</li>
+                    <li><strong>IVA %:</strong> La alícuota que facturás (21%, 10.5% o 27%)</li>
+                  </ul>
+                  <p style={{fontSize:11,color:'var(--mu)',marginTop:6}}>Si no tenés punto de venta, entrá a AFIP con tu clave fiscal y solicitá uno desde el servicio "Comprobantes en Línea".</p>
+                </div>
+
+                <div style={{background:'var(--bg)',borderRadius:8,padding:'12px 14px',marginBottom:12,border:'1px solid var(--bd)'}}>
+                  <p style={{fontWeight:600,color:'var(--tx)',marginBottom:6}}>Paso 3 — Solo para producción: Certificado y Clave Privada</p>
+                  <p>Si vas a facturar en serio (no solo probar), necesitás un <strong>certificado digital</strong> de AFIP:</p>
+                  <ol style={{paddingLeft:20,margin:'6px 0'}}>
+                    <li>Entrá al sitio de AFIP con tu clave fiscal</li>
+                    <li>Buscá el servicio <strong>"Administración de Certificados Digitales"</strong></li>
+                    <li>Generá un certificado para facturación electrónica</li>
+                    <li>Te va a dar dos archivos: el <strong>certificado</strong> (.crt o .pem) y la <strong>clave privada</strong> (.key)</li>
+                    <li>Abrí cada archivo con el Bloc de Notas y copiá TODO su contenido (incluyendo las líneas <code>-----BEGIN CERTIFICATE-----</code> y <code>-----END CERTIFICATE-----</code>)</li>
+                  </ol>
+                  <p style={{fontSize:11,color:'var(--mu)',marginTop:6}}>Para <strong>modo prueba</strong> no hace falta certificado. FlexCRM usa el CUIT 20-40937847-2 automáticamente para pruebas con Afip SDK.</p>
+                </div>
+
+                <div style={{background:'var(--bg)',borderRadius:8,padding:'12px 14px',marginBottom:12,border:'1px solid var(--bd)'}}>
+                  <p style={{fontWeight:600,color:'var(--tx)',marginBottom:6}}>Paso 4 — Configurá ARCA en FlexCRM</p>
+                  <ol style={{paddingLeft:20,margin:'6px 0'}}>
+                    <li>Andá a <strong>Configuración → pestaña 📄 ARCA</strong></li>
+                    <li>Pegá el <strong>Access Token</strong> que obtuviste en el Paso 1<br/><span style={{fontSize:11}}>Si dice "✅ Configurado", hacé clic en <strong>Cambiar</strong> y pegá el nuevo token.</span></li>
+                    <li>Completá tu <strong>CUIT</strong> sin guiones (ej: 20123456789)</li>
+                    <li>Poné tu <strong>Punto de venta</strong> (ej: 1)</li>
+                    <li>Elegí <strong>Ambiente</strong>:<br/>— 🧪 <strong>Desarrollo</strong> = pruebas sin emitir facturas reales<br/>— 🚀 <strong>Producción</strong> = facturas reales (necesitás certificado)</li>
+                    <li>Completá el <strong>IVA %</strong> (normalmente 21)</li>
+                    <li><strong>Solo si elegiste Producción:</strong> pegá el contenido del certificado y la clave privada en los recuadros de abajo</li>
+                    <li>Hacé clic en <strong>Guardar cambios</strong> (el botón verde al final)</li>
+                  </ol>
+                </div>
+
+                <div style={{background:'var(--bg)',borderRadius:8,padding:'12px 14px',marginBottom:12,border:'1px solid var(--bd)'}}>
+                  <p style={{fontWeight:600,color:'var(--tx)',marginBottom:6}}>Paso 5 — ¡Probá que funcione!</p>
+                  <ol style={{paddingLeft:20,margin:'6px 0'}}>
+                    <li>Andá a <strong>Caja</strong> en el menú lateral</li>
+                    <li>Hacé una venta de prueba (cualquier producto, cualquier monto)</li>
+                    <li>Cobrala (podés usar efectivo)</li>
+                    <li>Al finalizar el cobro, aparece una ventana preguntando qué comprobante querés</li>
+                    <li>Elegí <strong>📄 Factura B</strong> (la más común para pruebas)</li>
+                    <li>Si todo está bien configurado, vas a ver: <code>✅ Factura B #1 — CAE: 12345678...</code></li>
+                  </ol>
+                  <p style={{fontSize:11,color:'var(--mu)',marginTop:6}}>Si ves un error, leé el mensaje. Lo más común es: token mal copiado, CUIT inválido, o punto de venta sin habilitar en AFIP.</p>
+                </div>
+
+                <div style={{background:'var(--bg)',borderRadius:8,padding:'12px 14px',marginBottom:12,border:'1px solid var(--bd)'}}>
+                  <p style={{fontWeight:600,color:'var(--tx)',marginBottom:6}}>Paso 6 — Facturá en el día a día</p>
+                  <p>Cada vez que cobrás una venta en Caja, después de confirmar el pago, elegí el tipo de comprobante:</p>
+                  <table style={{width:'100%',borderCollapse:'collapse',margin:'8px 0'}}>
+                    <tbody>
+                      <tr><td style={{padding:'4px 8px',fontWeight:600}}>📄 Factura B</td><td style={{padding:'4px 8px'}}>Consumidor final (no pide CUIT al cliente)</td></tr>
+                      <tr><td style={{padding:'4px 8px',fontWeight:600}}>📄 Factura A</td><td style={{padding:'4px 8px'}}>Responsable inscripto (pedile el CUIT al cliente)</td></tr>
+                      <tr><td style={{padding:'4px 8px',fontWeight:600}}>📄 Factura C</td><td style={{padding:'4px 8px'}}>Monotributista o exento de IVA</td></tr>
+                    </tbody>
+                  </table>
+                  <p style={{fontSize:11,color:'var(--mu)',marginTop:6}}>El <strong>CAE</strong> y el número de factura quedan guardados en la venta. Podés verlos desde el historial de ventas.</p>
+                </div>
+
+                <div style={{background:'rgba(234,179,8,.08)',border:'1px solid rgba(234,179,8,.25)',borderRadius:8,padding:'10px 14px',marginTop:8}}>
+                  <p style={{fontSize:12,color:'var(--tx)',margin:0}}>⚠️ <strong>Importante:</strong> Para <strong>anular</strong> una factura ya emitida, usá la opción Nota de Crédito desde el detalle de la venta. Solo pueden hacerlo usuarios con rol Admin o Supervisor.</p>
+                </div>
+              </div>
+            </details>
+
+            <details style={{marginBottom:12,border:'1px solid var(--bd)',borderRadius:8,padding:'12px 16px',background:'var(--sf)'}}>
               <summary style={{fontWeight:600,cursor:'pointer',fontSize:14}}>📧 Enviar consulta a soporte</summary>
               <div style={{marginTop:10,fontSize:13,lineHeight:1.7}}>
                 {me?.rol === 'admin' ? (
