@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { useApp, useAuth } from '../store'
+import { useApp, useAuth, useApps } from '../store'
 import { useChatUnread, usePipelineVencidas, useTareasVencidas, usePipelineActivity } from '../hooks/badges'
 
 const NAV = [
@@ -62,6 +62,8 @@ export function Sidebar({ mobile, onClose }) {
     window.location.reload()
   }
 
+  const { installed: installedApps } = useApps()
+  
   const items = NAV.filter((item) => {
     if (item.section) return true
     if (item.adminOnly && me?.rol !== 'admin') return false
@@ -69,6 +71,54 @@ export function Sidebar({ mobile, onClose }) {
     if (item.mod && !hasModule(item.mod)) return false
     return true
   })
+
+  // Generar items dinámicos de apps instaladas
+  const appNavItems = (installedApps || [])
+    .filter(app => app.menu) // solo apps con config de menú
+    .map(app => ({
+      to: `/app/apps/${app.slug}`,
+      icon: app.icono || '📦',
+      label: app.menu?.label || app.nombre || app.slug,
+      isApp: true,
+      section: app.menu?.seccion || null,
+    }))
+
+  // Intercalar apps en las secciones correspondientes
+  const appNavBySection = {}
+  appNavItems.forEach(item => {
+    const sec = item.section || '_default'
+    if (!appNavBySection[sec]) appNavBySection[sec] = []
+    appNavBySection[sec].push(item)
+  })
+
+  // Construir lista final con apps intercaladas
+  const finalItems = []
+  let currentSection = null
+  for (const item of items) {
+    if (item.section) {
+      currentSection = item.section
+      finalItems.push(item)
+      // Insertar apps de esta sección
+      const secKey = item.section
+      if (appNavBySection[secKey]) {
+        finalItems.push(...appNavBySection[secKey])
+        delete appNavBySection[secKey]
+      }
+    } else {
+      finalItems.push(item)
+    }
+  }
+  // Apps que no coincidieron con ninguna sección: van al final en sección "Apps"
+  const unplaced = Object.values(appNavBySection).flat()
+  if (unplaced.length > 0) {
+    finalItems.push({ section: 'Apps' })
+    finalItems.push(...unplaced)
+  }
+
+  // Agregar link a la Tienda (solo admin)
+  if (me?.rol === 'admin') {
+    finalItems.push({ to: '/app/marketplace', icon: '🛍️', label: 'Tienda de Apps', mod: null })
+  }
 
   return (
     <nav className={`sidebar ${mobile ? 'open' : ''}`}>
@@ -102,10 +152,10 @@ export function Sidebar({ mobile, onClose }) {
 
       {/* Nav items */}
       <div className="sidebar-nav">
-        {items.map((item, i) => {
+        {finalItems.map((item, i) => {
           if (item.section) {
             return (
-              <div key={"sec-"+item.section} className="nav-section">{item.section}</div>
+              <div key={"sec-"+item.section+'-'+i} className="nav-section">{item.section}</div>
             )
           }
           return (

@@ -917,6 +917,7 @@ const AUDIT_RETENTION_DAYS = 90;
 let _auditInsertCount = 0;
 
 const db = {
+  _sqlite: sqlite,
   all(table) {
     const rows = sqlite.prepare(`SELECT * FROM \`${table}\``).all();
     return rows.map(expandRow); // never auto-enrich — caller must use enrichProduct with suc_id

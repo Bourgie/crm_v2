@@ -46,7 +46,13 @@ export const useApp = create((set, get) => ({
   setSucSesion: (id) => { localStorage.setItem('crm_suc', id); set({ sucSesion: id }); },
   setModulos:   (v) => set({ modulos: v }),
   setRubro:     (v) => set({ rubro: v }),
-  setCfg:       (v) => set({ cfg: v }),
+  setCfg:       (v) => {
+    set({ cfg: v })
+    // Sincronizar apps instaladas desde cfg._apps
+    if (v._apps && Array.isArray(v._apps)) {
+      useApps.getState().setInstalled(v._apps)
+    }
+  },
   setTheme:     (v) => { document.documentElement.setAttribute('data-theme', v); set({ theme: v }); },
 
   hasModule: (mod) => {
@@ -54,6 +60,24 @@ export const useApp = create((set, get) => ({
     if (!mods) return true
     return Array.isArray(mods) ? mods.includes(mod) : true
   },
+}))
+
+// ── Apps store (ecosistema) ───────────────────────────────────
+export const useApps = create((set, get) => ({
+  installed: [],       // apps instaladas para este tenant [{slug, nombre, icono, categoria, menu, ...}]
+  marketplace: [],     // catálogo de apps disponibles
+  loading: false,
+
+  setInstalled: (apps) => set({ installed: apps || [] }),
+  setMarketplace: (apps) => set({ marketplace: apps || [] }),
+  setLoading: (v) => set({ loading: v }),
+
+  isInstalled: (slug) => get().installed.some(a => a.slug === slug),
+  getInstalled: (slug) => get().installed.find(a => a.slug === slug),
+
+  /** Agregar/quitar localmente (optimistic update) */
+  addInstalled: (app) => set(s => ({ installed: [...s.installed, app] })),
+  removeInstalled: (slug) => set(s => ({ installed: s.installed.filter(a => a.slug !== slug) })),
 }))
 
 // ── Toast store ───────────────────────────────────────────────

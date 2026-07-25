@@ -92,7 +92,15 @@ export function Layout() {
     return () => clearInterval(pollRef.current)
   }, [sucSesion, location.pathname])
 
-  const title = TITLES[location.pathname] || 'FlexCRM'
+  const title = (() => {
+    // Dynamic app titles
+    if (location.pathname.startsWith('/app/apps/')) {
+      const slug = location.pathname.replace('/app/apps/', '')
+      if (slug) return '📦 ' + slug
+    }
+    if (location.pathname === '/app/marketplace') return '🛍️ Tienda de Apps'
+    return TITLES[location.pathname] || 'FlexCRM'
+  })()
 
   return (
     <div className="layout">

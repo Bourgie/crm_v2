@@ -1,0 +1,36 @@
+{
+  "slug": "_hello-world",
+  "nombre": "Hello World (test)",
+  "version": "1.0.0",
+  "descripcion": "App de prueba para validar que el ecosistema de apps funciona correctamente.",
+  "descripcion_larga": "Esta app no hace nada útil. Sirve para verificar que el App Loader, el SDK backend, el SDK frontend, el montaje dinámico de rutas, y la inyección en el sidebar funcionan end-to-end.",
+  "icono": "👋",
+  "categoria": "general",
+  "autor": "FlexCRM",
+  "precio": {
+    "unico": null,
+    "mensual": 0,
+    "anual": 0,
+    "trial_dias": 0
+  },
+  "requisitos": {
+    "crm_version_min": "2.0.0",
+    "modulos": [],
+    "roles": ["admin", "supervisor"]
+  },
+  "menu": {
+    "seccion": "Sistema",
+    "label": "Hello World",
+    "orden": 99
+  },
+  "permisos": ["config:read", "config:write"],
+  "tablas": [
+    {
+      "nombre": "app_hw_log",
+      "sql": "CREATE TABLE IF NOT EXISTS app_hw_log (id TEXT PRIMARY KEY, mensaje TEXT, fecha TEXT)"
+    }
+  ],
+  "roles_permitidos": ["admin", "supervisor"],
+  "modulos_requeridos": [],
+  "tags": ["test", "hello-world"]
+}
