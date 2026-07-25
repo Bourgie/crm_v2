@@ -19,6 +19,10 @@ function parseEmpresaFromToken(token) {
 }
 
 // ── Disparar webhooks (exportada para usar desde otros módulos) ──
+function signPayload(token, body) {
+  return crypto.createHmac('sha256', token).update(body).digest('hex');
+}
+
 function dispararWebhooks(db, evento, payload) {
   try {
     const whs = db.where('webhooks', w =>
@@ -27,8 +31,15 @@ function dispararWebhooks(db, evento, payload) {
     if (!whs.length) return;
     const body = JSON.stringify({ evento, timestamp: new Date().toISOString(), data: payload });
     whs.forEach(w => {
+      const signature = signPayload(w.token, body);
       fetch(w.url, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Webhook-Signature': signature,
+          'X-Webhook-Event': evento,
+        },
+        body,
         signal: AbortSignal.timeout(5000),
       }).catch(() => {});
     });
@@ -99,6 +110,12 @@ router.post('/:id/test', authMiddleware, requireRol('admin','supervisor'), async
 
 // ── Receptor público (n8n → FlexCRM) ──────────────────────────
 router.post('/receptor/:token', (req, res) => {
+  // Content-Type enforcement
+  const ct = (req.headers['content-type'] || '').split(';')[0].trim();
+  if (ct !== 'application/json') {
+    return res.status(415).json({ error: 'Content-Type debe ser application/json' });
+  }
+
   const token = req.params.token;
   const empresaCode = parseEmpresaFromToken(token);
   if (!empresaCode) return res.status(400).json({ error: 'Token con formato inválido' });
@@ -106,6 +123,17 @@ router.post('/receptor/:token', (req, res) => {
     const db = getEmpresaDB(empresaCode);
     const w = db.where('webhooks', wh => wh.token === token && wh.activo)[0];
     if (!w) return res.status(401).json({ error: 'Token inválido o desactivado' });
+
+    // Verify HMAC signature if provided
+    const signature = req.headers['x-webhook-signature'];
+    if (signature) {
+      const body = JSON.stringify(req.body);
+      const expected = signPayload(token, body);
+      if (!crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))) {
+        return res.status(401).json({ error: 'Firma inválida' });
+      }
+    }
+
     const body = req.body || {};
     res.json({ ok: true, recibido: body, webhook_id: w.id, empresa: empresaCode });
   } catch (e) {
@@ -113,4 +141,4 @@ router.post('/receptor/:token', (req, res) => {
   }
 });
 
-module.exports = { router, dispararWebhooks, EVENTOS };
+module.exports = { router, dispararWebhooks, signPayload, EVENTOS };

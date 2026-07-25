@@ -129,10 +129,54 @@ router.post('/email-test', authMiddleware, (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+const SENSITIVE_KEYS = new Set([
+  'jwt_secret', 'smtp_pass', 'smtp_user',
+  'tienda_woo_key', 'tienda_woo_secret',
+  'tienda_tn_access_token',
+  'tienda_meli_app_id', 'tienda_meli_client_secret',
+  'tienda_meli_access_token', 'tienda_meli_refresh_token',
+  'arca_access_token', 'arca_cert', 'arca_key',
+]);
+
+const MASK_KEYS = new Set(['arca_access_token', 'arca_cert', 'arca_key']);
+
 router.get('/', authMiddleware, (req, res) => {
   const db = _getDB(req);
   const cfg = { ...db.getConfig() };
-  delete cfg.jwt_secret;
+  for (const key of SENSITIVE_KEYS) {
+    if (key in cfg) {
+      if (MASK_KEYS.has(key)) {
+        cfg[key] = cfg[key] ? true : false;
+      } else {
+        delete cfg[key];
+      }
+    }
+  }
+
+  // Incluir apps instaladas
+  try {
+    const { getEmpresa, getAppsInstaladas } = require('../db_master');
+    const empresa = getEmpresa(req.user.empresa || 'default');
+    if (empresa) {
+      const appLoader = require('../lib/app-loader');
+      const instaladas = getAppsInstaladas(empresa.id);
+      cfg._apps = instaladas
+        .filter(i => i.activa)
+        .map(i => {
+          const manifest = appLoader.getAppManifest(i.app_slug);
+          return {
+            slug: i.app_slug,
+            nombre: manifest?.nombre || i.app_slug,
+            version: i.version_instalada,
+            icono: manifest?.icono || '📦',
+            categoria: manifest?.categoria || 'general',
+            menu: manifest?.menu || null,
+            rutas: manifest?.rutas_api || null,
+          };
+        });
+    }
+  } catch (e) { /* non-fatal */ }
+
   res.json(cfg);
 });
 
@@ -150,12 +194,19 @@ router.put('/', authMiddleware, requireRol('admin'), (req, res) => {
     safe.objetivos_mensuales = objetivos;
   }
 
+  // Skip masked sensitive keys (boolean true/false means "keep existing")
+  for (const key of MASK_KEYS) {
+    if (key in safe && typeof safe[key] === 'boolean') {
+      delete safe[key];
+    }
+  }
+
   db.setConfig(safe);
   res.json({ ok: true });
 });
 
 // Listar backups disponibles
-router.get('/backups', requireRol('admin'), (req, res) => {
+router.get('/backups', authMiddleware, requireRol('admin'), (req, res) => {
   const db = _getDB(req);
   const fs = require('fs'), path = require('path');
   const dir = path.join(__dirname, '../data/backups');
@@ -171,7 +222,7 @@ router.get('/backups', requireRol('admin'), (req, res) => {
 });
 
 // Forzar backup manual ahora
-router.post('/backup', requireRol('admin'), (req, res) => {
+router.post('/backup', authMiddleware, requireRol('admin'), (req, res) => {
   const db = _getDB(req);
   try {
     const fs = require('fs'), path = require('path');

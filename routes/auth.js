@@ -397,6 +397,28 @@ router.post('/usuarios', authMiddleware, requireRol('admin'), validate(createUse
   res.json(safe);
 });
 
+// ── Per-email signup rate limiting ──
+const signupEmailAttempts = new Map();
+const SIGNUP_EMAIL_MAX = 2;
+const SIGNUP_EMAIL_WINDOW = 24 * 60 * 60 * 1000; // 24h
+
+setInterval(() => {
+  const cutoff = Date.now() - SIGNUP_EMAIL_WINDOW;
+  for (const [key, ts] of signupEmailAttempts) {
+    if (ts < cutoff) signupEmailAttempts.delete(key);
+  }
+}, 60000); // cleanup every minute
+
+function checkSignupEmailLimit(email) {
+  const key = email.toLowerCase().trim();
+  const last = signupEmailAttempts.get(key);
+  if (last && (Date.now() - last) < SIGNUP_EMAIL_WINDOW) {
+    return false;
+  }
+  signupEmailAttempts.set(key, Date.now());
+  return true;
+}
+
 // ── Public signup (auto-provisión de empresa + trial) ──
 router.post('/signup', async (req, res) => {
   const { empresa_nombre, email, password, rubro } = req.body;
@@ -405,6 +427,11 @@ router.post('/signup', async (req, res) => {
   }
   if (password.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
   if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) return res.status(400).json({ error: 'La contraseña debe incluir una mayúscula y un número' });
+
+  // Per-email rate limit
+  if (!checkSignupEmailLimit(email)) {
+    return res.status(429).json({ error: 'Ya te registraste con este email recientemente. Esperá 24 horas o contactanos.' });
+  }
 
   const { getEmpresaDB, uid } = require('../db_sqlite');
   const { master, getEmpresa, createEmpresa } = require('../db_master');

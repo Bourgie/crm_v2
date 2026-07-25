@@ -508,7 +508,14 @@ export function Config() {
             </div>
             <div className="fr">
               <Field label="Access Token">
-                <input value={form.arca_access_token} onChange={set('arca_access_token')} placeholder="tu-access-token" style={{fontFamily:'monospace',fontSize:12}}/>
+                {form.arca_access_token === true ? (
+                  <div style={{display:'flex',alignItems:'center',gap:8,height:36}}>
+                    <span style={{fontSize:13,color:'var(--ok)',fontWeight:600}}>✅ Configurado</span>
+                    <button type="button" className="btn btn-xs" onClick={() => setForm(p => ({...p, arca_access_token: ''}))}>Cambiar</button>
+                  </div>
+                ) : (
+                  <input value={form.arca_access_token} onChange={set('arca_access_token')} placeholder="tu-access-token" style={{fontFamily:'monospace',fontSize:12}}/>
+                )}
               </Field>
               <Field label="CUIT">
                 <input value={form.arca_cuit} onChange={set('arca_cuit')} placeholder="20111111112" style={{fontFamily:'monospace'}}/>
@@ -529,10 +536,24 @@ export function Config() {
               </Field>
             </div>
             <Field label="Certificado (solo producción)">
-              <textarea value={form.arca_cert} onChange={set('arca_cert')} rows={4} placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" style={{fontSize:11,fontFamily:'monospace'}}/>
+              {form.arca_cert === true ? (
+                <div style={{display:'flex',alignItems:'center',gap:8,height:36}}>
+                  <span style={{fontSize:13,color:'var(--ok)',fontWeight:600}}>✅ Configurado</span>
+                  <button type="button" className="btn btn-xs" onClick={() => setForm(p => ({...p, arca_cert: ''}))}>Cambiar</button>
+                </div>
+              ) : (
+                <textarea value={form.arca_cert} onChange={set('arca_cert')} rows={4} placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" style={{fontSize:11,fontFamily:'monospace'}}/>
+              )}
             </Field>
             <Field label="Clave privada (solo producción)">
-              <textarea value={form.arca_key} onChange={set('arca_key')} rows={4} placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style={{fontSize:11,fontFamily:'monospace'}}/>
+              {form.arca_key === true ? (
+                <div style={{display:'flex',alignItems:'center',gap:8,height:36}}>
+                  <span style={{fontSize:13,color:'var(--ok)',fontWeight:600}}>✅ Configurado</span>
+                  <button type="button" className="btn btn-xs" onClick={() => setForm(p => ({...p, arca_key: ''}))}>Cambiar</button>
+                </div>
+              ) : (
+                <textarea value={form.arca_key} onChange={set('arca_key')} rows={4} placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style={{fontSize:11,fontFamily:'monospace'}}/>
+              )}
             </Field>
           </>
         )}

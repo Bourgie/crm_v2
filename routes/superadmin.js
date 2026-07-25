@@ -28,11 +28,19 @@ function setAuthCookie(res, token) {
   });
 }
 
-// ── Superadmin rate limiter ──
+// ── Superadmin rate limiters ──
 const superadminLoginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 5,
   message: { error: 'Demasiados intentos de login superadmin. Esperá 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const superadminForgotPasswordLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 3,
+  message: { error: 'Demasiados intentos. Esperá 1 hora.' },
   standardHeaders: true,
   legacyHeaders: false,
 });
@@ -926,7 +934,7 @@ router.post('/email-test', superAuth, (req, res) => {
 });
 
 // ── Superadmin forgot-password ──
-router.post('/forgot-password', async (req, res) => {
+router.post('/forgot-password', superadminForgotPasswordLimiter, async (req, res) => {
   const { email } = req.body;
   const search = (email || '').trim().toLowerCase();
   if (!search) return res.json({ ok: true, mensaje: 'Si la cuenta existe en nuestro sistema, recibirás un enlace para restablecer tu contraseña.' });
@@ -952,8 +960,8 @@ router.post('/forgot-password', async (req, res) => {
   const smtpPass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
   const smtpFrom = getGlobalConfig('smtp_from') || smtpUser || '';
   const smtpFromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
-  const resetLink = `${process.env.APP_URL || 'https://crm-v2.fly.dev'}/admin?token=${token}`;
   if (smtpHost && smtpUser && smtpPass && smtpFrom && userEmail) {
+    const resetLink = `${process.env.APP_URL || 'https://app.flexcrm.com.ar'}/admin?token=${token}`;
     const { sendEmail } = require('../lib/send-email');
     const html = `<div style="font-family:sans-serif;padding:20px"><h2>Restablecer contraseña</h2><p>Recibiste este email porque solicitaste restablecer tu contraseña de superadmin en FlexCRM.</p><p><a href="${resetLink}" style="display:inline-block;padding:12px 32px;background:#F97316;color:#fff;font-size:15px;font-weight:700;text-decoration:none;border-radius:8px">Restablecer contraseña</a></p><p style="color:#64748b;font-size:12px">Este enlace expira en 1 hora. Si no solicitaste este cambio, ignorá este mensaje.</p></div>`;
     try {
@@ -963,10 +971,7 @@ router.post('/forgot-password', async (req, res) => {
       console.error('[SA] Error enviando email forgot-password:', e.message);
     }
   } else {
-    const resetLink = `${process.env.APP_URL || 'https://crm-v2.fly.dev'}/admin?token=${token}`;
-    console.log('[SA] ⚠️  SMTP global no configurado — token NO enviado por email.');
-    console.log('[SA] 🔗 URL reset:', resetLink);
-    console.log('[SA] 🔑 Token:', token);
+    console.warn('[SA] SMTP global no configurado — token de reset NO enviado por email.');
   }
   res.json({ ok: true, mensaje: 'Si la cuenta existe en nuestro sistema, recibirás un enlace para restablecer tu contraseña.' });
 });
