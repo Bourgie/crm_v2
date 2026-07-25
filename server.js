@@ -306,6 +306,14 @@ app.use('/api', apiLimiter);
 // ── Health check (after rate limiter) ──
 app.get('/api/health', healthHandler);
 
+// ── Error report endpoint (frontend captures errors → logs here) ──
+app.post('/api/log-error', (req, res) => {
+  const { message, stack, url, userAgent, timestamp } = req.body;
+  console.error(`[CLIENT-ERROR] ${timestamp || new Date().toISOString()} — ${url || 'unknown'} — ${message}`);
+  if (stack) console.error(stack);
+  res.json({ ok: true });
+});
+
 // ── CSRF protection for state-changing API requests ──
 app.use('/api', csrfProtection);
 

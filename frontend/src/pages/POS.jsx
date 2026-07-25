@@ -54,7 +54,7 @@ function CartItem({ item, onQty, onRemove }) {
   )
 }
 
-const btnQty = { width: 26, height: 26, borderRadius: 6, border: '1.5px solid var(--bd)', background: 'var(--sf)', cursor: 'pointer', fontWeight: 700, fontSize: 15 }
+const btnQty = { width: 26, height: 26, borderRadius: 6, border: '1.5px solid var(--bd)', background: 'var(--sf)', cursor: 'pointer', fontWeight: 700, fontSize: 15, className: 'pos-btn-qty' }
 const LISTA_LABELS = { 1: 'Lista 1', 2: 'Lista 2', 3: 'Lista 3' }
 
 export function POS() {
@@ -174,18 +174,37 @@ export function POS() {
   }
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 12, height: 'calc(100vh - 92px)' }}>
+    <>
+    <style>{`
+      @media (max-width: 768px) {
+        .pos-grid { grid-template-columns: 1fr !important; height: auto !important; min-height: 100vh; }
+        .pos-products { order: 2; }
+        .pos-cart { order: 1; position: sticky; top: 0; z-index: 20; max-height: 50vh; border-radius: 0 !important; margin: -12px -24px 12px -24px; border-left: none !important; border-right: none !important; }
+        .pos-cart-header { display: none; }
+        .pos-cart-items { max-height: 25vh !important; }
+        .pos-search { font-size: 16px !important; padding: 14px 14px 14px 40px !important; }
+        .pos-tile { padding: 12px 10px !important; min-height: 70px; }
+        .pos-tile-name { font-size: 14px !important; }
+        .pos-tile-price { font-size: 16px !important; }
+        .pos-btn-qty { width: 32px !important; height: 32px !important; font-size: 18px !important; }
+        .pos-product-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 6px !important; }
+      }
+      @media (max-width: 400px) {
+        .pos-product-grid { grid-template-columns: 1fr 1fr !important; }
+      }
+    `}</style>
+    <div className="pos-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 12, height: 'calc(100vh - 92px)' }}>
       {/* ── Izquierda: búsqueda + grilla ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden' }}>
+      <div className="pos-products" style={{ display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden' }}>
         <div style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--mu)' }}>🔍</span>
-          <input ref={searchRef} value={search} onChange={(e) => handleSearch(e.target.value)} placeholder="Buscar producto o escanear código de barras..." autoComplete="off" style={{ paddingLeft: 38, fontSize: 14, fontWeight: 500 }} />
+          <input ref={searchRef} value={search} onChange={(e) => handleSearch(e.target.value)} placeholder="Buscar producto o escanear código de barras..." autoComplete="off" className="pos-search" style={{ paddingLeft: 38, fontSize: 14, fontWeight: 500 }} />
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {prodsFiltrados.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}><div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div><div>{search ? `Sin resultados para "${search}"` : 'Sin productos cargados'}</div></div>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 8 }}>
+            <div className="pos-product-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 8 }}>
               {prodsFiltrados.map((p) => <ProdTile key={p.id + (p.talle || '')} prod={p} lista={lista} onClick={addToCart} />)}
             </div>
           )}
@@ -193,9 +212,9 @@ export function POS() {
       </div>
 
       {/* ── Derecha: carrito ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden' }}>
+      <div className="pos-cart" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden' }}>
         {/* Cliente */}
-        <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--bd)', background: 'var(--sf)', position: 'relative' }}>
+        <div className="pos-cart-header" style={{ padding: '10px 14px', borderBottom: '1px solid var(--bd)', background: 'var(--sf)', position: 'relative' }}>
           {cliente ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ flex: 1 }}>
@@ -223,7 +242,7 @@ export function POS() {
         </div>
 
         {/* Items */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 14px' }}>
+          <div className="pos-cart-items" style={{ flex: 1, overflowY: 'auto', padding: '0 14px' }}>
           {cart.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 28, color: 'var(--mu)', fontSize: 13 }}><div style={{ fontSize: 26, marginBottom: 6 }}>🛒</div>Tocá un producto para agregar</div>
           ) : cart.map((item) => <CartItem key={item.prod_id + item.talle} item={item} onQty={updateQty} onRemove={removeItem} />)}
@@ -287,5 +306,6 @@ export function POS() {
       </div>
 
     </div>
+    </>
   )
 }
