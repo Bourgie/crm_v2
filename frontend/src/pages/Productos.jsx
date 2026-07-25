@@ -4,6 +4,7 @@ import { useApp, useToast } from '../store'
 import { Modal } from '../components/Modal'
 import { SearchBar, PageHeader, Field, ConfirmDialog, EmptyRow, Loader, Pagination } from '../components/UI'
 import { exportExcel, importExcel, pickFile } from '../utils/excel'
+import { fetchWithCache } from '../hooks/useOfflineCache'
 
 const PER_PAGE = 30
 const EMPTY = {
@@ -110,10 +111,10 @@ export function Productos() {
 
   const load = useCallback(async () => {
     try {
-      const data = await api('GET', `/productos?viewer_suc=${sucSesion || ''}`)
+      const data = await fetchWithCache('productos', () => api('GET', `/productos?viewer_suc=${sucSesion || ''}`))
       const list = Array.isArray(data) ? data : []
       setProds(list)
-      setAppProds(list)   // sincronizar store global para que el POS vea los nuevos productos
+      setAppProds(list)
     } catch { toast('Error cargando productos', 'err') }
     finally { setLoading(false) }
   }, [sucSesion])
