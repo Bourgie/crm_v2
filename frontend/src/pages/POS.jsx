@@ -198,7 +198,7 @@ export function POS() {
       <div className="pos-products" style={{ display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden' }}>
         <div style={{ position: 'relative' }}>
           <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--mu)' }}>🔍</span>
-          <input ref={searchRef} value={search} onChange={(e) => handleSearch(e.target.value)} placeholder="Buscar producto o escanear código de barras..." autoComplete="off" className="pos-search" style={{ paddingLeft: 38, fontSize: 14, fontWeight: 500 }} />
+          <input ref={searchRef} value={search} onChange={(e) => handleSearch(e.target.value)} placeholder="🔍 Buscar producto · 📷 Escanear código" autoComplete="off" className="pos-search" style={{ paddingLeft: 38, fontSize: 14, fontWeight: 500 }} />
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {prodsFiltrados.length === 0 ? (
