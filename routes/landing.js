@@ -131,4 +131,23 @@ router.post('/zoho-form', (req, res) => {
   }
 });
 
+// ── Analytics tracking pixel (records page views) ──
+router.get('/pixel', (req, res) => {
+  try {
+    const { master } = require('../db_master');
+    const id = 'pv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+    const pagina = req.query.p || req.headers['referer'] || '';
+    const dominio = pagina.includes('unfulanodev') ? 'unfulanodev' : 'flexcrm';
+    master.prepare(`INSERT INTO landing_leads (id,nombre,telefono,email,mensaje,empresa_interes,pagina,leido,fecha)
+      VALUES (?,?,?,?,?,?,?,2,?)`).run(
+      id, 'Analytics', '', '', '', '', pagina, new Date().toISOString()
+    );
+  } catch(e) { /* silent */ }
+  // Return a 1x1 transparent pixel
+  const pixel = Buffer.from('R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7', 'base64');
+  res.setHeader('Content-Type', 'image/gif');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.send(pixel);
+});
+
 module.exports = router;

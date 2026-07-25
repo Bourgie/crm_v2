@@ -471,6 +471,44 @@ router.post('/signup', async (req, res) => {
 
   console.log('[Signup] Nueva empresa:', finalCodigo, '—', email);
 
+  // Send welcome email (async, non-blocking)
+  setImmediate(async () => {
+    try {
+      const { getGlobalConfig } = require('../db_master');
+      const { decryptValue } = require('../lib/crypto-utils');
+      const smtpHost = getGlobalConfig('smtp_host');
+      const smtpPort = parseInt(getGlobalConfig('smtp_port')) || 465;
+      const smtpUser = getGlobalConfig('smtp_user');
+      const encryptedPass = getGlobalConfig('smtp_pass');
+      const smtpPass = encryptedPass ? decryptValue(encryptedPass) : '';
+      const smtpFrom = getGlobalConfig('smtp_from') || smtpUser;
+      const smtpFromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
+      if (smtpHost && smtpUser && smtpPass && email) {
+        const { sendEmail } = require('../lib/send-email');
+        const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
+        const html = `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px">
+<h2 style="color:#6366f1">🚀 ¡Bienvenido a FlexCRM!</h2>
+<p>Hola <strong>${empresa_nombre}</strong>,</p>
+<p>Tu cuenta de prueba de <strong>14 días</strong> está activa. Ya podés empezar a usar FlexCRM sin restricciones.</p>
+<div style="background:#f8fafc;border-radius:8px;padding:16px;margin:16px 0">
+  <p style="margin:0 0 8px"><strong>🔗 Acceso:</strong> <a href="${appUrl}/app/login" style="color:#6366f1">${appUrl}/app/login</a></p>
+  <p style="margin:0 0 8px"><strong>🏢 Empresa:</strong> ${finalCodigo}</p>
+  <p style="margin:0"><strong>👤 Usuario:</strong> ${usuario}</p>
+</div>
+<p style="color:#64748b;font-size:14px">📋 <strong>Primeros pasos:</strong></p>
+<ol style="color:#64748b;font-size:14px">
+  <li>Cargá tus productos desde el menú Productos (o importá por Excel)</li>
+  <li>Creá usuarios para tu equipo desde Usuarios</li>
+  <li>Empezá a vender desde el Punto de Venta (POS)</li>
+</ol>
+<p style="color:#64748b;font-size:14px">¿Dudas? Escribime por WhatsApp al <a href="https://wa.me/5493517424391">+54 9 351 742-4391</a>.</p>
+<p style="color:#94a3b8;font-size:12px;margin-top:24px">FlexCRM — Hecho en Argentina 🇦🇷</p></div>`;
+        await sendEmail(smtpHost, smtpPort, smtpUser, smtpPass, `"${smtpFromName}" <${smtpFrom}>`, email, '🚀 Bienvenido a FlexCRM — Tu cuenta está lista', html);
+        console.log('[Signup] Welcome email sent to:', email);
+      }
+    } catch(e) { console.error('[Signup] Welcome email error:', e.message); }
+  });
+
   // Generate JWT
   const token = jwt.sign(
     { id: adminId, rol: 'admin', empresa: finalCodigo, nombre: 'Admin' },

@@ -153,12 +153,32 @@ router.get('/', (req,res) => {
   if(suc_id) ventasMismoMesAnioAnterior = ventasMismoMesAnioAnterior.filter(v=>v.suc_id===suc_id);
   const totalMismoMesAnio = ventasMismoMesAnioAnterior.reduce((a,v)=>a+v.total,0);
 
+  // Mes anterior (comparación mes a mes)
+  const prevMonth = new Date(now); prevMonth.setMonth(prevMonth.getMonth()-1);
+  const mesAnteriorKey = prevMonth.toISOString().substr(0,7);
+  let ventasMesAnterior = db.all('ventas')
+    .filter(v=>!v.anulada && v.fecha && v.fecha.substr(0,7)===mesAnteriorKey);
+  if(suc_id) ventasMesAnterior = ventasMesAnterior.filter(v=>v.suc_id===suc_id);
+  const totalMesAnterior = ventasMesAnterior.reduce((a,v)=>a+v.total,0);
+
+  // Gastos del mes
+  let gastos = db.all('gastos').filter(g => {
+    if(g.anulado) return false;
+    if(!g.fecha) return false;
+    return g.fecha.substr(0,7) === mes;
+  });
+  if(suc_id) gastos = gastos.filter(g => g.suc_id === suc_id);
+  const totalGastos = gastos.reduce((a,g) => a + (parseFloat(g.monto)||0), 0);
+
   res.json({
     kpis:{
       ventas_hoy:{t:vH.reduce((a,v)=>a+v.total,0),n:vH.length},
       ventas_mes:{t:vM.reduce((a,v)=>a+v.total,0),n:vM.length},
+      ventas_mes_anterior:{t:totalMesAnterior, n:ventasMesAnterior.length},
+      gastos_mes:{t:totalGastos, n:gastos.length},
       ticket_promedio:vM.length?vM.reduce((a,v)=>a+v.total,0)/vM.length:0,
       margen_mes:margenMes,
+      resultado_mes:vM.reduce((a,v)=>a+v.total,0) - totalGastos,
       clientes:{total:db.find('clientes',{activo:true}).length,mes:new Set(vM.flatMap(v=>v.cliente_id?[v.cliente_id]:[])).size},
       stock_critico:stockCrit.length,
       pendientes_sin_despachar:pendientes.length,
