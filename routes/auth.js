@@ -512,24 +512,9 @@ router.post('/signup', async (req, res) => {
       const smtpFromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
       if (smtpHost && smtpUser && smtpPass && email) {
         const { sendEmail } = require('../lib/send-email');
+        const { welcomeEmail } = require('../lib/email-templates');
         const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
-        const html = `<div style="font-family:sans-serif;max-width:500px;margin:0 auto;padding:24px">
-<h2 style="color:#6366f1">🚀 ¡Bienvenido a FlexCRM!</h2>
-<p>Hola <strong>${empresa_nombre}</strong>,</p>
-<p>Tu cuenta de prueba de <strong>14 días</strong> está activa. Ya podés empezar a usar FlexCRM sin restricciones.</p>
-<div style="background:#f8fafc;border-radius:8px;padding:16px;margin:16px 0">
-  <p style="margin:0 0 8px"><strong>🔗 Acceso:</strong> <a href="${appUrl}/app/login" style="color:#6366f1">${appUrl}/app/login</a></p>
-  <p style="margin:0 0 8px"><strong>🏢 Empresa:</strong> ${finalCodigo}</p>
-  <p style="margin:0"><strong>👤 Usuario:</strong> ${usuario}</p>
-</div>
-<p style="color:#64748b;font-size:14px">📋 <strong>Primeros pasos:</strong></p>
-<ol style="color:#64748b;font-size:14px">
-  <li>Cargá tus productos desde el menú Productos (o importá por Excel)</li>
-  <li>Creá usuarios para tu equipo desde Usuarios</li>
-  <li>Empezá a vender desde el Punto de Venta (POS)</li>
-</ol>
-<p style="color:#64748b;font-size:14px">¿Dudas? Escribime por WhatsApp al <a href="https://wa.me/5493517424391">+54 9 351 742-4391</a>.</p>
-<p style="color:#94a3b8;font-size:12px;margin-top:24px">FlexCRM — Hecho en Argentina 🇦🇷</p></div>`;
+        const html = welcomeEmail(empresa_nombre, finalCodigo, usuario, appUrl);
         await sendEmail(smtpHost, smtpPort, smtpUser, smtpPass, `"${smtpFromName}" <${smtpFrom}>`, email, '🚀 Bienvenido a FlexCRM — Tu cuenta está lista', html);
         console.log('[Signup] Welcome email sent to:', email);
       }
@@ -651,45 +636,13 @@ router.post('/usuarios/:id/reset-password', authMiddleware, requireRol('admin'),
 });
 
 function buildResetEmailHtml(resetLink, empresaNombre) {
-  const nombre = empresaNombre || 'FlexCRM';
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 16px">
-<table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.08)">
-<tr><td style="padding:32px 32px 24px;text-align:center;border-bottom:1px solid #e4e4e7">
-<div style="font-size:22px;font-weight:800;color:#18181b">${nombre}</div>
-<div style="font-size:13px;color:#71717a;margin-top:4px">Restablecer contraseña</div>
-</td></tr>
-<tr><td style="padding:24px 32px">
-<p style="font-size:14px;color:#3f3f46;line-height:1.6;margin:0 0 16px">Recibimos una solicitud para restablecer la contraseña de tu cuenta.</p>
-<p style="font-size:14px;color:#3f3f46;line-height:1.6;margin:0 0 20px">Hacé clic en el botón de abajo para crear una nueva contraseña. Este enlace es válido por <strong>1 hora</strong>.</p>
-<table cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:0 0 24px">
-<a href="${resetLink}" style="display:inline-block;padding:12px 32px;background:#F97316;color:#fff;font-size:15px;font-weight:700;text-decoration:none;border-radius:8px">Restablecer contraseña</a>
-</td></tr></table>
-<p style="font-size:13px;color:#71717a;line-height:1.5;margin:0">Si no solicitaste este cambio, podés ignorar este mensaje. Tu contraseña actual sigue siendo segura.</p>
-</td></tr>
-<tr><td style="padding:16px 32px;text-align:center;border-top:1px solid #e4e4e7;font-size:11px;color:#a1a1aa">
-${nombre} — Sistema de gestión
-</td></tr>
-</table>
-</td></tr></table></body></html>`;
+  const { resetPasswordEmail } = require('../lib/email-templates');
+  return resetPasswordEmail(resetLink, empresaNombre || 'FlexCRM');
 }
 
 function buildResetConfirmedHtml(loginLink) {
-  return `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif">
-<table width="100%" cellpadding="0" cellspacing="0"><tr><td align="center" style="padding:40px 16px">
-<table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:16px;box-shadow:0 4px 24px rgba(0,0,0,.08)">
-<tr><td style="padding:32px 32px 24px;text-align:center;border-bottom:1px solid #e4e4e7">
-<div style="font-size:22px;font-weight:800;color:#18181b">FlexCRM</div>
-</td></tr>
-<tr><td style="padding:24px 32px;text-align:center">
-<div style="font-size:48px;margin-bottom:12px">✅</div>
-<p style="font-size:15px;color:#3f3f46;font-weight:600;margin:0 0 8px">Contraseña actualizada</p>
-<p style="font-size:13px;color:#71717a;line-height:1.5;margin:0 0 20px">Tu contraseña se actualizó correctamente. Ya podés iniciar sesión con tu nueva contraseña.</p>
-<table cellpadding="0" cellspacing="0"><tr><td align="center">
-<a href="${loginLink}" style="display:inline-block;padding:12px 32px;background:#F97316;color:#fff;font-size:15px;font-weight:700;text-decoration:none;border-radius:8px">Ir al inicio de sesión</a>
-</td></tr></table>
-</td></tr></table>
-</td></tr></table></body></html>`;
+  const { passwordChangedEmail } = require('../lib/email-templates');
+  return passwordChangedEmail(loginLink, 'FlexCRM');
 }
 
 async function sendEmail(host, port, smtpUser, smtpPass, from, to, subject, html) {

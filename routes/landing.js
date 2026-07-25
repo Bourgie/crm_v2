@@ -4,25 +4,22 @@ const router = Router();
 function notifyNewLead(nombre, telefono, email, empresa, mensaje) {
   setImmediate(async () => {
     try {
-      const { sendNotificationEmail, buildNotificationHtml } = require('../lib/send-email');
-      const title = `Nuevo lead: ${nombre}`;
-      const body = `Alguien completó el formulario de contacto en la landing page.`;
-      const details = [
-        `👤 <b>Nombre:</b> ${nombre}`,
-        `📞 <b>Teléfono:</b> ${telefono}`,
-        email ? `✉️ <b>Email:</b> ${email}` : null,
-        empresa ? `🏢 <b>Empresa:</b> ${empresa}` : null,
-        mensaje ? `💬 <b>Mensaje:</b> "${mensaje.substring(0, 200)}${mensaje.length > 200 ? '...' : ''}"` : null,
-      ].filter(Boolean).join('\n');
-      const link = process.env.APP_URL || 'http://localhost:3000';
-      await sendNotificationEmail(
-        null,
-        `🆕 ${title}`,
-        buildNotificationHtml(title, body, details, `${link}/admin?tab=landing`)
-      );
-    } catch (e) {
-      console.error('[Landing] Email notification error:', e.message);
-    }
+      const { sendEmail, getTenantSMTP, getNotificationSMTP } = require('../lib/send-email');
+      const { newLeadEmail } = require('../lib/email-templates');
+      const adminLink = (process.env.APP_URL || 'https://app.flexcrm.com.ar') + '/admin?tab=landing';
+      const html = newLeadEmail(nombre, telefono, email, mensaje, empresa, adminLink);
+      // Use global SMTP for admin notifications
+      const smtp = getNotificationSMTP();
+      if (smtp.host && smtp.user && smtp.to) {
+        await sendEmail(smtp.host, smtp.port, smtp.user, smtp.pass, smtp.from, smtp.to, '🆕 Nuevo lead: ' + nombre, html);
+      } else {
+        // Fallback: try tenant SMTP
+        try {
+          const { sendTenantEmail } = require('../lib/send-email');
+          await sendTenantEmail(null, null, '🆕 Nuevo lead: ' + nombre, html);
+        } catch(fb) { /* can't send */ }
+      }
+    } catch (e) { console.error('[Landing] Email error:', e.message); }
   });
 }
 
