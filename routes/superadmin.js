@@ -502,25 +502,69 @@ router.delete('/empresas/:id', superAuth, (req, res) => {
     if(!e) return res.status(404).json({error:'No encontrado'});
 
     const path = require('path');
-    const empresaId = e.id;
-    const empresaCodigo = e.codigo;
+    const empresaId = e.id, empresaCodigo = e.codigo, empresaNombre = e.nombre, adminEmail = e.admin_email;
+    const { hacer_backup, enviar_email } = req.query;
+    let backupFilename = null;
 
-    // Soft delete first (mark inactive)
+    // Generate backup if requested
+    if (hacer_backup === 'true' || enviar_email === 'true') {
+      try {
+        const { makeFullBackup } = require('./backup');
+        const result = makeFullBackup();
+        backupFilename = result.name;
+      } catch(be) { console.error('[DeleteEmpresa] Backup error:', be.message); }
+    }
+
+    // Send email if requested
+    if (enviar_email === 'true' && adminEmail && backupFilename) {
+      setImmediate(async () => {
+        try {
+          const { getGlobalConfig } = require('../db_master');
+          const h = getGlobalConfig('smtp_host');
+          if (h) {
+            const { decryptValue } = require('../lib/crypto-utils');
+            const u = getGlobalConfig('smtp_user');
+            const pass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
+            const from = getGlobalConfig('smtp_from')||u||'';
+            const fromName = getGlobalConfig('smtp_from_name')||'FlexCRM';
+            const { sendEmail } = require('../lib/send-email');
+            const html = `<div style="font-family:sans-serif;padding:20px"><h2>Empresa eliminada: ${empresaNombre}</h2>
+<p><strong>Codigo:</strong> ${empresaCodigo}</p><p>Adjunto el backup final de todos los datos.</p></div>`;
+            const backupPath = path.join(__dirname, '../data/backups', backupFilename);
+            const fs = require('fs');
+            if (fs.existsSync(backupPath)) {
+              await sendEmail(h, parseInt(getGlobalConfig('smtp_port'))||465, u, pass, '"'+fromName+'" <'+from+'>', adminEmail, 'Backup final: '+empresaNombre+' — FlexCRM', html, [{ filename: backupFilename, path: backupPath }]);
+            }
+          }
+        } catch(se) { console.error('[DeleteEmpresa] Email error:', se.message); }
+      });
+    }
+
+    // Soft delete
     master.prepare("UPDATE empresas SET activo=0 WHERE id=?").run(empresaId);
-    
-    // Try to delete DB file if it exists
+
+    // Try to delete DB file
     try {
       const dbPath = path.join(__dirname, '../data', `empresa_${empresaCodigo}.db`);
       const fs = require('fs');
       if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
-    } catch(fe) { console.error('[DeleteEmpresa] File error:', fe.message); }
+    } catch(fe) {}
 
-    saAudit(req.sadmin.id, 'eliminar_empresa', empresaId, 'Eliminada: ' + (e.nombre||empresaCodigo));
-    res.json({ ok: true, mensaje: 'Empresa eliminada.' });
+    saAudit(req.sadmin.id, 'eliminar_empresa', empresaId, 'Eliminada: ' + empresaNombre + (backupFilename ? ' — Backup: '+backupFilename : ''));
+    res.json({ ok: true, backup: backupFilename, mensaje: 'Empresa eliminada.' });
   } catch(err) {
-    console.error('[DeleteEmpresa] CRASH:', err.message, err.stack);
+    console.error('[DeleteEmpresa] Error:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// Download a specific backup file
+router.get('/empresas/backup-download/:file', superAuth, (req, res) => {
+  const file = req.params.file;
+  if (file.includes('..') || !file.endsWith('.zip')) return res.status(400).json({ error: 'Nombre invalido' });
+  const fp = require('path').join(__dirname, '../data/backups', file);
+  if (!require('fs').existsSync(fp)) return res.status(404).json({ error: 'No encontrado' });
+  res.download(fp, file);
 });
 
 // ══ Crear empresa desde backup ══
