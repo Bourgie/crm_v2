@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../store'
+import { PasswordInput } from '../components/PasswordInput'
 
 export function Signup() {
   const navigate = useNavigate()
@@ -63,7 +64,8 @@ export function Signup() {
         </div>
         <div style={{ marginBottom: 12 }}>
           <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Contraseña *</label>
-          <input type="password" value={form.password} onChange={set('password')} placeholder="Mín. 8 caracteres" onKeyDown={e => e.key === 'Enter' && handleSignup()} style={{ width: '100%' }} />
+          <PasswordInput value={form.password} onChange={set('password')} placeholder="Mín. 8 caracteres" style={{ width: '100%' }} onKeyDown={e => e.key === 'Enter' && handleSignup()} />
+          <input type="text" name="website" value={form.website||''} onChange={set('website')} style={{ display:'none' }} tabIndex={-1} autoComplete="off" />
         </div>
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Rubro (opcional)</label>

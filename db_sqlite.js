@@ -580,6 +580,9 @@ try { sqlite.exec("ALTER TABLE usuarios ADD COLUMN must_change_password INTEGER 
 try { sqlite.exec("ALTER TABLE usuarios ADD COLUMN password_changed_at TEXT"); } catch(e) {}
 // User sessions tracking
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS user_sessions (id TEXT PRIMARY KEY, usuario_id TEXT NOT NULL, token_hash TEXT, ip TEXT, user_agent TEXT, creado TEXT, ultimo_acceso TEXT, activo INTEGER DEFAULT 1)"); } catch(e) {}
+// Email verification
+try { sqlite.exec("ALTER TABLE usuarios ADD COLUMN email_verificado INTEGER DEFAULT 1"); } catch(e) {}
+try { sqlite.exec("CREATE TABLE IF NOT EXISTS email_tokens (id TEXT PRIMARY KEY, usuario_id TEXT NOT NULL, email TEXT, token_hash TEXT NOT NULL, expires TEXT, usado INTEGER DEFAULT 0, creado TEXT)"); } catch(e) {}
 }
 sqlite.prepare("INSERT OR REPLACE INTO schema_version(version) VALUES(?)").run(CURRENT_SCHEMA_VERSION);
 

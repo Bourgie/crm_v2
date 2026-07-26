@@ -400,6 +400,39 @@ function saAudit(admin_id, accion, empresa_id, detalle) {
       .run('sal_'+Date.now(), new Date().toISOString(), admin_id, accion, empresa_id||null, detalle||null);
   } catch(e) {}
 }
+
+// Extended audit with IP, user-agent, and extra metadata
+function saAuditExtended(admin_id, accion, empresa_id, detalle, meta = {}) {
+  try {
+    const fullDetalle = JSON.stringify({
+      msg: detalle || '',
+      ip: meta.ip || '',
+      ua: meta.userAgent || '',
+      email: meta.email || '',
+      ts: new Date().toISOString(),
+      ...meta.data
+    });
+    master.prepare("INSERT INTO sa_audit_log (id,fecha,admin_id,accion,empresa_id,detalle) VALUES (?,?,?,?,?,?)")
+      .run('sal_'+Date.now()+'_'+Math.random().toString(36).substr(2,6), new Date().toISOString(), admin_id, accion, empresa_id||null, fullDetalle);
+  } catch(e) { console.error('[Audit] Error:', e.message); }
+}
+
+// Add data column to audit log for future use
+try { master.exec("ALTER TABLE sa_audit_log ADD COLUMN data TEXT DEFAULT '{}'"); } catch(e) {}
+
+const DISPOSABLE_DOMAINS = new Set([
+  'mailinator.com','yopmail.com','tempmail.com','10minutemail.com','guerrillamail.com','sharklasers.com',
+  'trashmail.com','throwaway.email','maildrop.cc','harakirimail.com','getnada.com','temp-mail.org',
+  'fakeinbox.com','emailondeck.com','tempmail.net','dispostable.com','mailnesia.com','spamgourmet.com',
+  'mytemp.email','emailfake.com','moakt.com','tempail.com','guerrillamail.org','guerrillamail.net',
+  'guerrillamail.biz','pokemail.net','spam4.me','wegwerfmail.de','wegwerfmail.net','wegwerfmail.org',
+  'nwytg.com','vusra.com','colevillecapital.com','gufum.com','montepaone.com','katamo-mail.com',
+]);
+
+function isDisposableEmail(email) {
+  const domain = (email || '').split('@')[1]?.toLowerCase();
+  return domain ? DISPOSABLE_DOMAINS.has(domain) : false;
+}
 function saPurgeAuditLog(retentionDays) {
   try {
     const days = retentionDays || 90;
@@ -684,4 +717,4 @@ function getVencimientosProximos(dias) {
 }
 
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
-module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos, saAudit, saPurgeAuditLog, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos };
+module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos };

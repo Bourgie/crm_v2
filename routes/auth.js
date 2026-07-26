@@ -174,6 +174,15 @@ router.post('/login', validate(loginSchema), async (req, res) => {
   resetAttempts(userDB, lockKey);
   suspicious.auditLoginSuccess(req, userDB, user)
 
+  // Check email verification
+  if (user.email_verificado === 0 || user.email_verificado === false) {
+    return res.status(403).json({
+      error: 'Debés verificar tu email antes de ingresar.',
+      require_verification: true,
+      email: user.email || ''
+    });
+  }
+
   if (user.must_change_password) {
     const tempToken = jwt.sign(
       { id: user.id, purpose: 'change_password', empresa },
@@ -421,7 +430,14 @@ function checkSignupEmailLimit(email) {
 
 // ── Public signup (auto-provisión de empresa + trial) ──
 router.post('/signup', async (req, res) => {
-  const { empresa_nombre, email, password, rubro } = req.body;
+  const { empresa_nombre, email, password, rubro, website } = req.body;
+
+  // Honeypot (hidden field — bots fill it)
+  if (website && website.length > 0) {
+    try { const { saAuditExtended } = require('../db_master'); saAuditExtended('system', 'signup_honeypot', null, 'Bot: '+(req.ip||'')); } catch {}
+    return res.json({ ok: true, mensaje: 'Revisa tu email para activar la cuenta.' });
+  }
+
   if (!empresa_nombre || !email || !password) {
     return res.status(400).json({ error: 'Nombre del negocio, email y contraseña requeridos' });
   }
@@ -471,7 +487,13 @@ router.post('/signup', async (req, res) => {
     modulos_habilitados: JSON.stringify(['pos', 'caja', 'clientes', 'ventas', 'productos', 'ctacte', 'presupuestos', 'reportes']),
   });
 
-  // Create admin user
+  // Disposable email
+  try {
+    const { isDisposableEmail } = require('../db_master');
+    if (isDisposableEmail(email)) return res.status(400).json({ error: 'Usa un email valido para registrarte.' });
+  } catch {}
+
+  // Create admin user (email_verificado=0)
   const hash = await bcrypt.hash(password, 10);
   const adminId = 'u' + uid();
   const usuario = email.split('@')[0].replace(/[^a-z0-9_]/g, '_').substring(0, 20);
@@ -479,55 +501,123 @@ router.post('/signup', async (req, res) => {
     id: adminId, nombre: 'Admin', usuario: usuario,
     email: email.trim().toLowerCase(), password: hash,
     rol: 'admin', roles: JSON.stringify(['admin']), activo: true,
-    creado: new Date().toISOString(), password_changed_at: new Date().toISOString(),
+    email_verificado: 0, creado: new Date().toISOString(), password_changed_at: new Date().toISOString(),
   });
 
-  // Auto-create empleado
   const empId = uid();
   empDB.insert('empleados', {
     id: empId, nombre: 'Admin', apellido: null, email: email.trim().toLowerCase(),
     fecha_ingreso: new Date().toISOString().substr(0, 10), activo: 1,
     usuario_id: adminId, creado: new Date().toISOString(),
   });
+  empDB.insert('sucursales', { id: uid(), nombre: empresa_nombre, dir: '', activo: true, creado: new Date().toISOString() });
 
-  // Create default sucursal
-  empDB.insert('sucursales', {
-    id: uid(), nombre: empresa_nombre, dir: '', activo: true,
-    creado: new Date().toISOString(),
+  // Generate verification token
+  const verToken = crypto.randomBytes(20).toString('hex');
+  const verTokenHash = crypto.createHash('sha256').update(verToken).digest('hex');
+  empDB.insert('email_tokens', {
+    id: 'vet_' + Date.now(), usuario_id: adminId, email: email.trim().toLowerCase(),
+    token_hash: verTokenHash, expires: new Date(Date.now() + 24*3600000).toISOString(), usado: 0, creado: new Date().toISOString()
   });
 
-  console.log('[Signup] Nueva empresa:', finalCodigo, '—', email);
+  try { const { saAuditExtended } = require('../db_master'); saAuditExtended('system', 'signup_exitoso', finalCodigo, 'Empresa: '+empresa_nombre, { ip: req.ip||'', email }); } catch {}
+  console.log('[Signup] Nueva:', finalCodigo, email);
 
-  // Send welcome email (async, non-blocking)
-  setImmediate(async () => {
-    try {
-      const { getGlobalConfig } = require('../db_master');
+  // Send verification email inline (not setImmediate)
+  try {
+    const { getGlobalConfig } = require('../db_master');
+    const { decryptValue } = require('../lib/crypto-utils');
+    const h = getGlobalConfig('smtp_host'), p = parseInt(getGlobalConfig('smtp_port'))||465;
+    const u = getGlobalConfig('smtp_user'), ep = getGlobalConfig('smtp_pass');
+    const pass = ep ? decryptValue(ep) : '';
+    const from = getGlobalConfig('smtp_from') || u || '';
+    const fromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
+    const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
+    const verifyLink = `${appUrl}/app/verify-email/${verToken}`;
+    if (h && u && pass && from) {
+      const { sendEmail } = require('../lib/send-email');
+      const { verificationEmail } = require('../lib/email-templates');
+      await sendEmail(h, p, u, pass, `"${fromName}" <${from}>`, email, 'Verifica tu email — FlexCRM', verificationEmail(empresa_nombre, verifyLink));
+      console.log('[Signup] Verification email to:', email);
+    }
+  } catch(e) {
+    console.error('[Signup] Email error:', e.message);
+    try { const { saAuditExtended } = require('../db_master'); saAuditExtended('system', 'smtp_error', finalCodigo, e.message); } catch {}
+  }
+
+  res.json({ ok: true, mensaje: 'Cuenta creada. Revisa tu email para verificarla y empezar.' });
+});
+
+// ── Verify email via token ──
+router.get('/verify-email/:token', async (req, res) => {
+  try {
+    const tokenHash = crypto.createHash('sha256').update(req.params.token).digest('hex');
+    const { getEmpresaDB } = require('../db_sqlite');
+    const { getEmpresas, saAuditExtended } = require('../db_master');
+    const empresas = getEmpresas();
+    let found = null, foundCodigo = null;
+    for (const emp of empresas) {
+      if (!emp.activo) continue;
+      try {
+        const db = getEmpresaDB(emp.codigo);
+        const row = db.raw.prepare("SELECT * FROM email_tokens WHERE token_hash=? AND usado=0").get(tokenHash);
+        if (row) { found = row; foundCodigo = emp.codigo; break; }
+      } catch {}
+    }
+    if (!found) return res.redirect('/app/login?verified=invalid');
+    if (new Date(found.expires) < new Date()) return res.redirect('/app/login?verified=expired');
+
+    const empDB = getEmpresaDB(foundCodigo);
+    empDB.raw.prepare("UPDATE usuarios SET email_verificado=1 WHERE id=?").run(found.usuario_id);
+    empDB.raw.prepare("UPDATE email_tokens SET usado=1 WHERE id=?").run(found.id);
+    try { saAuditExtended('system', 'email_verificado', foundCodigo, 'Email: '+found.email, { email: found.email }); } catch {}
+
+    const user = empDB.findOne('usuarios', found.usuario_id);
+    if (user) {
+      const accessToken = jwt.sign({ id: user.id, rol: user.rol, empresa: foundCodigo, nombre: user.nombre }, getSecret(), { expiresIn: '24h' });
+      res.redirect('/app/login?verified=ok&token=' + encodeURIComponent(accessToken));
+    } else {
+      res.redirect('/app/login?verified=ok');
+    }
+  } catch(e) { console.error('[Verify] Error:', e.message); res.redirect('/app/login?verified=error'); }
+});
+
+// ── Resend verification email ──
+router.post('/verify-email/resend', async (req, res) => {
+  const { email } = req.body;
+  if (!email) return res.status(400).json({ error: 'Email requerido' });
+  try {
+    const { getEmpresaDB } = require('../db_sqlite');
+    const { getEmpresas } = require('../db_master');
+    const empresas = getEmpresas();
+    let found = null, foundCodigo = null;
+    for (const emp of empresas) {
+      try {
+        const db = getEmpresaDB(emp.codigo);
+        const user = db.where('usuarios', u => u.email === email.trim().toLowerCase() && u.email_verificado === 0 && u.activo)[0];
+        if (user) { found = user; foundCodigo = emp.codigo; break; }
+      } catch {}
+    }
+    if (!found) return res.json({ ok: true, mensaje: 'Si la cuenta existe, recibiras un nuevo email.' });
+
+    const verToken = crypto.randomBytes(20).toString('hex');
+    const empDB = getEmpresaDB(foundCodigo);
+    empDB.raw.prepare("UPDATE email_tokens SET usado=1 WHERE usuario_id=?").run(found.id);
+    empDB.insert('email_tokens', { id: 'vet_'+Date.now(), usuario_id: found.id, email: email, token_hash: crypto.createHash('sha256').update(verToken).digest('hex'), expires: new Date(Date.now()+24*3600000).toISOString(), usado: 0, creado: new Date().toISOString() });
+
+    const { getGlobalConfig } = require('../db_master');
+    if (getGlobalConfig('smtp_host')) {
       const { decryptValue } = require('../lib/crypto-utils');
-      const smtpHost = getGlobalConfig('smtp_host');
-      const smtpPort = parseInt(getGlobalConfig('smtp_port')) || 465;
-      const smtpUser = getGlobalConfig('smtp_user');
-      const encryptedPass = getGlobalConfig('smtp_pass');
-      const smtpPass = encryptedPass ? decryptValue(encryptedPass) : '';
-      const smtpFrom = getGlobalConfig('smtp_from') || smtpUser;
-      const smtpFromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
-      if (smtpHost && smtpUser && smtpPass && email) {
-        const { sendEmail } = require('../lib/send-email');
-        const { welcomeEmail } = require('../lib/email-templates');
-        const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
-        const html = welcomeEmail(empresa_nombre, finalCodigo, usuario, appUrl);
-        await sendEmail(smtpHost, smtpPort, smtpUser, smtpPass, `"${smtpFromName}" <${smtpFrom}>`, email, '🚀 Bienvenido a FlexCRM — Tu cuenta está lista', html);
-        console.log('[Signup] Welcome email sent to:', email);
-      }
-    } catch(e) { console.error('[Signup] Welcome email error:', e.message); }
-  });
-
-  // Generate JWT
-  const token = jwt.sign(
-    { id: adminId, rol: 'admin', empresa: finalCodigo, nombre: 'Admin' },
-    getSecret(), { expiresIn: '24h' }
-  );
-
-  res.json({ ok: true, token, empresa: finalCodigo, nombre: 'Admin', empresa_nombre, mensaje: `Prueba gratuita de ${trialDays} días activada` });
+      const h = getGlobalConfig('smtp_host'), p = parseInt(getGlobalConfig('smtp_port'))||465;
+      const u = getGlobalConfig('smtp_user'), pass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
+      const from = getGlobalConfig('smtp_from')||u||''; const fromName = getGlobalConfig('smtp_from_name')||'FlexCRM';
+      const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
+      const { sendEmail } = require('../lib/send-email');
+      const { verificationEmail } = require('../lib/email-templates');
+      await sendEmail(h, p, u, pass, '"'+fromName+'" <'+from+'>', email, 'Verifica tu email — FlexCRM', verificationEmail('FlexCRM', appUrl+'/app/verify-email/'+verToken));
+    }
+    res.json({ ok: true, mensaje: 'Si la cuenta existe, recibiras un nuevo email.' });
+  } catch(e) { res.json({ ok: true, mensaje: 'Si la cuenta existe, recibiras un nuevo email.' }); }
 });
 
 // ── Check if tenant code is available ──

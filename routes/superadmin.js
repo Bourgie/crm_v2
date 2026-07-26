@@ -492,11 +492,60 @@ router.post('/empresas/:id/modulos', superAuth, (req, res) => {
 
 
 router.delete('/empresas/:id', superAuth, (req, res) => {
-  const e = master.prepare("SELECT * FROM empresas WHERE id=?").get(req.params.id);
+  const e = master.prepare("SELECT * FROM empresas WHERE id=? OR codigo=?").get(req.params.id, req.params.id);
   if(!e) return res.status(404).json({error:'No encontrado'});
-  master.prepare("UPDATE empresas SET activo=0 WHERE id=?").run(req.params.id);
-  saAudit(req.sadmin.id, 'suspender_empresa', req.params.id, `Suspendida: ${e.nombre}`);
-  res.json({ok:true});
+
+  const fs = require('fs');
+  const path = require('path');
+  const empresaNombre = e.nombre;
+  const empresaCodigo = e.codigo;
+  const adminEmail = e.admin_email;
+
+  // 1. Generate backup ZIP before deleting
+  let backupFile = null;
+  try {
+    const { makeFullBackup } = require('./backup');
+    backupFile = makeFullBackup().path;
+    console.log('[DeleteEmpresa] Backup generado:', backupFile);
+  } catch(be) { console.error('[DeleteEmpresa] Backup error:', be.message); }
+
+  // 2. Delete tenant database
+  try {
+    const dbPath = path.join(__dirname, '../data', `empresa_${empresaCodigo}.db`);
+    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+  } catch(dbe) { console.error('[DeleteEmpresa] DB delete error:', dbe.message); }
+
+  // 3. Hard delete from master DB
+  master.prepare("DELETE FROM empresas WHERE id=?").run(e.id);
+
+  // 4. Send email notification with backup
+  setImmediate(async () => {
+    try {
+      const { getGlobalConfig } = require('../db_master');
+      const { decryptValue } = require('../lib/crypto-utils');
+      const h = getGlobalConfig('smtp_host');
+      const u = getGlobalConfig('smtp_user');
+      const pass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
+      const from = getGlobalConfig('smtp_from')||u||'';
+      const fromName = getGlobalConfig('smtp_from_name')||'FlexCRM';
+      if (h && u && pass && from) {
+        const { sendEmail } = require('../lib/send-email');
+        // Send to superadmin (notification of deletion)
+        if (req.sadmin?.email || adminEmail) {
+          const to = req.sadmin?.email || adminEmail;
+          const html = `<div style="font-family:sans-serif;padding:20px"><h2>Empresa eliminada: ${empresaNombre}</h2>
+<p><strong>Código:</strong> ${empresaCodigo}</p><p><strong>Email:</strong> ${adminEmail||'—'}</p>
+<p>La empresa y todos sus datos fueron eliminados permanentemente.</p>
+${backupFile ? `<p style="color:#94a3b8;font-size:12px">Backup guardado en: ${backupFile}</p>` : ''}
+</div>`;
+          await sendEmail(h, parseInt(getGlobalConfig('smtp_port'))||465, u, pass, `"${fromName}" <${from}>`, to, 'Empresa eliminada: ' + empresaNombre + ' — FlexCRM', html);
+        }
+      }
+    } catch(se) { console.error('[DeleteEmpresa] Email error:', se.message); }
+  });
+
+  saAudit(req.sadmin.id, 'eliminar_empresa_permanente', req.params.id, `Eliminada: ${empresaNombre} (${empresaCodigo})${backupFile ? ' — Backup: '+path.basename(backupFile) : ''}`);
+  res.json({ ok: true, backup: backupFile ? path.basename(backupFile) : null, mensaje: 'Empresa eliminada permanentemente.' });
 });
 
 // ══ Login as empresa ══
