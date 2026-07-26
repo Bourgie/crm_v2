@@ -1,13 +1,23 @@
-// flexcrm — Basic Integration Tests
-// Run: npm test or npx vitest run
+// flexcrm — Unit Tests (no server needed)
+// Run: npx vitest run
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import http from 'node:http'
 
-import { describe, it, expect } from 'vitest'
+let server, baseUrl
 
-// ═══ Signup Tests ═══
-const BASE_URL = process.env.TEST_URL || 'http://localhost:3000'
+beforeAll(async () => {
+  // Start Express app on random port
+  const app = require('../server')
+  server = http.createServer(app)
+  await new Promise(resolve => server.listen(0, () => resolve()))
+  const port = server.address().port
+  baseUrl = `http://localhost:${port}`
+})
+
+afterAll(() => { if (server) server.close() })
 
 async function api(method, path, body) {
-  const res = await fetch(BASE_URL + path, {
+  const res = await fetch(baseUrl + path, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
@@ -17,45 +27,64 @@ async function api(method, path, body) {
 }
 
 describe('POST /api/auth/signup', () => {
-  it('rejects missing fields', async () => {
+  it('rejects empty fields', async () => {
     const r = await api('POST', '/api/auth/signup', { empresa_nombre: '', email: '', password: '' })
     expect(r.error).toBeTruthy()
   })
 
-  it('rejects weak password', async () => {
-    const r = await api('POST', '/api/auth/signup', { empresa_nombre: 'Test', email: 'test@test.com', password: '123' })
+  it('rejects weak password (no uppercase/no digit)', async () => {
+    const r = await api('POST', '/api/auth/signup', {
+      empresa_nombre: 'TestShop',
+      email: 'weak@test.com',
+      password: 'solominuscula'
+    })
     expect(r.error).toBeTruthy()
   })
 
-  it('creates account with valid data', async () => {
+  it('creates account and returns token', async () => {
     const ts = Date.now()
     const r = await api('POST', '/api/auth/signup', {
-      empresa_nombre: 'TestSignup' + ts,
-      email: 'test' + ts + '@test.com',
+      empresa_nombre: 'UnitTest-' + ts,
+      email: 'unittest' + ts + '@test.com',
       password: 'Test1234!',
       rubro: 'general'
     })
     expect(r.ok).toBe(true)
     expect(r.token).toBeTruthy()
     expect(r.empresa).toBeTruthy()
+    expect(r.empresa_nombre).toBe('UnitTest-' + ts)
+    expect(r.mensaje).toContain('14 días')
   })
 })
 
 describe('GET /api/health', () => {
-  it('returns ok with version', async () => {
+  it('returns version, uptime, memory, db', async () => {
     const r = await api('GET', '/api/health')
     expect(r.ok).toBe(true)
     expect(r.version).toBeTruthy()
   })
 })
 
-describe('POST /api/landing/lead (form submission)', () => {
-  it('accepts valid lead', async () => {
+describe('POST /api/landing/lead', () => {
+  it('accepts valid lead form', async () => {
     const r = await api('POST', '/api/landing/lead', {
-      nombre: 'Test Lead',
-      mensaje: 'Hola, quiero probar',
-      telefono: '123456',
-      pagina: 'test'
+      nombre: 'Test Lead Unit',
+      mensaje: 'Probando desde test unitario',
+      telefono: '123456789',
+      pagina: 'unittest'
+    })
+    expect(r.ok).toBe(true)
+    expect(r.id).toBeTruthy()
+  })
+})
+
+describe('POST /api/landing/zoho-form', () => {
+  it('accepts Zoho-style JSON payload', async () => {
+    const r = await api('POST', '/api/landing/zoho-form', {
+      Name: { first_name: 'Zoho', last_name: 'Test' },
+      Email: { value: 'zoho@test.com' },
+      PhoneNumber: { value: '999' },
+      MultiLine: { value: 'Mensaje de Zoho Forms' },
     })
     expect(r.ok).toBe(true)
   })
