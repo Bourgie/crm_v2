@@ -492,27 +492,30 @@ router.post('/empresas/:id/modulos', superAuth, (req, res) => {
 
 
 router.delete('/empresas/:id', superAuth, (req, res) => {
-  console.log('[DeleteEmpresa] Request params:', JSON.stringify(req.params));
-  const e = master.prepare("SELECT * FROM empresas WHERE id=? OR codigo=?").get(req.params.id, req.params.id);
-  if(!e) return res.status(404).json({error:'No encontrado'});
+  try {
+    const e = master.prepare("SELECT * FROM empresas WHERE id=? OR codigo=?").get(req.params.id, req.params.id);
+    if(!e) return res.status(404).json({error:'No encontrado'});
 
-  const path = require('path');
-  const empresaNombre = e.nombre, empresaCodigo = e.codigo, empresaId = e.id;
+    const path = require('path');
+    const empresaId = e.id;
+    const empresaCodigo = e.codigo;
 
-  // Delete from master DB
-  const delResult = master.prepare("DELETE FROM empresas WHERE id=?").run(empresaId);
-  console.log('[DeleteEmpresa] Master DB delete:', delResult.changes, 'rows for', empresaId);
+    // Soft delete first (mark inactive)
+    master.prepare("UPDATE empresas SET activo=0 WHERE id=?").run(empresaId);
+    
+    // Try to delete DB file if it exists
+    try {
+      const dbPath = path.join(__dirname, '../data', `empresa_${empresaCodigo}.db`);
+      const fs = require('fs');
+      if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+    } catch(fe) { console.error('[DeleteEmpresa] File error:', fe.message); }
 
-  // Delete tenant DB file
-  const dbPath = path.join(__dirname, '../data', `empresa_${empresaCodigo}.db`);
-  console.log('[DeleteEmpresa] DB path:', dbPath, 'exists:', require('fs').existsSync(dbPath));
-  if (require('fs').existsSync(dbPath)) {
-    require('fs').unlinkSync(dbPath);
-    console.log('[DeleteEmpresa] File deleted:', empresaCodigo);
+    saAudit(req.sadmin.id, 'eliminar_empresa', empresaId, 'Eliminada: ' + (e.nombre||empresaCodigo));
+    res.json({ ok: true, mensaje: 'Empresa eliminada.' });
+  } catch(err) {
+    console.error('[DeleteEmpresa] CRASH:', err.message, err.stack);
+    res.status(500).json({ error: err.message });
   }
-
-  saAudit(req.sadmin.id, 'eliminar_empresa', empresaId, 'Eliminada: ' + empresaNombre + ' (' + empresaCodigo + ')');
-  res.json({ ok: true, mensaje: 'Empresa eliminada permanentemente.' });
 });
 
 // ══ Crear empresa desde backup ══
