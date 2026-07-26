@@ -193,8 +193,8 @@ export default function Superadmin() {
   async function loadEmpresas() { try { const r = await saApi('GET', '/empresas'); setEmpresas(r) } catch {} }
   async function loadPlanes() { try { const r = await saApi('GET', '/planes'); setPlanes(r) } catch {} }
   async function loadModulos() { try { const r = await saApi('GET', '/modulos'); setModulos(r) } catch {} }
-  async function loadSolicitudes() { try { setLoading(p=>({...p,sol:true})); const r = await saApi('GET', '/solicitudes'); setSolicitudes(r) } catch {} finally { setLoading(p=>({...p,sol:false})) } }
-  async function loadAudit() { try { const r = await saApi('GET', '/auditoria'); setAudit(r) } catch {} }
+  async function loadSolicitudes() { try { setLoading(p=>({...p,sol:true})); const r = await saApi('GET', '/solicitudes-plan'); setSolicitudes(r) } catch {} finally { setLoading(p=>({...p,sol:false})) } }
+  async function loadAudit() { try { const r = await saApi('GET', '/audit'); setAudit(r) } catch {} }
   async function loadProspectos() { try { const r = await saApi('GET', '/prospectos'); setProspectos(r) } catch {} }
   async function loadLanding() { try { const r = await saApi('GET', '/landing-leads'); setLeads(r) } catch {} }
   async function loadTickets() { try { const r = await saApi('GET', '/solicitudes-soporte'); setTickets(r) } catch {} }
@@ -431,8 +431,8 @@ export default function Superadmin() {
   }
   function togglePlanMod(m) { setPlanForm(p => ({ ...p, modulos: p.modulos.includes(m) ? p.modulos.filter(x => x !== m) : [...p.modulos, m] })) }
 
-  async function aprobarSol(id) { try { await saApi('POST', '/solicitudes/' + id + '/aprobar'); loadSolicitudes(); loadEmpresas() } catch (e) { alert(e.message) } }
-  async function rechazarSol(id) { try { await saApi('POST', '/solicitudes/' + id + '/rechazar'); loadSolicitudes() } catch (e) { alert(e.message) } }
+  async function aprobarSol(id) { try { await saApi('POST', '/solicitudes-plan/' + id + '/resolver', { accion: 'aprobar' }); loadSolicitudes(); loadEmpresas() } catch (e) { alert(e.message) } }
+  async function rechazarSol(id) { try { await saApi('POST', '/solicitudes-plan/' + id + '/resolver', { accion: 'rechazar' }); loadSolicitudes() } catch (e) { alert(e.message) } }
 
   const planModulos = (pid) => { const p = planes.find(x => x.id === pid); if (!p) return []; let mods = p.modulos || []; if (typeof mods === 'string') try { mods = JSON.parse(mods) } catch { mods = [] }; return mods }
 
