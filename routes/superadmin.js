@@ -492,30 +492,27 @@ router.post('/empresas/:id/modulos', superAuth, (req, res) => {
 
 
 router.delete('/empresas/:id', superAuth, (req, res) => {
+  console.log('[DeleteEmpresa] Request params:', JSON.stringify(req.params));
   const e = master.prepare("SELECT * FROM empresas WHERE id=? OR codigo=?").get(req.params.id, req.params.id);
   if(!e) return res.status(404).json({error:'No encontrado'});
 
-  const fs = require('fs');
   const path = require('path');
-  const empresaNombre = e.nombre;
-  const empresaCodigo = e.codigo;
-  const empresaId = e.id;
+  const empresaNombre = e.nombre, empresaCodigo = e.codigo, empresaId = e.id;
 
-  try {
-    // 1. Hard delete from master DB
-    master.prepare("DELETE FROM empresas WHERE id=?").run(empresaId);
+  // Delete from master DB
+  const delResult = master.prepare("DELETE FROM empresas WHERE id=?").run(empresaId);
+  console.log('[DeleteEmpresa] Master DB delete:', delResult.changes, 'rows for', empresaId);
 
-    // 2. Delete tenant database
-    const dbPath = path.join(__dirname, '../data', `empresa_${empresaCodigo}.db`);
-    if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
-
-    console.log('[DeleteEmpresa] Eliminada:', empresaCodigo, empresaNombre);
-    saAudit(req.sadmin.id, 'eliminar_empresa', empresaId, 'Eliminada: ' + empresaNombre + ' (' + empresaCodigo + ')');
-    res.json({ ok: true, mensaje: 'Empresa eliminada permanentemente.' });
-  } catch(err) {
-    console.error('[DeleteEmpresa] Error:', err.message);
-    res.status(500).json({ error: err.message });
+  // Delete tenant DB file
+  const dbPath = path.join(__dirname, '../data', `empresa_${empresaCodigo}.db`);
+  console.log('[DeleteEmpresa] DB path:', dbPath, 'exists:', require('fs').existsSync(dbPath));
+  if (require('fs').existsSync(dbPath)) {
+    require('fs').unlinkSync(dbPath);
+    console.log('[DeleteEmpresa] File deleted:', empresaCodigo);
   }
+
+  saAudit(req.sadmin.id, 'eliminar_empresa', empresaId, 'Eliminada: ' + empresaNombre + ' (' + empresaCodigo + ')');
+  res.json({ ok: true, mensaje: 'Empresa eliminada permanentemente.' });
 });
 
 // ══ Crear empresa desde backup ══
