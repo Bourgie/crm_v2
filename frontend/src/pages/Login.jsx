@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useAuth, useApp, useToast } from '../store'
+import { PasswordInput } from '../components/PasswordInput'
 
 function parseJwt(token) {
   try {
@@ -32,9 +33,13 @@ export function Login() {
     if (codigo) setForm(f => ({ ...f, empresa: codigo }))
   }, [searchParams])
 
-  // Auto-login via token from query param (superadmin "login as")
+  // Auto-login via token (verification or superadmin login-as)
   useEffect(() => {
+    const verified = searchParams.get('verified');
     const token = searchParams.get('token')
+    if (verified === 'ok') toast('Email verificado. Bienvenido!', 'ok');
+    if (verified === 'invalid') toast('Link de verificacion invalido', 'err');
+    if (verified === 'expired') toast('Link de verificacion expirado. Solicita uno nuevo.', 'err');
     if (!token) return
     const payload = parseJwt(token)
     if (!payload || !payload.empresa) {
@@ -261,7 +266,7 @@ export function Login() {
           </div>
           <div className="fg">
             <label>Contraseña *</label>
-            <input type="password" value={form.password} onChange={set('password')} placeholder="Tu contraseña" required autoComplete="current-password" />
+            <PasswordInput value={form.password} onChange={set('password')} placeholder="Tu contraseña" style={{ width: '100%' }} />
           </div>
 
           {error && (

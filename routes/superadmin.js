@@ -548,6 +548,36 @@ ${backupFile ? `<p style="color:#94a3b8;font-size:12px">Backup guardado en: ${ba
   res.json({ ok: true, backup: backupFile ? path.basename(backupFile) : null, mensaje: 'Empresa eliminada permanentemente.' });
 });
 
+// ══ Crear empresa desde backup ══
+router.post('/empresas/from-backup', superAuth, (req, res) => {
+  const { codigo, nombre, backup_file, rubro, plan_id } = req.body;
+  if (!codigo || !nombre || !backup_file) return res.status(400).json({ error: 'Codigo, nombre y archivo de backup requeridos' });
+  if (!/^[a-z0-9_]+$/.test(codigo)) return res.status(400).json({ error: 'Solo minusculas, numeros y _' });
+  if (getEmpresa(codigo)) return res.status(400).json({ error: 'Ese codigo ya existe' });
+
+  const fs = require('fs');
+  const path = require('path');
+  const crypto = require('crypto');
+
+  try {
+    const backupPath = path.join(__dirname, '../data/backups', backup_file);
+    if (!fs.existsSync(backupPath)) return res.status(404).json({ error: 'Archivo de backup no encontrado' });
+
+    // Copy the backup as the new tenant DB
+    const destPath = path.join(__dirname, '../data', `empresa_${codigo}.db`);
+    fs.copyFileSync(backupPath, destPath);
+
+    // Create empresa in master DB
+    createEmpresa({ codigo, nombre, rubro: rubro || 'general', plan_id: plan_id || 'plan_basic', admin_email: req.sadmin?.email || '', vencimiento: null, usuarios_max: 5, sucursales_max: 1 });
+
+    saAudit(req.sadmin.id, 'crear_desde_backup', codigo, `Empresa restaurada desde backup: ${backup_file}`);
+    res.json({ ok: true, codigo, mensaje: 'Empresa creada desde backup' });
+  } catch(e) {
+    console.error('[BackupRestore] Error:', e.message);
+    res.status(500).json({ error: 'Error al restaurar: ' + e.message });
+  }
+});
+
 // ══ Login as empresa ══
 router.post('/empresas/:codigo/login-as', superAuth, (req, res) => {
   const e = getEmpresa(req.params.codigo);
