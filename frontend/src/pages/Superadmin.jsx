@@ -652,11 +652,12 @@ export default function Superadmin() {
                         <td>{e.sucursales_max || '∞'}</td>
                         <td><span className={`badge ${e.activo ? 'badge-green' : 'badge-red'}`} style={{ fontSize: 11 }}>{e.activo ? 'Activo' : 'Suspendido'}</span></td>
                         <td style={{ whiteSpace: 'nowrap' }}>
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEditEmpresa(e)}>✏️</button>
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => loginAs(e)}>🔑</button>
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => toggleEmpresaActiva(e)}>{e.activo ? '🚫' : '✅'}</button>
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => backupEmpresa(e.codigo)}>💾</button>
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => importBackup(e.codigo)}>📥</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEditEmpresa(e)} title="Editar empresa">✏️</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => loginAs(e)} title="Ingresar como admin">🔑</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => toggleEmpresaActiva(e)} title={e.activo ? 'Suspender empresa' : 'Activar empresa'}>{e.activo ? '🚫' : '✅'}</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => backupEmpresa(e.codigo)} title="Descargar backup">💾</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => importBackup(e.codigo)} title="Importar backup">📥</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => { if (confirm('¿Eliminar permanentemente la empresa ' + (e.nombre || e.codigo) + '?')) { saApi('DELETE', '/empresas/' + e.id).then(() => loadEmpresas()).catch(er => alert(er.message)) } }} title="Eliminar empresa" style={{ color: 'var(--bad)' }}>🗑️</button>
                         </td>
                       </tr>
                     })}
