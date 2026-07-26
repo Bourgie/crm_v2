@@ -416,16 +416,21 @@ router.post('/empresas', superAuth, (req, res) => {
 });
 
 router.put('/empresas/:id', superAuth, (req, res) => {
-  const e = master.prepare("SELECT * FROM empresas WHERE id=? OR codigo=?").get(req.params.id, req.params.id);
-  if(!e) return res.status(404).json({error:'No encontrado'});
-  const { nombre, rubro, plan_id, activo, vencimiento, usuarios_max, sucursales_max, modulos_extra, modulos_bloqueados } = req.body;
-  master.prepare(`UPDATE empresas SET nombre=?,rubro=?,plan_id=?,activo=?,vencimiento=?,
-    usuarios_max=?,sucursales_max=?,modulos_extra=?,modulos_bloqueados=? WHERE id=?`)
-    .run(nombre||e.nombre, rubro||e.rubro, plan_id||e.plan_id, activo!=null?activo:e.activo,
-      vencimiento||e.vencimiento, usuarios_max||e.usuarios_max, sucursales_max||e.sucursales_max,
-      JSON.stringify(modulos_extra||[]), JSON.stringify(modulos_bloqueados||[]), e.id);
-  saAudit(req.sadmin.id, 'editar_empresa', e.id, `Edit: ${nombre||e.nombre}`);
-  res.json({ok:true});
+  try {
+    const e = master.prepare("SELECT * FROM empresas WHERE id=? OR codigo=?").get(req.params.id, req.params.id);
+    if(!e) return res.status(404).json({error:'No encontrado'});
+    const { nombre, rubro, plan_id, activo, vencimiento, usuarios_max, sucursales_max, modulos_extra, modulos_bloqueados } = req.body;
+    const act = activo !== null && activo !== undefined ? (activo ? 1 : 0) : e.activo;
+    master.prepare("UPDATE empresas SET nombre=?,rubro=?,plan_id=?,activo=?,vencimiento=?,usuarios_max=?,sucursales_max=?,modulos_extra=?,modulos_bloqueados=? WHERE id=?")
+      .run(nombre||e.nombre, rubro||e.rubro, plan_id||e.plan_id, act,
+        vencimiento||e.vencimiento, usuarios_max||e.usuarios_max, sucursales_max||e.sucursales_max,
+        JSON.stringify(modulos_extra||[]), JSON.stringify(modulos_bloqueados||[]), e.id);
+    saAudit(req.sadmin.id, 'editar_empresa', e.id, 'Edit: '+(nombre||e.nombre));
+    res.json({ok:true});
+  } catch(err) {
+    console.error('[EditEmpresa] Error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Renovar / extender suscripción
