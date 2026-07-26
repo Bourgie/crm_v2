@@ -122,6 +122,10 @@ export default function Superadmin() {
   const [mtModal, setMtModal] = useState(null)
   const [mtForm, setMtForm] = useState({ tipo:'dominio', nombre:'', descripcion:'', fecha_vencimiento:'', proveedor:'', url:'', notas:'' })
   const [mtSaving, setMtSaving] = useState(false)
+  const [deleteModal, setDeleteModal] = useState(null)
+  const [deleteBackup, setDeleteBackup] = useState(false)
+  const [deleteEmail, setDeleteEmail] = useState(false)
+  const [deleteSaving, setDeleteSaving] = useState(false)
 
   const [appsData, setAppsData] = useState([])
   const [appsInstaladas, setAppsInstaladas] = useState([])
@@ -217,6 +221,32 @@ export default function Superadmin() {
   function openNewMt() { setMtForm({ tipo:'dominio', nombre:'', descripcion:'', fecha_vencimiento:'', proveedor:'', url:'', notas:'' }); setMtModal('new') }
   function openEditMt(m) { setMtForm({ tipo:m.tipo, nombre:m.nombre, descripcion:m.descripcion||'', fecha_vencimiento:m.fecha_vencimiento||'', proveedor:m.proveedor||'', url:m.url||'', notas:m.notas||'' }); setMtModal(m) }
   async function deleteMt(id) { if (!confirm('Eliminar item de mantenimiento?')) return; try { await saApi('DELETE', '/mantenimiento/' + id); loadMantenimiento() } catch(e) { alert(e.message) } }
+
+  async function deleteEmpresa() {
+    if (!deleteModal) return
+    setDeleteSaving(true)
+    try {
+      const params = new URLSearchParams()
+      if (deleteBackup) params.set('hacer_backup', 'true')
+      if (deleteEmail) params.set('enviar_email', 'true')
+      const qs = params.toString() ? '?' + params.toString() : ''
+      const r = await saApi('DELETE', '/empresas/' + deleteModal.id + qs)
+
+      // Download backup if requested
+      if (r.backup) {
+        const res = await fetch(API + '/empresas/backup-download/' + r.backup, { credentials: 'include' })
+        if (res.ok) {
+          const blob = await res.blob()
+          const url = URL.createObjectURL(blob)
+          const a = document.createElement('a'); a.href = url; a.download = r.backup; a.click()
+          URL.revokeObjectURL(url)
+        }
+      }
+      alert('Empresa eliminada: ' + (deleteModal.nombre || deleteModal.codigo))
+      setDeleteModal(null); loadEmpresas()
+    } catch(e) { alert(e.message) }
+    finally { setDeleteSaving(false) }
+  }
 
   async function loadApps() { try { const r = await saApi('GET', '/apps'); setAppsData(r) } catch {} }
   async function loadAppsInstaladas() { try { const r = await saApi('GET', '/apps/instaladas'); setAppsInstaladas(r) } catch {} }
@@ -657,7 +687,7 @@ export default function Superadmin() {
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => toggleEmpresaActiva(e)} title={e.activo ? 'Suspender empresa' : 'Activar empresa'}>{e.activo ? '🚫' : '✅'}</button>
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => backupEmpresa(e.codigo)} title="Descargar backup">💾</button>
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => importBackup(e.codigo)} title="Importar backup">📥</button>
-                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => { if (confirm('¿Eliminar permanentemente la empresa ' + (e.nombre || e.codigo) + '?')) { saApi('DELETE', '/empresas/' + e.id).then(() => loadEmpresas()).catch(er => alert(er.message)) } }} title="Eliminar empresa" style={{ color: 'var(--bad)' }}>🗑️</button>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setDeleteModal(e); setDeleteBackup(true); setDeleteEmail(false) }} title="Eliminar empresa" style={{ color: 'var(--bad)' }}>🗑️</button>
                         </td>
                       </tr>
                     })}
@@ -1266,6 +1296,38 @@ export default function Superadmin() {
             <div className="modal-footer">
               <button type="button" className="btn btn-secondary" onClick={() => setEmpModal(null)}>Cancelar</button>
               <button type="button" className="btn btn-primary" onClick={saveEmpresa} disabled={empSaving}>{empSaving ? '⏳ Guardando...' : '💾 Guardar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Eliminar Empresa */}
+      {deleteModal && (
+        <div className="modal-overlay" onClick={() => setDeleteModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
+            <div className="modal-header"><h3>🗑️ Eliminar empresa</h3><button type="button" onClick={() => setDeleteModal(null)} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--mu)'}}>×</button></div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ background:'rgba(239,68,68,.06)', borderRadius:8, padding:12, fontSize:13, border:'1px solid rgba(239,68,68,.2)' }}>
+                <p style={{ marginBottom:4 }}>⚠️ Vas a eliminar permanentemente:</p>
+                <p style={{ fontWeight:700 }}>{deleteModal.nombre || deleteModal.codigo}</p>
+                <p style={{ fontSize:11, color:'var(--mu)', fontFamily:'monospace' }}>{deleteModal.codigo}{deleteModal.admin_email ? ' · '+deleteModal.admin_email : ''}</p>
+              </div>
+              {deleteModal.admin_email && (
+                <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:13, cursor:'pointer', padding:'8px 12px', background:'var(--sf)', borderRadius:8, border:'1px solid var(--bd)' }}>
+                  <input type="checkbox" checked={deleteEmail} onChange={e => setDeleteEmail(e.target.checked)} style={{ width:16,height:16 }} />
+                  📧 Enviar backup por email a <strong>{deleteModal.admin_email}</strong>
+                </label>
+              )}
+              <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:13, cursor:'pointer', padding:'8px 12px', background:'var(--sf)', borderRadius:8, border:'1px solid var(--bd)' }}>
+                <input type="checkbox" checked={deleteBackup} onChange={e => setDeleteBackup(e.target.checked)} style={{ width:16,height:16 }} />
+                💾 Descargar backup antes de eliminar
+              </label>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setDeleteModal(null)}>Cancelar</button>
+              <button type="button" className="btn btn-danger" onClick={deleteEmpresa} disabled={deleteSaving} style={{ background:'var(--bad)', color:'#fff', border:'none' }}>
+                {deleteSaving ? '⏳ Eliminando...' : '🗑️ Eliminar permanentemente'}
+              </button>
             </div>
           </div>
         </div>
