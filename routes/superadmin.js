@@ -540,15 +540,15 @@ router.delete('/empresas/:id', superAuth, (req, res) => {
       });
     }
 
-    // Soft delete
-    master.prepare("UPDATE empresas SET activo=0 WHERE id=?").run(empresaId);
+    // Hard delete from master DB
+    master.prepare("DELETE FROM empresas WHERE id=?").run(empresaId);
 
-    // Try to delete DB file
+    // Delete tenant database file
     try {
       const dbPath = path.join(__dirname, '../data', `empresa_${empresaCodigo}.db`);
       const fs = require('fs');
       if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
-    } catch(fe) {}
+    } catch(fe) { console.error('[DeleteEmpresa] File error:', fe.message); }
 
     saAudit(req.sadmin.id, 'eliminar_empresa', empresaId, 'Eliminada: ' + empresaNombre + (backupFilename ? ' — Backup: '+backupFilename : ''));
     res.json({ ok: true, backup: backupFilename, mensaje: 'Empresa eliminada.' });
