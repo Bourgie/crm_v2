@@ -33,6 +33,7 @@ const SIDEBAR = [
   ['mantenimiento', '🔧 Mantenimiento'],
   ['landing', '🌐 Landing'],
   ['soporte', '🆘 Soporte'],
+  ['apps', '🧩 Apps'],
   ['audit', '📋 Auditoría'],
 ]
 
@@ -141,6 +142,16 @@ export default function Superadmin() {
   const [appModal, setAppModal] = useState(null)
   const [appForm, setAppForm] = useState({ slug:'', nombre:'', version:'1.0.0', descripcion:'', descripcion_larga:'', categoria:'general', icono:'📦', precio_mensual:'0', precio_anual:'0', trial_dias:'0', modulos_requeridos:'', roles_permitidos:'', tags:'', activa:true })
   const [appSaving, setAppSaving] = useState(false)
+
+  const [empresaDetail, setEmpresaDetail] = useState(null)
+  const [empresaDetailTab, setEmpresaDetailTab] = useState('info')
+  const [detailAudit, setDetailAudit] = useState([])
+  const [detailApps, setDetailApps] = useState([])
+  const [detailNotas, setDetailNotas] = useState([])
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [detailAuditSearch, setDetailAuditSearch] = useState('')
+  const [notaForm, setNotaForm] = useState({ texto: '' })
+  const [notaSaving, setNotaSaving] = useState(false)
 
   useEffect(() => {
     saApi('GET', '/me').then(r => { setLogged(true); setUser(r); loadAll() }).catch(() => {})
@@ -417,6 +428,47 @@ export default function Superadmin() {
       setAppModal(null); loadApps()
     } catch(e) { alert(e.message) }
     finally { setAppSaving(false) }
+  }
+
+  async function openEmpresaDetail(e) {
+    setEmpresaDetail(e)
+    setEmpresaDetailTab('info')
+    setDetailAuditSearch('')
+    setNotaForm({ texto: '' })
+    setDetailLoading(true)
+    try {
+      const [info, audit, apps, notas] = await Promise.all([
+        saApi('GET', '/empresas/' + e.codigo),
+        saApi('GET', '/audit?empresa_id=' + e.id),
+        saApi('GET', '/apps/instaladas?empresa_id=' + e.id),
+        saApi('GET', '/empresas/' + e.id + '/notas'),
+      ])
+      setEmpresaDetail({ ...e, ...info })
+      setDetailAudit(audit)
+      setDetailApps(apps)
+      setDetailNotas(notas)
+    } catch (err) { alert('Error al cargar detalle: ' + err.message) }
+    finally { setDetailLoading(false) }
+  }
+
+  async function agregarNota() {
+    if (!notaForm.texto.trim()) return
+    setNotaSaving(true)
+    try {
+      await saApi('POST', '/empresas/' + empresaDetail.id + '/notas', { texto: notaForm.texto.trim() })
+      setNotaForm({ texto: '' })
+      const notas = await saApi('GET', '/empresas/' + empresaDetail.id + '/notas')
+      setDetailNotas(notas)
+    } catch (e) { alert(e.message) }
+    finally { setNotaSaving(false) }
+  }
+
+  async function toggleDetailApp(app) {
+    try {
+      await saApi('PUT', '/apps/instaladas/' + app.id + '/status', { activa: app.activa ? 0 : 1 })
+      const apps = await saApi('GET', '/apps/instaladas?empresa_id=' + empresaDetail.id)
+      setDetailApps(apps)
+    } catch (e) { alert(e.message) }
   }
 
   async function instalarAppEnEmpresa(appSlug, empresaId) {
@@ -710,6 +762,7 @@ export default function Superadmin() {
                         <td>{e.sucursales_max || '∞'}</td>
                         <td><span className={`badge ${e.activo ? 'badge-green' : 'badge-red'}`} style={{ fontSize: 11 }}>{e.activo ? 'Activo' : 'Suspendido'}</span></td>
                         <td style={{ whiteSpace: 'nowrap' }}>
+                          <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEmpresaDetail(e)} title="Ver detalle completo">👁️</button>
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEditEmpresa(e)} title="Editar empresa">✏️</button>
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => loginAs(e)} title="Ingresar como admin">🔑</button>
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => toggleEmpresaActiva(e)} title={e.activo ? 'Suspender empresa' : 'Activar empresa'}>{e.activo ? '🚫' : '✅'}</button>
@@ -1425,6 +1478,152 @@ export default function Superadmin() {
               <button type="button" className="btn btn-danger" onClick={() => resolverEliminacion(delSolModal.id, 'aprobar')} disabled={delSolSaving} style={{ background:'var(--bad)', color:'#fff', border:'none' }}>
                 {delSolSaving ? '⏳ Eliminando...' : '🗑️ Eliminar permanentemente'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Detalle empresa */}
+      {empresaDetail && (
+        <div className="modal-overlay" onClick={() => setEmpresaDetail(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 700 }}>
+            <div className="modal-header">
+              <h3>🏢 Detalle: {empresaDetail.nombre || empresaDetail.codigo}</h3>
+              <button type="button" onClick={() => setEmpresaDetail(null)} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--mu)'}}>×</button>
+            </div>
+            <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
+              {/* Tabs */}
+              <div style={{display:'flex',gap:4,marginBottom:14,borderBottom:'2px solid var(--bd)',paddingBottom:8,flexWrap:'wrap'}}>
+                {[['info','📋 Info'],['audit','📋 Auditoría'],['apps','📦 Apps'],['notas','📝 Notas']].map(([k,l]) => (
+                  <button key={k} type="button" className={`btn btn-sm ${empresaDetailTab===k?'btn-primary':'btn-secondary'}`} onClick={() => setEmpresaDetailTab(k)}>{l}</button>
+                ))}
+              </div>
+
+              {detailLoading ? (
+                <div style={{textAlign:'center',padding:40}}><div className="spinner" style={{margin:'0 auto'}}/></div>
+              ) : (
+                <>
+                  {/* ═══ Tab Info ═══ */}
+                  {empresaDetailTab === 'info' && (
+                    <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                      <div className="fr">
+                        <div style={{flex:1}}><label className="" style={{display:'block',marginBottom:4}}>Nombre</label><input value={empresaDetail.nombre||''} disabled style={{width:'100%',opacity:.7}}/></div>
+                        <div style={{flex:1}}><label className="" style={{display:'block',marginBottom:4}}>Código</label><input value={empresaDetail.codigo||''} disabled style={{width:'100%',opacity:.7,fontFamily:'monospace'}}/></div>
+                      </div>
+                      <div className="fr">
+                        <div style={{flex:1}}><label className="" style={{display:'block',marginBottom:4}}>Plan</label><input value={empresaDetail.plan_id||'—'} disabled style={{width:'100%',opacity:.7}}/></div>
+                        <div style={{flex:1}}><label className="" style={{display:'block',marginBottom:4}}>Vencimiento</label><input value={empresaDetail.vencimiento||'—'} disabled style={{width:'100%',opacity:.7,color:empresaDetail.vencimiento&&empresaDetail.vencimiento<new Date().toISOString().substr(0,10)?'var(--bad)':'inherit'}}/></div>
+                      </div>
+                      <div className="fr">
+                        <div style={{flex:1}}>
+                          <label className="" style={{display:'block',marginBottom:4}}>Email admin</label>
+                          <div style={{display:'flex',alignItems:'center',gap:8}}>
+                            <input value={empresaDetail.admin_email||''} disabled style={{flex:1,opacity:.7}}/>
+                            {empresaDetail.email_verificado === 1
+                              ? <span className="badge badge-green" style={{fontSize:11,whiteSpace:'nowrap'}}>✅ Verificado</span>
+                              : <span className="badge badge-red" style={{fontSize:11,whiteSpace:'nowrap'}}>❌ Pendiente</span>}
+                          </div>
+                        </div>
+                        <div style={{flex:1}}><label className="" style={{display:'block',marginBottom:4}}>Estado</label><span className={`badge ${empresaDetail.activo?'badge-green':'badge-red'}`} style={{fontSize:12}}>{empresaDetail.activo?'Activo':'Suspendido'}</span></div>
+                      </div>
+                      <div style={{padding:'10px 12px',background:'var(--sf)',borderRadius:8,border:'1px solid var(--bd)'}}>
+                        <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>Estadísticas</div>
+                        <div style={{display:'flex',gap:16,flexWrap:'wrap'}}>
+                          <span>👥 <strong>{empresaDetail.usuarios?.length||empresaDetail.usuarios||'?'}</strong> usuarios</span>
+                          <span>🛒 <strong>{empresaDetail.ventas||'?'}</strong> ventas</span>
+                          <span>👤 <strong>{empresaDetail.clientes||'?'}</strong> clientes</span>
+                          <span>🏪 <strong>{empresaDetail.sucursales?.length||empresaDetail.sucursales||'?'}</strong> sucursales</span>
+                        </div>
+                      </div>
+                      {empresaDetail.config?.modulos_habilitados?.length > 0 && (
+                        <div style={{padding:'10px 12px',background:'var(--sf)',borderRadius:8,border:'1px solid var(--bd)'}}>
+                          <div style={{fontWeight:600,fontSize:13,marginBottom:6}}>Módulos habilitados</div>
+                          <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                            {empresaDetail.config.modulos_habilitados.map(m => (
+                              <span key={m} className="badge badge-orange" style={{fontSize:10}}>{MOD_LABELS[m]||m}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <div style={{fontSize:11,color:'var(--mu)'}}>Creado: {empresaDetail.creado ? new Date(empresaDetail.creado).toLocaleString('es-AR') : '—'}</div>
+                    </div>
+                  )}
+
+                  {/* ═══ Tab Auditoría ═══ */}
+                  {empresaDetailTab === 'audit' && (
+                    <div>
+                      <input value={detailAuditSearch} onChange={e => setDetailAuditSearch(e.target.value)} placeholder="🔍 Buscar en auditoría..." style={{width:'100%',padding:'8px 12px',borderRadius:8,border:'1px solid var(--bd)',marginBottom:12,fontSize:13}} />
+                      {detailAudit.length === 0 ? (
+                        <div style={{textAlign:'center',padding:24,color:'var(--mu)'}}>Sin registros de auditoría para esta empresa.</div>
+                      ) : (
+                        <div style={{overflowX:'auto',maxHeight:400,overflowY:'auto'}}>
+                          <table>
+                            <thead><tr><th>Fecha</th><th>Acción</th><th>Detalle</th></tr></thead>
+                            <tbody>
+                              {detailAudit.filter(a => !detailAuditSearch || (a.accion||'').toLowerCase().includes(detailAuditSearch.toLowerCase()) || (a.detalle||'').toLowerCase().includes(detailAuditSearch.toLowerCase())).map(a => (
+                                <tr key={a.id} style={{fontSize:12}}>
+                                  <td style={{whiteSpace:'nowrap'}}>{a.fecha ? new Date(a.fecha).toLocaleString('es-AR') : '—'}</td>
+                                  <td><span className="badge" style={{fontSize:10,background:'var(--sf)',color:'var(--tx)'}}>{a.accion||'—'}</span></td>
+                                  <td style={{color:'var(--mu)',maxWidth:300,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={a.detalle}>{(()=>{try{const d=JSON.parse(a.detalle);return d.msg||d}catch{return a.detalle||'—'}})()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ═══ Tab Apps ═══ */}
+                  {empresaDetailTab === 'apps' && (
+                    <div>
+                      {detailApps.length === 0 ? (
+                        <div style={{textAlign:'center',padding:24,color:'var(--mu)'}}>Sin apps instaladas en esta empresa.</div>
+                      ) : (
+                        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                          {detailApps.map(app => (
+                            <div key={app.id} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:8,border:'1px solid var(--bd)',background:'var(--sf)'}}>
+                              <span style={{fontSize:20}}>{app.app_icono||'📦'}</span>
+                              <div style={{flex:1}}>
+                                <div style={{fontWeight:600,fontSize:13}}>{app.app_nombre||app.app_slug}</div>
+                                <div style={{fontSize:11,color:'var(--mu)'}}>v{app.version_instalada||'—'} · {new Date(app.fecha_instalacion).toLocaleDateString('es-AR')}</div>
+                              </div>
+                              <span className={`badge ${app.activa?'badge-green':'badge-gray'}`} style={{fontSize:10}}>{app.activa?'Activa':'Pausada'}</span>
+                              <button type="button" className="btn btn-sm btn-secondary" onClick={() => toggleDetailApp(app)} title={app.activa?'Pausar':'Activar'} style={{fontSize:11}}>
+                                {app.activa ? '⏸️' : '▶️'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ═══ Tab Notas ═══ */}
+                  {empresaDetailTab === 'notas' && (
+                    <div>
+                      <div style={{display:'flex',gap:8,marginBottom:12}}>
+                        <textarea value={notaForm.texto} onChange={e => setNotaForm(p=>({...p,texto:e.target.value}))} placeholder="Escribí una nota interna..." style={{flex:1,minHeight:60,padding:'8px 12px',borderRadius:8,border:'1px solid var(--bd)',fontSize:13,resize:'vertical'}} />
+                        <button type="button" className="btn btn-primary" onClick={agregarNota} disabled={notaSaving||!notaForm.texto.trim()} style={{alignSelf:'flex-end'}}>
+                          {notaSaving ? '⏳' : '💾 Agregar'}
+                        </button>
+                      </div>
+                      {detailNotas.length === 0 ? (
+                        <div style={{textAlign:'center',padding:24,color:'var(--mu)'}}>Sin notas internas.</div>
+                      ) : (
+                        <div style={{display:'flex',flexDirection:'column',gap:8}}>
+                          {detailNotas.map(n => (
+                            <div key={n.id} style={{padding:'10px 12px',borderRadius:8,border:'1px solid var(--bd)',background:'var(--sf)'}}>
+                              <div style={{fontSize:12,color:'var(--mu)',marginBottom:4}}>{new Date(n.fecha).toLocaleString('es-AR')} · {n.autor||'—'}</div>
+                              <div style={{fontSize:13,whiteSpace:'pre-wrap'}}>{n.texto}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

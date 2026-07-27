@@ -343,10 +343,13 @@ router.get('/empresas/:codigo', superAuth, (req, res) => {
   try {
     const db = getEmpresaDB(e.codigo);
     const usuarios = db.find('usuarios').filter(u=>u.activo!==false);
+    const adminUser = db.find('usuarios').find(u => u.email && u.rol === 'admin');
     const sucursales = db.find('sucursales').filter(s=>s.activo!==false);
     const ventas = db.all('ventas').length;
     const clientes = db.find('clientes').filter(c=>c.activo!==false).length;
-    res.json({...e, usuarios, sucursales, ventas, clientes});
+    const cfg = db.getConfig();
+    const modulos = cfg.modulos_habilitados ? (typeof cfg.modulos_habilitados === 'string' ? JSON.parse(cfg.modulos_habilitados) : cfg.modulos_habilitados) : [];
+    res.json({...e, email_verificado: adminUser ? adminUser.email_verificado : null, admin_email: e.admin_email, config: { rubro: cfg.rubro || '', modulos_habilitados: modulos }, usuarios, sucursales, ventas, clientes});
   } catch(err) { res.json({...e, error: err.message}); }
 });
 
@@ -685,7 +688,13 @@ router.get('/repair-sucursales', superAuth, (req, res) => {
 });
 
 router.get('/audit', superAuth, (req, res) => {
-  const rows = master.prepare("SELECT * FROM sa_audit_log ORDER BY fecha DESC LIMIT 200").all();
+  const empresaId = req.query.empresa_id;
+  let rows;
+  if (empresaId) {
+    rows = master.prepare("SELECT * FROM sa_audit_log WHERE empresa_id=? ORDER BY fecha DESC LIMIT 200").all(empresaId);
+  } else {
+    rows = master.prepare("SELECT * FROM sa_audit_log ORDER BY fecha DESC LIMIT 200").all();
+  }
   res.json(rows);
 });
 
