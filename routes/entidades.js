@@ -64,7 +64,7 @@ vendRouter.delete('/:id', requireRol('admin'), (req,res) => {
 // ── PROVEEDORES ───────────────────────────────────────────────
 const provRouter = express.Router();
 provRouter.use(authMiddleware);
-provRouter.get('/', (req,res) => res.json(db.find('proveedores',{activo:true})));
+provRouter.get('/', (req,res) => { const db = _getDB(req); res.json(db.find('proveedores',{activo:true})); });
 
 // GET ordenes for a specific provider — includes both prov_oc and prov_ordenes
 // Used by factura OC selector

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useApi } from '../hooks/useApi'
 import { useApp, useAuth, useToast } from '../store'
+import { chatUnread as _chatUnread } from '../stores/chatUnread'
 
 // ─── Global badge state (used by Sidebar) ───
-export const chatUnread = { count: 0, listeners: [] }
+export const chatUnread = _chatUnread
 export function useChatUnread() {
   const [n, setN] = useState(chatUnread.count)
   useEffect(() => {
@@ -418,8 +419,7 @@ export function Chat() {
                   rows={1}
                   style={{ flex: 1, padding: '10px 14px', borderRadius: 22, border: 'none', background: '#fff', fontSize: 14, resize: 'none', outline: 'none', maxHeight: 120, minHeight: 22, fontFamily: 'inherit' }}
                 />
-                <buttontype="button" 
-                  type="button" onClick={enviar}
+                <button type="button" onClick={enviar}
                   disabled={!texto.trim() || enviando}
                   style={{ width: 42, height: 42, borderRadius: '50%', border: 'none', background: texto.trim() ? '#00a884' : '#8696a0', color: '#fff', cursor: texto.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontSize: 18 }}
                   title="Enviar (Enter)"
@@ -501,8 +501,7 @@ function ConvItem({ conv, active, onClick, onPin, isGroup, locked }) {
 
       {/* Pin button (only for contacts) */}
       {onPin && (
-        <buttontype="button" 
-          type="button" className="pin-btn"
+        <button type="button" className="pin-btn"
           onClick={(e) => { e.stopPropagation(); onPin() }}
           title={conv.fijado ? 'Desfijar' : 'Fijar conversación'}
           style={{

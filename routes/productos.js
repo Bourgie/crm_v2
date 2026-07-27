@@ -86,6 +86,18 @@ router.get('/ranking-rotacion', (req,res) => {
   res.json(Object.values(map).sort((a,b)=>b.qty-a.qty));
 });
 
+// ── Rubro atributos ──
+router.get('/rubro-atributos', (req, res) => {
+  try {
+    const { getRubroAtributos } = require('../db_master');
+    const db = _getDB(req);
+    const cfg = db.getConfig();
+    const rubro = cfg.rubro || 'general';
+    const atributos = getRubroAtributos(rubro);
+    res.json({ rubro, atributos });
+  } catch(e) { res.json({ rubro: 'general', atributos: [] }); }
+});
+
 router.get('/:id', (req,res) => {
   const db = _getDB(req);
   const prod = db.findOne('productos', req.params.id);
@@ -258,18 +270,6 @@ router.get('/:id/historial', authMiddleware, (req,res) => {
     suc_nombre: (sucs.find(s => s.id === m.suc_id) || {}).nombre || m.suc_id || '—'
   }));
   res.json(movs);
-});
-
-// ── Rubro atributos ──
-router.get('/rubro-atributos', (req, res) => {
-  try {
-    const { getRubroAtributos } = require('../db_master');
-    const db = _getDB(req);
-    const cfg = db.getConfig();
-    const rubro = cfg.rubro || 'general';
-    const atributos = getRubroAtributos(rubro);
-    res.json({ rubro, atributos });
-  } catch(e) { res.json({ rubro: 'general', atributos: [] }); }
 });
 
 module.exports = router;

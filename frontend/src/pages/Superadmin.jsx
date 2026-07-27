@@ -14,6 +14,30 @@ function saApi(method, path, body) {
 const RUBROS = [{v:'ropa_infantil',l:'👶 Ropa infantil'},{v:'ropa',l:'👗 Ropa'},{v:'panaderia',l:'🍞 Panadería'},{v:'farmacia',l:'💊 Farmacia'},{v:'ferreteria',l:'🔧 Ferretería'},{v:'servicios',l:'💼 Servicios'},{v:'general',l:'🏪 General'}]
 const TODOS_MODS = ['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','listabebe','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda','webhooks','rrhh']
 const MOD_LABELS = {pos:'🛒 POS',caja:'💰 Caja',clientes:'👥 Clientes',ventas:'📋 Ventas',productos:'👕 Productos',ctacte:'📒 Cta Cte',presupuestos:'📄 Presupuestos',pendientes:'🚚 Pendientes',listabebe:'🍼 Lista Bebé',transferencias:'🔄 Transferencias',proveedores:'📦 Proveedores',gastos:'💸 Gastos',reportes:'📈 Reportes',auditoria:'🔍 Auditoría',chat:'💬 Chat',pipeline:'📋 Pipeline',arca:'📄 ARCA',tienda:'🛒 Tienda',webhooks:'🔗 Webhooks',rrhh:'👥 RRHH'}
+const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', vendedor: 'Vendedor', cajero: 'Cajero', readonly: 'Solo lectura' }
+const ROLE_COLORS = { admin:'#f59e0b', supervisor:'#3b82f6', vendedor:'#10b981', cajero:'#8b5cf6', readonly:'#6b7280' }
+const MOD_ROLES = {
+  pos: ['admin','supervisor','vendedor','cajero'],
+  caja: ['admin','supervisor','cajero'],
+  clientes: ['admin','supervisor','vendedor','cajero','readonly'],
+  ventas: ['admin','supervisor','vendedor','cajero','readonly'],
+  productos: ['admin','supervisor','vendedor','cajero','readonly'],
+  ctacte: ['admin','supervisor'],
+  presupuestos: ['admin','supervisor','vendedor'],
+  pendientes: ['admin','supervisor','vendedor','cajero'],
+  listabebe: ['admin','supervisor'],
+  transferencias: ['admin','supervisor'],
+  proveedores: ['admin','supervisor'],
+  gastos: ['admin','supervisor'],
+  reportes: ['admin','supervisor','readonly'],
+  auditoria: ['admin','supervisor'],
+  chat: ['admin','supervisor','vendedor','cajero'],
+  pipeline: ['admin','supervisor'],
+  arca: ['admin','supervisor'],
+  tienda: ['admin','supervisor'],
+  webhooks: ['admin','supervisor'],
+  rrhh: ['admin','supervisor'],
+}
 const PROS_ESTADOS = ['nuevo','contactado','interesado','calificado','cerrado_ganado','cerrado_perdido']
 const PROS_EST_COLORS = { nuevo:'var(--ac)', contactado:'var(--warn)', interesado:'var(--ok)', calificado:'#06b6d4', cerrado_ganado:'#059669', cerrado_perdido:'var(--bad)' }
 const PROS_EST_LABELS = { nuevo:'Nuevo', contactado:'Contactado', interesado:'Interesado', calificado:'Calificado', cerrado_ganado:'Cerrado (ganado)', cerrado_perdido:'Cerrado (perdido)' }
@@ -34,6 +58,7 @@ const SIDEBAR = [
   ['landing', '🌐 Landing'],
   ['soporte', '🆘 Soporte'],
   ['apps', '🧩 Apps'],
+  ['roles', '👤 Roles'],
   ['audit', '📋 Auditoría'],
 ]
 
@@ -963,16 +988,74 @@ export default function Superadmin() {
           {/* ═══════ MÓDULOS ═══════ */}
           {tab === 'modulos' && (
             <div className="card">
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 16 }}>Módulos del sistema</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8 }}>
-                {modulos.map(m => (
-                  <div key={m.id} className="card" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: 10 }}>
-                    <span>{MOD_LABELS[m.codigo]?.split(' ')[0] || '🧩'}</span>
-                    <span style={{ flex: 1 }}>{m.nombre || m.codigo}</span>
-                    {m.premium ? <span className="badge badge-yellow" style={{ fontSize: 9 }}>⭐ Premium</span> : null}
-                    {m.beta ? <span className="badge badge-green" style={{ fontSize: 9 }}>🧪 Beta</span> : null}
-                  </div>
-                ))}
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 16 }}>🧩 Módulos del sistema</h3>
+              <p style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 12 }}>Cada tarjeta muestra los roles que tienen acceso al módulo.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+                {modulos.map(m => {
+                  const roles = MOD_ROLES[m.codigo] || []
+                  return (
+                    <div key={m.id} className="card" style={{ fontSize: 12, padding: 12 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <span style={{ fontSize: 18 }}>{MOD_LABELS[m.codigo]?.split(' ')[0] || '🧩'}</span>
+                        <span style={{ flex: 1, fontWeight: 600 }}>{m.nombre || m.codigo}</span>
+                        {m.premium ? <span className="badge badge-yellow" style={{ fontSize: 9 }}>⭐ Premium</span> : null}
+                        {m.beta ? <span className="badge badge-green" style={{ fontSize: 9 }}>🧪 Beta</span> : null}
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        {roles.map(r => (
+                          <span key={r} style={{ display:'inline-flex',alignItems:'center',gap:3,padding:'2px 8px',borderRadius:99,fontSize:10,fontWeight:600,background:ROLE_COLORS[r]+'20',color:ROLE_COLORS[r] }}>
+                            <span style={{ width:5,height:5,borderRadius:'50%',background:ROLE_COLORS[r] }} />
+                            {ROLE_LABELS[r] || r}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* ═══════ ROLES ═══════ */}
+          {tab === 'roles' && (
+            <div>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 16 }}>👤 Roles del sistema</h3>
+              <p style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 16 }}>
+                Cada rol define qué módulos puede ver y usar un usuario dentro de su empresa.
+                Los roles se asignan desde Configuración → Usuarios en el CRM de cada empresa.
+              </p>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 16 }}>
+                {Object.entries(ROLE_LABELS).map(([key, label]) => {
+                  const mods = Object.entries(MOD_ROLES).filter(([, roles]) => roles.includes(key)).map(([mod]) => mod)
+                  const allMods = Object.keys(MOD_ROLES)
+                  const cant = mods.length
+                  const total = allMods.length
+                  return (
+                    <div key={key} className="card" style={{ padding: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                        <span style={{ width:28,height:28,borderRadius:'50%',background:ROLE_COLORS[key]+'20',display:'flex',alignItems:'center',justifyContent:'center',fontSize:14,fontWeight:700,color:ROLE_COLORS[key] }}>
+                          {label[0]}
+                        </span>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontWeight: 700, fontSize: 14 }}>{label}</div>
+                          <div style={{ fontSize: 11, color: 'var(--mu)' }}>{cant} de {total} módulos habilitados</div>
+                        </div>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 4 }}>
+                        {allMods.map(mod => {
+                          const has = mods.includes(mod)
+                          return (
+                            <div key={mod} style={{ display:'flex',alignItems:'center',gap:6,padding:'4px 8px',borderRadius:6,background:has ? ROLE_COLORS[key]+'10' : 'var(--bg)', fontSize:11 }}>
+                              <span style={{ opacity: has ? 1 : .3 }}>{MOD_LABELS[mod]?.split(' ')[0] || '🧩'}</span>
+                              <span style={{ flex:1, color: has ? 'var(--tx)' : 'var(--mu)', fontWeight: has ? 600 : 400 }}>{MOD_LABELS[mod]?.split(' ').slice(1).join(' ') || mod}</span>
+                              {has ? <span style={{ color:ROLE_COLORS[key],fontSize:12 }}>✓</span> : <span style={{ color:'var(--mu)',fontSize:12,opacity:.4 }}>—</span>}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}

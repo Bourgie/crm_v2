@@ -5,13 +5,7 @@ const { db } = require('../db_sqlite');
 function getSecret() {
   const envSecret = process.env.JWT_SECRET;
   if (envSecret) return envSecret;
-  // Fallback to DB config (legacy — should migrate to env var)
-  const dbSecret = db.getConfig('jwt_secret');
-  if (dbSecret) {
-    console.warn('[auth] ADVERTENCIA: JWT_SECRET no configurado en .env. Usando jwt_secret de la DB (obsoleto). Configurá JWT_SECRET en .env.');
-    return dbSecret;
-  }
-  throw new Error('JWT_SECRET no configurado. Revisá el archivo .env');
+  throw new Error('JWT_SECRET no configurado en .env. Revisá las variables de entorno.');
 }
 
 // Permisos por rol: qué rutas/acciones puede hacer cada rol
@@ -24,11 +18,18 @@ const PERMISOS = {
 };
 
 function authMiddleware(req, res, next) {
+  let token = null;
   const header = req.headers['authorization'];
-  if (!header || !header.startsWith('Bearer ')) {
+  if (header && header.startsWith('Bearer ')) {
+    token = header.split(' ')[1];
+  }
+  // Fallback to access-token cookie (httpOnly, set on login)
+  if (!token && req.cookies && req.cookies['access-token']) {
+    token = req.cookies['access-token'];
+  }
+  if (!token) {
     return res.status(401).json({ error: 'No autenticado' });
   }
-  const token = header.split(' ')[1];
   try {
     const payload = jwt.verify(token, getSecret());
     // Use empresa-specific DB if available (set by global middleware), else fall back to default

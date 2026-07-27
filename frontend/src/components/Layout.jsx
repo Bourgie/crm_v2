@@ -6,8 +6,8 @@ import { useOfflineManager } from '../hooks/useOfflineManager'
 import { useIdleTimer } from '../hooks/useIdleTimer'
 import { useApi } from '../hooks/useApi'
 import { useApp, useAuth } from '../store'
-import { chatUnread } from '../pages/Chat'
-import { pipelineVencidas, tareasVencidas, pipelineActivity } from '../pages/Pipeline'
+import { chatUnread } from '../stores/chatUnread'
+import { pipelineVencidas, tareasVencidas, pipelineActivity } from '../stores/pipelineCounters'
 
 const TITLES = {
   '/app/dashboard': '📊 Dashboard',
@@ -99,6 +99,7 @@ export function Layout() {
       if (slug) return '📦 ' + slug
     }
     if (location.pathname === '/app/marketplace') return '🛍️ Tienda de Apps'
+    if (location.pathname.startsWith('/app/marketplace/')) return '🛍️ Detalle de App'
     return TITLES[location.pathname] || 'FlexCRM'
   })()
 
@@ -122,8 +123,7 @@ export function Layout() {
 
         {/* Topbar */}
         <div className="topbar">
-          <buttontype="button" 
-            type="button" className="btn btn-icon hamburger"
+          <button type="button" className="btn btn-icon hamburger"
             onClick={() => setSidebarOpen(true)}
           >
             ☰

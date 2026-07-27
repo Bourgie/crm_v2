@@ -23,6 +23,7 @@ export default defineConfig({
   build: {
     outDir: '../public/app',
     emptyOutDir: true,
+    chunkSizeWarningLimit: 1000,
   },
   base: '/app/',
   // Vitest config

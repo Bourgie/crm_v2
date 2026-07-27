@@ -22,7 +22,7 @@ export const useAuth = create(
     }),
     {
       name: 'flexcrm-auth',
-      partialize: (s) => ({ token: s.token, me: s.me }),
+      partialize: (s) => ({ me: s.me }),
     }
   )
 )

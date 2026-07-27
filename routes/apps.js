@@ -26,10 +26,19 @@ const {
 router.get('/marketplace', authMiddleware, (req, res) => {
   try {
     const categoria = req.query.categoria || null;
-    const apps = getAppsDisponibles(categoria);
+    const q = req.query.q ? req.query.q.trim().toLowerCase() : null;
+    let apps = getAppsDisponibles(categoria);
     // Filtrar solo apps no-internas (slug no empieza con _)
-    const publicApps = apps.filter(a => !a.slug.startsWith('_'));
-    res.json(publicApps);
+    apps = apps.filter(a => !a.slug.startsWith('_'));
+    // Filtro por búsqueda textual
+    if (q) {
+      apps = apps.filter(a =>
+        (a.nombre && a.nombre.toLowerCase().includes(q)) ||
+        (a.descripcion && a.descripcion.toLowerCase().includes(q)) ||
+        (Array.isArray(a.tags) && a.tags.some(t => t.toLowerCase().includes(q)))
+      );
+    }
+    res.json(apps);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

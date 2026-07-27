@@ -167,6 +167,7 @@ router.post('/verify-login', validate(twofaVerifySchema), (req, res) => {
   });
 
   auth.setRefreshCookie(res, refreshToken);
+  auth.setAccessCookie(res, accessToken);
   res.json(auth.buildLoginResponse(user, accessToken, refreshToken, userDB));
 });
 

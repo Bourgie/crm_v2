@@ -118,6 +118,16 @@ function setRefreshCookie(res, token) {
   });
 }
 
+function setAccessCookie(res, token) {
+  res.cookie('access-token', token, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 24 * 60 * 60 * 1000,
+  });
+}
+
 function enforceSessionLimit(db, userId) {
   const active = db.raw.prepare(
     "SELECT id FROM password_reset_tokens WHERE usuario_id=? AND usado=0 AND id LIKE 'rt_%' AND expires > datetime('now') ORDER BY creado ASC"
@@ -230,6 +240,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
   });
 
   setRefreshCookie(res, refreshToken);
+  setAccessCookie(res, accessToken);
   res.json(buildLoginResponse(user, accessToken, refreshToken, userDB));
 });
 
@@ -277,6 +288,7 @@ router.post('/refresh', (req, res) => {
   });
 
   setRefreshCookie(res, newRefresh);
+  setAccessCookie(res, accessToken);
   res.json(buildLoginResponse(user, accessToken, newRefresh, userDB));
 });
 
@@ -294,6 +306,7 @@ router.post('/logout', (req, res) => {
     } catch(e) { /* non-blocking */ }
   }
   res.clearCookie('refresh-token', { path: '/api/auth' });
+  res.clearCookie('access-token', { path: '/' });
   res.json({ ok: true });
 });
 
@@ -305,6 +318,7 @@ router.get('/me', authMiddleware, (req, res) => {
     getSecret(),
     { expiresIn: ACCESS_TOKEN_EXPIRY }
   );
+  setAccessCookie(res, token);
   res.json(buildLoginResponse(req.user, token, null, userDB));
 });
 
@@ -878,3 +892,4 @@ module.exports = router;
 module.exports.buildLoginResponse = buildLoginResponse;
 module.exports.generateTokens = generateTokens;
 module.exports.setRefreshCookie = setRefreshCookie;
+module.exports.setAccessCookie = setAccessCookie;

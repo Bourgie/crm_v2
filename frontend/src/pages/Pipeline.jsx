@@ -4,10 +4,13 @@ import { useAuth, useApp, useToast } from '../store'
 import { Modal } from '../components/Modal'
 import { Field, Loader } from '../components/UI'
 import { DndContext, DragOverlay, useDraggable, useDroppable, PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { pipelineVencidas as _pipelineVencidas, tareasVencidas as _tareasVencidas, pipelineActivity as _pipelineActivity } from '../stores/pipelineCounters'
 
 const fmt = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })
 
-export const pipelineVencidas = { count: 0, listeners: [] }
+export const pipelineVencidas = _pipelineVencidas
+export const tareasVencidas = _tareasVencidas
+export const pipelineActivity = _pipelineActivity
 export function usePipelineVencidas() {
   const [n, setN] = useState(pipelineVencidas.count)
   useEffect(() => {
@@ -17,7 +20,6 @@ export function usePipelineVencidas() {
   return n
 }
 
-export const tareasVencidas = { count: 0, listeners: [] }
 export function useTareasVencidas() {
   const [n, setN] = useState(tareasVencidas.count)
   useEffect(() => {
@@ -27,7 +29,6 @@ export function useTareasVencidas() {
   return n
 }
 
-export const pipelineActivity = { count: 0, data: [], listeners: [] }
 export function usePipelineActivity() {
   const [n, setN] = useState(pipelineActivity.count)
   useEffect(() => {

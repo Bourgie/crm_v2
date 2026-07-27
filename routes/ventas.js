@@ -8,6 +8,15 @@ const { dispararWebhooks } = require('./webhooks');
 const { updateSucStock, getStockSuc, updateVariantStock } = require('./stock_helpers');
 router.use(authMiddleware);
 
+function permiteSucursal(user, suc_id) {
+  if (!suc_id) return false;
+  if (user.rol === 'admin') return true;
+  let permitidas = user.suc_sesiones_permitidas;
+  if (typeof permitidas === 'string') { try { permitidas = JSON.parse(permitidas); } catch { permitidas = []; } }
+  if (Array.isArray(permitidas) && permitidas.length) return permitidas.includes(String(suc_id));
+  return user.suc_id && String(user.suc_id) === String(suc_id);
+}
+
 function enrichVenta(v, db) {
   const sucs=db.all('sucursales'),vends=db.all('vendedores'),users=db.all('usuarios'),clis=db.all('clientes');
   const vd=users.find(x=>x.id===v.vend_id)||vends.find(x=>x.id===v.vend_id), c=clis.find(x=>x.id===v.cliente_id);
@@ -66,6 +75,7 @@ router.get('/:id', (req,res) => {
   const db = _getDB(req);
   const v=db.findOne('ventas',req.params.id);
   if(!v) return res.status(404).json({error:'No encontrada'});
+  if (v.suc_id && v.suc_id !== 'default' && !permiteSucursal(req.user, v.suc_id)) return res.status(403).json({error:'Sin acceso a esta venta'});
   res.json({...enrichVenta(v, db), items:db.where('venta_items',i=>i.venta_id===req.params.id)});
 });
 

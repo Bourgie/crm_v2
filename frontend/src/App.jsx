@@ -35,6 +35,7 @@ const Superadmin = lazy(() => import('./pages/Superadmin'))
 // App ecosystem
 const AppShell = lazy(() => import('./components/AppShell'))
 const Marketplace = lazy(() => import('./pages/Marketplace'))
+const AppDetail = lazy(() => import('./pages/AppDetail'))
 
 function L({ children }) {
   return <Suspense fallback={<div className="p-8 text-center text-gray-400">Cargando...</div>}>{children}</Suspense>
@@ -77,6 +78,7 @@ export default function App() {
         {/* App ecosystem routes */}
         <Route path="apps/:slug"     element={<L><AppShell /></L>} />
         <Route path="marketplace"    element={<L><Marketplace /></L>} />
+        <Route path="marketplace/:slug" element={<L><AppDetail /></L>} />
       </Route>
       <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
     </Routes>

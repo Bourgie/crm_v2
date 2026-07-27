@@ -6,6 +6,15 @@ const { authMiddleware, requireRol } = require('../middleware/auth');
 const { validate, cajaAbrirSchema } = require('../middleware/validate');
 router.use(authMiddleware);
 
+function permiteSucursal(user, suc_id) {
+  if (!suc_id) return false;
+  if (user.rol === 'admin') return true;
+  let permitidas = user.suc_sesiones_permitidas;
+  if (typeof permitidas === 'string') { try { permitidas = JSON.parse(permitidas); } catch { permitidas = []; } }
+  if (Array.isArray(permitidas) && permitidas.length) return permitidas.includes(String(suc_id));
+  return user.suc_id && String(user.suc_id) === String(suc_id);
+}
+
 // Métodos que entran físicamente a la caja (efectivo)
 const METODOS_EFECTIVO = ['efectivo'];
 
@@ -42,12 +51,14 @@ function getCajaEstado(suc_id, empDB) {
 
 // Estado caja actual
 router.get('/estado/:suc_id', (req, res) => {
+  if (!permiteSucursal(req.user, req.params.suc_id)) return res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
   const empDB = _getDB(req);
   res.json(getCajaEstado(req.params.suc_id, empDB));
 });
 
 // Verificar si caja está abierta
 router.get('/check/:suc_id', (req, res) => {
+  if (!permiteSucursal(req.user, req.params.suc_id)) return res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
   const empDB = _getDB(req);
   const est = getCajaEstado(req.params.suc_id, empDB);
   res.json({ abierta: est.estado === 'abierta', saldo: est.saldo_efectivo || 0 });
@@ -55,6 +66,7 @@ router.get('/check/:suc_id', (req, res) => {
 
 // Historial
 router.get('/historial/:suc_id', (req, res) => {
+  if (!permiteSucursal(req.user, req.params.suc_id)) return res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
   const empDB = _getDB(req);
   const { desde, hasta } = req.query;
   let rows = empDB.where('cajas', c => c.suc_id === req.params.suc_id);
@@ -77,6 +89,7 @@ router.post('/abrir', requireRol('admin', 'supervisor', 'cajero'), validate(caja
   const empDB = _getDB(req);
   const { suc_id, fondo_inicial } = req.body;
   if (!suc_id) return res.status(400).json({ error: 'suc_id requerido' });
+  if (!permiteSucursal(req.user, suc_id)) return res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
   const hoy = new Date().toISOString().substr(0, 10);
   const ex = empDB.where('cajas', c => c.suc_id === suc_id && c.fecha.substr(0, 10) === hoy && c.estado === 'abierta')[0];
   if (ex) return res.status(400).json({ error: 'Ya hay una caja abierta hoy' });
@@ -91,6 +104,7 @@ router.post('/abrir', requireRol('admin', 'supervisor', 'cajero'), validate(caja
 router.post('/cerrar', requireRol('admin', 'supervisor', 'cajero'), (req, res) => {
   const empDB = _getDB(req);
   const { suc_id, saldo_real } = req.body;
+  if (!permiteSucursal(req.user, suc_id)) return res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
   const hoy = new Date().toISOString().substr(0, 10);
   const caja = empDB.where('cajas', c => c.suc_id === suc_id && c.fecha.substr(0, 10) === hoy && c.estado === 'abierta')[0];
   if (!caja) return res.status(404).json({ error: 'No hay caja abierta' });
@@ -137,6 +151,7 @@ router.post('/movimiento', requireRol('admin', 'supervisor', 'cajero'), (req, re
   const empDB = _getDB(req);
   const { suc_id, tipo, concepto, monto, pago_metodo, confirmar_retiro } = req.body;
   if (!suc_id || !tipo || !concepto || !monto) return res.status(400).json({ error: 'Datos incompletos' });
+  if (!permiteSucursal(req.user, suc_id)) return res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
   const hoy = new Date().toISOString().substr(0, 10);
   const caja = empDB.where('cajas', c => c.suc_id === suc_id && c.fecha.substr(0, 10) === hoy && c.estado === 'abierta')[0];
   if (!caja) return res.status(400).json({ error: 'La caja está cerrada' });
@@ -172,6 +187,7 @@ router.delete('/movimiento/:id', requireRol('admin'), (req, res) => {
 router.get('/movimientos', (req, res) => {
   const empDB = _getDB(req);
   const { venta_id, suc_id } = req.query;
+  if (suc_id && !permiteSucursal(req.user, suc_id)) return res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
   let movs = empDB.all('movimientos_caja');
   if (venta_id) movs = movs.filter(m => m.venta_id === venta_id);
   if (suc_id) movs = movs.filter(m => m.suc_id === suc_id);

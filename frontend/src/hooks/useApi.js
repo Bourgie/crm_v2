@@ -31,7 +31,7 @@ export async function apiFetch(method, path, body, token, onLogout) {
     const csrf = getCookie('csrf-token')
     if (csrf) headers['x-csrf-token'] = csrf
   }
-  const opts = { method, headers }
+  const opts = { method, headers, credentials: 'include' }
   if (body) opts.body = JSON.stringify(body)
 
   const r = await fetch('/api' + path, opts)
