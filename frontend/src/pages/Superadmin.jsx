@@ -25,6 +25,7 @@ const SIDEBAR = [
   ['empresas', '🏢 Empresas'],
   ['prospectos', '👥 Prospectos'],
   ['solicitudes', '📋 Solicitudes'],
+  ['eliminaciones', '🗑️ Eliminaciones'],
   ['planes', '💼 Planes'],
   ['modulos', '🧩 Módulos'],
   ['email', '📧 Email'],
@@ -57,6 +58,11 @@ export default function Superadmin() {
   const [planes, setPlanes] = useState([])
   const [modulos, setModulos] = useState([])
   const [solicitudes, setSolicitudes] = useState([])
+  const [solicitudesElim, setSolicitudesElim] = useState([])
+  const [delSolModal, setDelSolModal] = useState(null)
+  const [delSolSaving, setDelSolSaving] = useState(false)
+  const [delSolBackup, setDelSolBackup] = useState(false)
+  const [delSolEmail, setDelSolEmail] = useState(false)
   const [audit, setAudit] = useState([])
   const [prospectos, setProspectos] = useState([])
   const [leads, setLeads] = useState([])
@@ -189,7 +195,7 @@ export default function Superadmin() {
   }, [])
 
   function loadAll() {
-    loadDash(); loadEmpresas(); loadPlanes(); loadModulos(); loadSolicitudes(); loadAudit(); loadProspectos(); loadLanding(); loadTickets(); loadEmailConfig(); loadAtributos(); loadMantenimiento();
+    loadDash(); loadEmpresas(); loadPlanes(); loadModulos(); loadSolicitudes(); loadSolicitudesEliminacion(); loadAudit(); loadProspectos(); loadLanding(); loadTickets(); loadEmailConfig(); loadAtributos(); loadMantenimiento();
     try { const imp = JSON.parse(sessionStorage.getItem('SA_IMP') || 'null'); if (imp) setImpersonating(imp) } catch {}
   }
 
@@ -198,6 +204,7 @@ export default function Superadmin() {
   async function loadPlanes() { try { const r = await saApi('GET', '/planes'); setPlanes(r) } catch {} }
   async function loadModulos() { try { const r = await saApi('GET', '/modulos'); setModulos(r) } catch {} }
   async function loadSolicitudes() { try { setLoading(p=>({...p,sol:true})); const r = await saApi('GET', '/solicitudes-plan'); setSolicitudes(r) } catch {} finally { setLoading(p=>({...p,sol:false})) } }
+  async function loadSolicitudesEliminacion() { try { const r = await saApi('GET', '/solicitudes-eliminacion'); setSolicitudesElim(r) } catch {} }
   async function loadAudit() { try { const r = await saApi('GET', '/audit'); setAudit(r) } catch {} }
   async function loadProspectos() { try { const r = await saApi('GET', '/prospectos'); setProspectos(r) } catch {} }
   async function loadLanding() { try { const r = await saApi('GET', '/landing-leads'); setLeads(r) } catch {} }
@@ -463,6 +470,27 @@ export default function Superadmin() {
 
   async function aprobarSol(id) { try { await saApi('POST', '/solicitudes-plan/' + id + '/resolver', { accion: 'aprobar' }); loadSolicitudes(); loadEmpresas() } catch (e) { alert(e.message) } }
   async function rechazarSol(id) { try { await saApi('POST', '/solicitudes-plan/' + id + '/resolver', { accion: 'rechazar' }); loadSolicitudes() } catch (e) { alert(e.message) } }
+
+  async function resolverEliminacion(id, accion) {
+    if (accion === 'aprobar') {
+      if (!window.confirm('¿Estás seguro? Esta acción eliminará permanentemente la empresa y todos sus datos.')) return
+      setDelSolSaving(true)
+      try {
+        await saApi('POST', '/solicitudes-eliminacion/' + id + '/resolver', { accion, hacer_backup: delSolBackup, enviar_email: delSolEmail })
+        setDelSolModal(null)
+        loadSolicitudesEliminacion(); loadEmpresas()
+        alert('✅ Solicitud de eliminación procesada')
+      } catch (e) { alert(e.message) }
+      finally { setDelSolSaving(false) }
+    } else {
+      if (!window.confirm('¿Rechazar esta solicitud de eliminación? Se notificará al usuario.')) return
+      try {
+        await saApi('POST', '/solicitudes-eliminacion/' + id + '/resolver', { accion: 'rechazar' })
+        loadSolicitudesEliminacion()
+        alert('✅ Solicitud rechazada. El usuario será notificado.')
+      } catch (e) { alert(e.message) }
+    }
+  }
 
   const planModulos = (pid) => { const p = planes.find(x => x.id === pid); if (!p) return []; let mods = p.modulos || []; if (typeof mods === 'string') try { mods = JSON.parse(mods) } catch { mods = [] }; return mods }
 
@@ -807,6 +835,43 @@ export default function Superadmin() {
                           <td>{s.plan_id || '—'}</td>
                           <td><span className={`badge ${s.estado === 'pendiente' ? 'badge-yellow' : s.estado === 'aprobada' ? 'badge-green' : 'badge-red'}`}>{s.estado}</span></td>
                           <td>{s.estado === 'pendiente' && <><button type="button" className="btn btn-primary btn-sm" onClick={() => aprobarSol(s.id)} style={{background:'var(--ok)',marginRight:4}}>✅ Aprobar</button><button type="button" className="btn btn-danger btn-sm" onClick={() => rechazarSol(s.id)}>❌ Rechazar</button></>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ═══════ ELIMINACIONES ═══════ */}
+          {tab === 'eliminaciones' && (
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase' }}>🗑️ Solicitudes de eliminación</h3>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={loadSolicitudesEliminacion}>↻ Actualizar</button>
+              </div>
+              {solicitudesElim.length === 0 ? <div style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}>✅ Sin solicitudes de eliminación</div> : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table>
+                    <thead><tr><th>Fecha</th><th>Empresa</th><th>Email</th><th>Motivo</th><th>Estado</th><th>Acciones</th></tr></thead>
+                    <tbody>
+                      {solicitudesElim.map(s => (
+                        <tr key={s.id}>
+                          <td>{s.fecha ? new Date(s.fecha).toLocaleDateString('es-AR') : '—'}</td>
+                          <td><strong>{s.empresa_nombre || s.empresa_codigo}</strong><br /><span style={{fontSize:11,color:'var(--mu)',fontFamily:'monospace'}}>{s.empresa_codigo}</span></td>
+                          <td>{s.email || '—'}</td>
+                          <td style={{fontSize:12,color:'var(--mu)'}}>{s.motivo || '—'}</td>
+                          <td><span className={`badge ${s.estado === 'pendiente' ? 'badge-yellow' : s.estado === 'aprobada' ? 'badge-red' : 'badge-gray'}`}>{s.estado}</span></td>
+                          <td>
+                            {s.estado === 'pendiente' && (
+                              <>
+                                <button type="button" className="btn btn-danger btn-sm" onClick={() => setDelSolModal(s)}
+                                  style={{background:'var(--bad)',color:'#fff',border:'none',marginRight:4}}>🗑️ Aprobar</button>
+                                <button type="button" className="btn btn-secondary btn-sm" onClick={() => resolverEliminacion(s.id, 'rechazar')}>❌ Rechazar</button>
+                              </>
+                            )}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1327,6 +1392,38 @@ export default function Superadmin() {
               <button type="button" className="btn btn-secondary" onClick={() => setDeleteModal(null)}>Cancelar</button>
               <button type="button" className="btn btn-danger" onClick={deleteEmpresa} disabled={deleteSaving} style={{ background:'var(--bad)', color:'#fff', border:'none' }}>
                 {deleteSaving ? '⏳ Eliminando...' : '🗑️ Eliminar permanentemente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Resolver eliminación */}
+      {delSolModal && (
+        <div className="modal-overlay" onClick={() => setDelSolModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 450 }}>
+            <div className="modal-header"><h3>🗑️ Aprobar eliminación</h3><button type="button" onClick={() => setDelSolModal(null)} style={{background:'none',border:'none',fontSize:22,cursor:'pointer',color:'var(--mu)'}}>×</button></div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ background:'rgba(239,68,68,.06)', borderRadius:8, padding:12, fontSize:13, border:'1px solid rgba(239,68,68,.2)' }}>
+                <p style={{ marginBottom:4 }}>⚠️ Vas a eliminar permanentemente:</p>
+                <p style={{ fontWeight:700 }}>{delSolModal.empresa_nombre || delSolModal.empresa_codigo}</p>
+                <p style={{ fontSize:11, color:'var(--mu)', fontFamily:'monospace' }}>{delSolModal.empresa_codigo} · {delSolModal.email || ''}</p>
+              </div>
+              {delSolModal.email && (
+                <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:13, cursor:'pointer', padding:'8px 12px', background:'var(--sf)', borderRadius:8, border:'1px solid var(--bd)' }}>
+                  <input type="checkbox" checked={delSolEmail} onChange={e => setDelSolEmail(e.target.checked)} style={{ width:16,height:16 }} />
+                  📧 Enviar backup por email a <strong>{delSolModal.email}</strong>
+                </label>
+              )}
+              <label style={{ display:'flex', alignItems:'center', gap:8, fontSize:13, cursor:'pointer', padding:'8px 12px', background:'var(--sf)', borderRadius:8, border:'1px solid var(--bd)' }}>
+                <input type="checkbox" checked={delSolBackup} onChange={e => setDelSolBackup(e.target.checked)} style={{ width:16,height:16 }} />
+                💾 Descargar backup antes de eliminar
+              </label>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setDelSolModal(null)}>Cancelar</button>
+              <button type="button" className="btn btn-danger" onClick={() => resolverEliminacion(delSolModal.id, 'aprobar')} disabled={delSolSaving} style={{ background:'var(--bad)', color:'#fff', border:'none' }}>
+                {delSolSaving ? '⏳ Eliminando...' : '🗑️ Eliminar permanentemente'}
               </button>
             </div>
           </div>

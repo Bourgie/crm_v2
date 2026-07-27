@@ -28,7 +28,8 @@ const NAV = [
   { to: '/app/auditoria', icon: '🔍', label: 'Auditoría', mod: 'auditoria', roles: ['admin','supervisor'] },
   { to: '/app/usuarios',  icon: '👤', label: 'Usuarios', mod: null, adminOnly: true },
   { to: '/app/sucursales', icon: '🏪', label: 'Sucursales', mod: null, adminOnly: true },
-  { to: '/app/config',    icon: '⚙️', label: 'Configuración', mod: null, roles: ['admin','supervisor'] },
+  { to: '/app/micuenta',  icon: '👤', label: 'Mi Cuenta', mod: null },
+  { to: '/app/config',    icon: '⚙️', label: 'Configuración', mod: null, adminOnly: true },
 ]
 
 export function Sidebar({ mobile, onClose }) {

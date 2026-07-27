@@ -533,7 +533,7 @@ router.post('/signup', async (req, res) => {
     const from = getGlobalConfig('smtp_from') || u || '';
     const fromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
     const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
-    const verifyLink = `${appUrl}/app/verify-email/${verToken}`;
+    const verifyLink = `${appUrl}/api/auth/verify-email/${verToken}`;
     if (h && u && pass && from) {
       const { sendEmail } = require('../lib/send-email');
       const { verificationEmail } = require('../lib/email-templates');
@@ -614,7 +614,7 @@ router.post('/verify-email/resend', async (req, res) => {
       const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
       const { sendEmail } = require('../lib/send-email');
       const { verificationEmail } = require('../lib/email-templates');
-      await sendEmail(h, p, u, pass, '"'+fromName+'" <'+from+'>', email, 'Verifica tu email — FlexCRM', verificationEmail('FlexCRM', appUrl+'/app/verify-email/'+verToken));
+      await sendEmail(h, p, u, pass, '"'+fromName+'" <'+from+'>', email, 'Verifica tu email — FlexCRM', verificationEmail('FlexCRM', appUrl+'/api/auth/verify-email/'+verToken));
     }
     res.json({ ok: true, mensaje: 'Si la cuenta existe, recibiras un nuevo email.' });
   } catch(e) { res.json({ ok: true, mensaje: 'Si la cuenta existe, recibiras un nuevo email.' }); }
@@ -854,6 +854,24 @@ router.post('/reset-password', validate(resetPasswordSchema), async (req, res) =
   } catch (e) { /* non-blocking */ }
 
   res.json({ ok: true, mensaje: 'Contraseña actualizada correctamente' });
+});
+
+// ── Solicitar eliminación de cuenta (usuario solicita, superadmin aprueba) ──
+router.post('/solicitar-eliminacion', authMiddleware, async (req, res) => {
+  try {
+    const { master, saAuditExtended } = require('../db_master');
+    const empresa = master.prepare("SELECT * FROM empresas WHERE codigo=?").get(req.user.empresa);
+    if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' });
+    const existing = master.prepare("SELECT id FROM solicitudes_eliminacion WHERE empresa_id=? AND estado='pendiente'").get(empresa.id);
+    if (existing) return res.status(400).json({ error: 'Ya tenés una solicitud de eliminación pendiente.' });
+    master.prepare("INSERT INTO solicitudes_eliminacion (id,empresa_id,empresa_codigo,email,motivo,fecha,estado) VALUES (?,?,?,?,?,?,?)")
+      .run('se_'+Date.now(), empresa.id, empresa.codigo, req.user.email, req.body.motivo || '', new Date().toISOString(), 'pendiente');
+    saAuditExtended('system', 'solicitud_eliminacion', empresa.codigo, 'Usuario solicitó eliminación: '+req.user.email);
+    res.json({ ok: true, mensaje: 'Solicitud de eliminación enviada. El administrador la procesará a la brevedad.' });
+  } catch(e) {
+    console.error('[SolicitarEliminacion] Error:', e.message);
+    res.status(500).json({ error: 'Error al enviar la solicitud.' });
+  }
 });
 
 module.exports = router;

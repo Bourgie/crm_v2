@@ -200,6 +200,9 @@ const fs = require('fs');
 if (fs.existsSync(reactDir)) {
   app.use('/app/', express.static(reactDir));
   app.get('/app', (req, res) => res.redirect('/app/dashboard'));
+  app.get('/app/verify-email/:token', (req, res) => {
+    res.redirect('/api/auth/verify-email/' + req.params.token);
+  });
   app.get('/app/*', (req, res) => {
     res.sendFile(path.join(reactDir, 'index.html'));
   });

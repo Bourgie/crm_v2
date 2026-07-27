@@ -719,8 +719,11 @@ router.post('/solicitudes-plan/:id/resolver', superAuth, (req, res) => {
     const plan = getPlan(sol.plan_id);
     if (plan) {
       const limites = typeof plan.limites === 'string' ? JSON.parse(plan.limites || '{}') : (plan.limites || {});
-      master.prepare('UPDATE empresas SET plan_id=?,usuarios_max=?,sucursales_max=? WHERE codigo=?')
-        .run(sol.plan_id, limites.usuarios_max || 5, limites.sucursales_max || 2, sol.empresa_id);
+      const periodo = plan.periodo || 'mensual';
+      const diasPeriodo = periodo === 'anual' ? 365 : 30;
+      const nuevoVenc = new Date(Date.now() + diasPeriodo * 86400000).toISOString().substr(0, 10);
+      master.prepare('UPDATE empresas SET plan_id=?,usuarios_max=?,sucursales_max=?,vencimiento=? WHERE codigo=?')
+        .run(sol.plan_id, limites.usuarios_max || 5, limites.sucursales_max || 2, nuevoVenc, sol.empresa_id);
       // Apply modules to empresa DB
       try {
         const { getEmpresaDB } = require('../db_sqlite');
@@ -742,6 +745,101 @@ router.post('/solicitudes-plan/:id/resolver', superAuth, (req, res) => {
 
   saAudit(req.sadmin.id, `plan_${accion}`, sol.empresa_id,
     `Plan ${accion}: ${sol.plan_id} para ${sol.empresa_id}`);
+  res.json({ ok: true });
+});
+
+// ── Solicitudes de eliminación de cuenta ──
+router.get('/solicitudes-eliminacion', superAuth, (req, res) => {
+  const rows = master.prepare(`
+    SELECT se.*, e.nombre as empresa_nombre, e.admin_email, e.plan_id
+    FROM solicitudes_eliminacion se
+    LEFT JOIN empresas e ON e.id = se.empresa_id
+    ORDER BY se.fecha DESC
+  `).all();
+  res.json(rows);
+});
+
+router.post('/solicitudes-eliminacion/:id/resolver', superAuth, async (req, res) => {
+  const { accion, hacer_backup, enviar_email } = req.body;
+  const sol = master.prepare('SELECT * FROM solicitudes_eliminacion WHERE id=?').get(req.params.id);
+  if (!sol) return res.status(404).json({ error: 'Solicitud no encontrada' });
+
+  if (accion === 'aprobar') {
+    const empresa = master.prepare('SELECT * FROM empresas WHERE id=?').get(sol.empresa_id);
+    if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+    const path = require('path');
+    let backupFilename = null;
+
+    if (hacer_backup || enviar_email) {
+      try {
+        const { makeFullBackup } = require('./backup');
+        const result = makeFullBackup();
+        backupFilename = result.name;
+      } catch(be) { console.error('[DeleteSolicitud] Backup error:', be.message); }
+    }
+
+    if (enviar_email && sol.email && backupFilename) {
+      setImmediate(async () => {
+        try {
+          const h = getGlobalConfig('smtp_host');
+          if (h) {
+            const { decryptValue } = require('../lib/crypto-utils');
+            const u = getGlobalConfig('smtp_user');
+            const pass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
+            const from = getGlobalConfig('smtp_from')||u||'';
+            const fromName = getGlobalConfig('smtp_from_name')||'FlexCRM';
+            const { sendEmail } = require('../lib/send-email');
+            const html = `<div style="font-family:sans-serif;padding:20px"><h2>Tu cuenta ha sido eliminada</h2>
+<p>Hola, tu empresa <strong>${empresa.nombre}</strong> (${empresa.codigo}) fue eliminada de FlexCRM según lo solicitado.</p>
+<p>Adjuntamos el backup final de todos tus datos.</p></div>`;
+            const backupPath = path.join(__dirname, '../data/backups', backupFilename);
+            const fs = require('fs');
+            if (fs.existsSync(backupPath)) {
+              await sendEmail(h, parseInt(getGlobalConfig('smtp_port'))||465, u, pass, '"'+fromName+'" <'+from+'>', sol.email, 'Cuenta eliminada — FlexCRM', html, [{ filename: backupFilename, path: backupPath }]);
+            }
+          }
+        } catch(se) { console.error('[DeleteSolicitud] Email error:', se.message); }
+      });
+    }
+
+    // Hard delete
+    master.prepare("DELETE FROM empresas WHERE id=?").run(sol.empresa_id);
+    try {
+      const dbPath = path.join(__dirname, '../data', `empresa_${empresa.codigo}.db`);
+      const fs = require('fs');
+      if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+    } catch(fe) { console.error('[DeleteSolicitud] File error:', fe.message); }
+
+    saAudit(req.sadmin.id, 'eliminar_empresa_solicitada', sol.empresa_id,
+      'Eliminada por solicitud: ' + empresa.nombre + ' — ' + sol.email + (backupFilename ? ' Backup: '+backupFilename : ''));
+  }
+
+  master.prepare("UPDATE solicitudes_eliminacion SET estado=? WHERE id=?")
+    .run(accion === 'aprobar' ? 'aprobada' : 'rechazada', req.params.id);
+
+  if (accion === 'rechazar' && sol.email) {
+    setImmediate(async () => {
+      try {
+        const h = getGlobalConfig('smtp_host');
+        if (h) {
+          const { decryptValue } = require('../lib/crypto-utils');
+          const u = getGlobalConfig('smtp_user');
+          const pass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
+          const from = getGlobalConfig('smtp_from')||u||'';
+          const fromName = getGlobalConfig('smtp_from_name')||'FlexCRM';
+          const { sendEmail } = require('../lib/send-email');
+          const html = `<div style="font-family:sans-serif;padding:20px"><h2>Solicitud de eliminación rechazada</h2>
+<p>Hola, la solicitud de eliminación de tu cuenta en FlexCRM fue <strong>rechazada</strong>.</p>
+<p>Si necesitás ayuda, contactanos respondiendo este email.</p></div>`;
+          await sendEmail(h, parseInt(getGlobalConfig('smtp_port'))||465, u, pass, '"'+fromName+'" <'+from+'>', sol.email, 'Solicitud de eliminación rechazada — FlexCRM', html);
+        }
+      } catch(se) { console.error('[DeleteSolicitud] Email error:', se.message); }
+    });
+  }
+
+  saAudit(req.sadmin.id, `eliminacion_${accion}`, sol.empresa_id,
+    `Solicitud ${accion}: ${sol.email} — ${sol.empresa_codigo}`);
   res.json({ ok: true });
 });
 

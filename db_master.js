@@ -231,6 +231,16 @@ master.exec(`
     fecha TEXT,
     realizado_por TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS solicitudes_eliminacion (
+    id TEXT PRIMARY KEY,
+    empresa_id TEXT,
+    empresa_codigo TEXT,
+    email TEXT,
+    motivo TEXT,
+    fecha TEXT,
+    estado TEXT DEFAULT 'pendiente'
+  );
 `);
 
 // Migration: add email and data columns to existing superadmin
@@ -338,6 +348,20 @@ if(planCount === 0) {
 // Ensure plan_trial always exists
 master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,modulos,limites,orden) VALUES ('plan_trial','trial','Prueba (14 dias)',0,?,?,0)")
   .run(JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','reportes']), JSON.stringify({usuarios_max:5, sucursales_max:1}));
+
+// Seed annual plans
+master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,periodo,modulos,limites,orden) VALUES (?,?,?,?,?,?,?,?)")
+  .run('plan_basic_anual','basic_anual','Básico Anual',150,'anual',
+    JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','proveedores','gastos','reportes']),
+    JSON.stringify({usuarios_max:3, sucursales_max:1}), 10);
+master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,periodo,modulos,limites,orden) VALUES (?,?,?,?,?,?,?,?)")
+  .run('plan_pro_anual','pro_anual','Pro Anual',400,'anual',
+    JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda']),
+    JSON.stringify({usuarios_max:10, sucursales_max:3}), 20);
+master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,periodo,modulos,limites,orden) VALUES (?,?,?,?,?,?,?,?)")
+  .run('plan_enterprise_anual','enterprise_anual','Enterprise Anual',900,'anual',
+    JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','listabebe','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda']),
+    JSON.stringify({usuarios_max:999, sucursales_max:999}), 30);
 
 // Seed default modules
 var modCount = master.prepare("SELECT COUNT(*) as n FROM modulos").get().n;

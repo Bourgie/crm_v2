@@ -291,7 +291,7 @@ export function Config() {
 
   if (loading) return <Loader/>
 
-  const TABS = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['email','📧 Email'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['seguridad','🔒 Seguridad'],['webhooks','🔗 Webhooks'],['arca','📄 ARCA'],['tienda','🛒 Tienda'],['plan','📦 Plan'],['micuenta','👤 Mi Cuenta'],['backups','💾 Backups'],['ayuda','🆘 Ayuda']]
+  const TABS = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['email','📧 Email'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['seguridad','🔒 Seguridad'],['webhooks','🔗 Webhooks'],['arca','📄 ARCA'],['tienda','🛒 Tienda'],['plan','📦 Plan'],['backups','💾 Backups'],['ayuda','🆘 Ayuda']]
 
   return (
     <div>
@@ -1112,6 +1112,7 @@ function PlanTab({ api, toast }) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [solicitando, setSolicitando] = useState(false)
+  const [periodo, setPeriodo] = useState('mensual')
 
   const load = () => {
     setLoading(true)
@@ -1127,13 +1128,33 @@ function PlanTab({ api, toast }) {
   const planes = data.planes || []
   const vto = emp.vencimiento ? new Date(emp.vencimiento) : null
   const diasVto = vto ? Math.ceil((vto - new Date()) / 86400000) : null
-  const actualIdx = planes.findIndex((p) => actual && p.id === actual.id)
   const actualMods = actual ? (Array.isArray(actual.modulos) ? actual.modulos : (() => { try { return JSON.parse(actual.modulos||'[]') } catch { return [] } })()) : []
   const MODNAMES = {pos:'POS',caja:'Caja',clientes:'Clientes',ventas:'Ventas',productos:'Productos',ctacte:'Cta. corriente',presupuestos:'Presupuestos',pendientes:'Pendientes',listabebe:'Lista Regalos',transferencias:'Transferencias',proveedores:'Proveedores',gastos:'Gastos',reportes:'Reportes',chat:'Chat sucursales',auditoria:'Auditoría',pipeline:'Pipeline Comercial',arca:'ARCA Facturación',tienda:'Sincronizar Tienda',webhooks:'Webhooks',rrhh:'RRHH'}
 
   // Check pending solicitud
   let solPendiente = null
   try { solPendiente = emp.solicitud_plan ? JSON.parse(emp.solicitud_plan) : null } catch {}
+
+  // Match monthly <-> annual plans by stripping '_anual' suffix
+  function getMensualContraparte(planAnual) {
+    const baseId = planAnual.id.replace('_anual', '')
+    return baseId !== planAnual.id ? planes.find(p => p.id === baseId) : null
+  }
+  function getAnualContraparte(planMensual) {
+    return planes.find(p => p.id === planMensual.id + '_anual')
+  }
+
+  // Filter plans by selected period
+  const planesFiltrados = periodo === 'mensual'
+    ? planes.filter(p => !p.id.endsWith('_anual') && p.id !== 'plan_trial')
+    : planes.filter(p => p.id.endsWith('_anual') && p.id !== 'plan_trial')
+  // Sort to match monthly order equivalent
+  const ordenMensual = ['plan_basic', 'plan_pro', 'plan_enterprise']
+  planesFiltrados.sort((a, b) => {
+    const baseA = a.id.replace('_anual', '')
+    const baseB = b.id.replace('_anual', '')
+    return ordenMensual.indexOf(baseA) - ordenMensual.indexOf(baseB)
+  })
 
   async function solicitarPlan(planId, planNombre, esUpgrade) {
     setSolicitando(planId)
@@ -1142,16 +1163,9 @@ function PlanTab({ api, toast }) {
       try { prate = await api('GET', `/config/plan/prorate?nuevo_plan_id=${planId}`) } catch {}
       let msg = esUpgrade
         ? (prate?.tiene_costo && prate.monto_neto > 0
-          ? `💳 Upgrade a ${planNombre}
-
-Días restantes: ${prate.dias_restantes}
-Monto a pagar ahora: $${prate.monto_neto}
-
-¿Confirmar solicitud de upgrade?`
+          ? `💳 Upgrade a ${planNombre}\n\nDías restantes: ${prate.dias_restantes}\nMonto a pagar ahora: $${prate.monto_neto}\n\n¿Confirmar solicitud de upgrade?`
           : `¿Solicitar upgrade a ${planNombre}? El administrador lo procesará.`)
-        : (prate?.mensaje || `Al hacer downgrade el plan actual continúa hasta su vencimiento.
-
-¿Confirmar cambio a ${planNombre}?`)
+        : (prate?.mensaje || `Al hacer downgrade el plan actual continúa hasta su vencimiento.\n\n¿Confirmar cambio a ${planNombre}?`)
       if (!window.confirm(msg)) { setSolicitando(false); return }
       await api('POST', '/config/plan/solicitar', { plan_id: planId, tipo: esUpgrade ? 'upgrade' : 'downgrade' })
       toast('Solicitud enviada — el administrador fue notificado', 'ok')
@@ -1159,6 +1173,8 @@ Monto a pagar ahora: $${prate.monto_neto}
     } catch (e) { toast(e.message, 'err') }
     finally { setSolicitando(false) }
   }
+
+  const periodoActual = actual && (actual.periodo === 'anual' || actual.id.endsWith('_anual')) ? 'anual' : 'mensual'
 
   return (
     <div>
@@ -1170,6 +1186,7 @@ Monto a pagar ahora: $${prate.monto_neto}
             <div style={{fontWeight:800,fontSize:16}}>{actual.nombre}</div>
             <div style={{fontSize:12,opacity:.85}}>
               {vto ? <span style={{color:diasVto!=null&&diasVto<=7?'#fde68a':'rgba(255,255,255,.85)'}}>{diasVto!=null&&diasVto<=0?'⚠️ VENCIDO':'Vence: '+vto.toLocaleDateString('es-AR')}{diasVto!=null&&diasVto>0&&diasVto<=30?' ('+diasVto+' días)':''}</span> : 'Sin vencimiento'}
+              {periodoActual === 'anual' && <span style={{marginLeft:8,background:'rgba(255,255,255,.2)',padding:'1px 6px',borderRadius:4,fontSize:10}}>ANUAL</span>}
             </div>
             <div style={{fontSize:11,marginTop:2,opacity:.85}}>👥 {emp.usuarios_max||actual.usuarios_max||'?'} usuarios · 🏪 {emp.sucursales_max||actual.sucursales_max||'?'} sucursales</div>
           </div>
@@ -1183,26 +1200,50 @@ Monto a pagar ahora: $${prate.monto_neto}
         </div>
       )}
 
+      {/* Toggle Mensual / Anual */}
+      <div style={{display:'flex',gap:4,marginBottom:14,background:'var(--sf)',borderRadius:8,padding:4,border:'1px solid var(--bd)',width:'fit-content'}}>
+        <button type="button" className={`btn btn-sm ${periodo==='mensual'?'btn-primary':'btn-secondary'}`} onClick={() => setPeriodo('mensual')} style={{border:'none'}}>📆 Mensual</button>
+        {getAnualContraparte(actual || {id:'plan_basic'}) && (
+          <button type="button" className={`btn btn-sm ${periodo==='anual'?'btn-primary':'btn-secondary'}`} onClick={() => setPeriodo('anual')} style={{border:'none'}}>📅 Anual <span style={{fontSize:10,opacity:.8}}>−17%</span></button>
+        )}
+      </div>
+
       {/* Planes disponibles */}
-      {planes.length > 0 && (
+      {planesFiltrados.length > 0 && (
         <div>
-          <div style={{fontWeight:600,fontSize:13,marginBottom:10}}>Planes disponibles</div>
-          {planes.map((p, i) => {
+          <div style={{fontWeight:600,fontSize:13,marginBottom:10}}>
+            {periodo === 'mensual' ? 'Planes mensuales' : 'Planes anuales'}
+          </div>
+          {planesFiltrados.map((p) => {
+            const contraparte = periodo === 'anual' ? getMensualContraparte(p) : getAnualContraparte(p)
+            const precioMensual = contraparte ? contraparte.precio : null
+            const ahorro = precioMensual ? Math.round((1 - p.precio / (precioMensual * 12)) * 100) : 0
             const esCurrent = actual && p.id === actual.id
-            const esUpgrade = actualIdx >= 0 ? i > actualIdx : false
+            const esUpgrade = !esCurrent && actual && p.precio > actual.precio
             const pMods = Array.isArray(p.modulos) ? p.modulos : (() => { try { return JSON.parse(p.modulos||'[]') } catch { return [] } })()
             const ganados = pMods.filter((m) => !actualMods.includes(m))
             const perdidos = actualMods.filter((m) => !pMods.includes(m))
             return (
               <div key={p.id} style={{padding:'12px 14px',borderRadius:8,marginBottom:8,border:esCurrent?'2px solid var(--ac)':'1px solid var(--bd)'}}>
                 <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:6}}>
-                  <div style={{fontWeight:700}}>📦 {p.nombre} — {p.precio ? `$${p.precio}/mes` : 'Gratis'}</div>
+                  <div style={{fontWeight:700}}>
+                    📦 {p.nombre}
+                    {periodo === 'anual'
+                      ? <span> — <strong>${p.precio}/año</strong></span>
+                      : <span> — {p.precio ? <strong>$${p.precio}/mes</strong> : 'Gratis'}</span>}
+                  </div>
                   {esCurrent
                     ? <span className="badge badge-green">Plan actual</span>
                     : <span className={`badge ${esUpgrade?'badge-blue':'badge-gray'}`}>{esUpgrade?'⬆ Upgrade':'⬇ Downgrade'}</span>}
                 </div>
                 <div style={{fontSize:11,color:'var(--mu)',marginBottom:6}}>
                   👥 {p.usuarios_max||'∞'} usuarios · 🏪 {p.sucursales_max||'∞'} sucursales · {pMods.length} módulos
+                  {periodo === 'anual' && precioMensual > 0 && (
+                    <span style={{marginLeft:8,color:'var(--ok)',fontWeight:700}}>Ahorrá {ahorro}%</span>
+                  )}
+                  {periodo === 'anual' && precioMensual > 0 && (
+                    <span style={{marginLeft:6,fontSize:10,color:'var(--mu)'}}>≈ ${(p.precio/12).toFixed(2)}/mes</span>
+                  )}
                 </div>
                 {!esCurrent && actual && (ganados.length>0||perdidos.length>0) && (
                   <div style={{fontSize:11,marginBottom:8}}>

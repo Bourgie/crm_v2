@@ -27,6 +27,7 @@ const Pipeline = lazy(() => import('./pages/Pipeline').then(m => ({ default: m.P
 const Usuarios = lazy(() => import('./pages/UsuariosConfig').then(m => ({ default: m.Usuarios })))
 const Config = lazy(() => import('./pages/UsuariosConfig').then(m => ({ default: m.Config })))
 const Setup2FA = lazy(() => import('./pages/Setup2FA').then(m => ({ default: m.Setup2FA })))
+const MiCuenta = lazy(() => import('./pages/MiCuenta').then(m => ({ default: m.MiCuenta })))
 const Sucursales = lazy(() => import('./pages/Sucursales').then(m => ({ default: m.Sucursales })))
 const RRHH = lazy(() => import('./pages/RRHH'))
 const Superadmin = lazy(() => import('./pages/Superadmin'))
@@ -68,6 +69,7 @@ export default function App() {
         <Route path="chat"           element={<L><Chat /></L>} />
         <Route path="usuarios"       element={<L><Usuarios /></L>} />
         <Route path="sucursales"     element={<L><Sucursales /></L>} />
+        <Route path="micuenta"       element={<L><MiCuenta /></L>} />
         <Route path="config"         element={<L><Config /></L>} />
         <Route path="2fa"            element={<L><Setup2FA /></L>} />
         <Route path="proveedores"    element={<L><Proveedores /></L>} />

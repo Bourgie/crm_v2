@@ -99,7 +99,7 @@ router.post('/signup', async (req, res) => {
       if (h && u && pass && from) {
         const { sendEmail } = require('../lib/send-email');
         const { verificationEmail } = require('../lib/email-templates');
-        await sendEmail(h, p, u, pass, '"' + fromName + '" <' + from + '>', email, 'Verifica tu email — FlexCRM', verificationEmail(empresa_nombre, appUrl + '/app/verify-email/' + verToken));
+        await sendEmail(h, p, u, pass, '"' + fromName + '" <' + from + '>', email, 'Verifica tu email — FlexCRM', verificationEmail(empresa_nombre, appUrl + '/api/auth/verify-email/' + verToken));
         console.log('[Signup] Verification email to:', email);
       } else {
         console.error('[Signup] SMTP not configured for:', email);
@@ -194,7 +194,7 @@ router.post('/verify-email/resend', async (req, res) => {
       const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
       const { sendEmail } = require('../lib/send-email');
       const { verificationEmail } = require('../lib/email-templates');
-      await sendEmail(h, p, u, pass, '"'+fromName+'" <'+from+'>', email, 'Verifica tu email — FlexCRM', verificationEmail('FlexCRM', appUrl+'/app/verify-email/'+verToken));
+      await sendEmail(h, p, u, pass, '"'+fromName+'" <'+from+'>', email, 'Verifica tu email — FlexCRM', verificationEmail('FlexCRM', appUrl+'/api/auth/verify-email/'+verToken));
     }
     res.json({ ok: true, mensaje: 'Si la cuenta existe, recibiras un nuevo email.' });
   } catch(e) { res.json({ ok: true, mensaje: 'Si la cuenta existe, recibiras un nuevo email.' }); }
