@@ -124,9 +124,31 @@ export function MiCuenta() {
             </p>
           </div>
         ) : (
-          <div style={{ fontSize: 12, color: 'var(--mu)', padding: '8px 0' }}>
-            {consentData && consentData.isAdmin ? 'Aún no aceptaste los documentos legales.' : 'Tu empresa aún no aceptó los documentos legales.'}
-          </div>
+          consentData && consentData.isAdmin ? (
+            <div style={{ fontSize: 12, padding: '8px 0' }}>
+              <p style={{ color: 'var(--warn)', marginBottom: 8 }}>
+                ⚠️ Tu empresa aún no firmó los documentos legales.
+              </p>
+              <p style={{ color: 'var(--mu)', marginBottom: 8 }}>
+                La próxima vez que inicies sesión, se te pedirá que los aceptes. También podés revisarlos ahora:
+              </p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 4 }}>
+                <a href="/terminos-y-condiciones" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontSize: 12 }}>
+                  📄 Términos y Condiciones
+                </a>
+                <a href="/politica-de-privacidad" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontSize: 12 }}>
+                  📄 Política de Privacidad
+                </a>
+                <a href="/politica-de-cookies" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontSize: 12 }}>
+                  📄 Política de Cookies
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 12, color: 'var(--mu)', padding: '8px 0' }}>
+              Tu empresa aún no aceptó los documentos legales.
+            </div>
+          )
         )}
       </div>
 

@@ -2041,6 +2041,137 @@ export default function Superadmin() {
         </div>
       )}
 
+          {/* ═══════ LEGAL ═══════ */}
+          {tab === 'legal' && (
+            <div>
+              <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 16 }}>⚖️ Gestión Legal</h2>
+
+              {/* Subir nueva versión */}
+              <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>📤 Subir nueva versión</h3>
+                <div style={{ display:'flex', gap: 8, flexWrap: 'wrap', alignItems:'flex-end' }}>
+                  <div style={{ flex: 1, minWidth: 120 }}>
+                    <label style={{ fontSize: 11, color: 'var(--mu)', display: 'block', marginBottom: 4 }}>Tipo</label>
+                    <select id="legal-tipo" style={S.select}>
+                      <option value="terminos">Términos y Condiciones</option>
+                      <option value="privacidad">Política de Privacidad</option>
+                      <option value="cookies">Política de Cookies</option>
+                    </select>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 100 }}>
+                    <label style={{ fontSize: 11, color: 'var(--mu)', display: 'block', marginBottom: 4 }}>Versión</label>
+                    <input id="legal-version" placeholder="1.1" style={S.input} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 100 }}>
+                    <label style={{ fontSize: 11, color: 'var(--mu)', display: 'block', marginBottom: 4 }}>Acción</label>
+                    <button type="button" className="btn btn-primary btn-sm" style={{ width: '100%' }} onClick={subirVersionLegal}>
+                      Subir nueva versión
+                    </button>
+                  </div>
+                </div>
+                <p style={{ fontSize: 11, color: 'var(--mu)', marginTop: 8 }}>
+                  Al subir una nueva versión, los administradores de cada empresa deberán re-aceptarla en su próximo inicio de sesión (período de gracia: 7 días).
+                </p>
+                {legalMsg && (
+                  <div style={{ marginTop: 8, padding: '8px 12px', borderRadius: 8, fontSize: 12, background: legalMsgErr ? 'rgba(239,68,68,.1)' : 'rgba(34,197,94,.1)', color: legalMsgErr ? 'var(--bad)' : 'var(--ok)' }}>
+                    {legalMsg}
+                  </div>
+                )}
+              </div>
+
+              {/* Estado por empresa */}
+              <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>📊 Estado de Consentimientos por Empresa</h3>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ borderBottom: '1px solid var(--bd)' }}>
+                        <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--mu)', fontSize: 11 }}>Empresa</th>
+                        <th style={{ textAlign: 'left', padding: '8px 6px', color: 'var(--mu)', fontSize: 11 }}>Admin</th>
+                        <th style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--mu)', fontSize: 11 }}>Términos</th>
+                        <th style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--mu)', fontSize: 11 }}>Privacidad</th>
+                        <th style={{ textAlign: 'center', padding: '8px 6px', color: 'var(--mu)', fontSize: 11 }}>Estado</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(legalEmpresas || []).map((e, i) => {
+                        const tOk = e.estado?.terminos?.aceptado;
+                        const pOk = e.estado?.privacidad?.aceptado;
+                        const ok = tOk && pOk;
+                        const pend = !tOk || !pOk;
+                        return (
+                          <tr key={i} style={{ borderBottom: '1px solid var(--bd)', background: i % 2 === 0 ? 'var(--sf)' : 'transparent' }}>
+                            <td style={{ padding: '8px 6px', fontWeight: 600 }}>{e.nombre} <span style={{ color: 'var(--mu)', fontSize: 10 }}>({e.codigo})</span></td>
+                            <td style={{ padding: '8px 6px', color: 'var(--mu)', fontSize: 10 }}>{e.admin_email}</td>
+                            <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                              {tOk ? (
+                                <span style={{ color: 'var(--ok)', fontSize: 11 }}>✅ v{e.estado.terminos.vigente || '—'}<br /><span style={{ fontSize: 9, color: 'var(--mu)' }}>{new Date(e.estado.terminos.aceptado_fecha).toLocaleDateString('es-AR')}</span></span>
+                              ) : (
+                                <span style={{ color: 'var(--bad)', fontSize: 11 }}>❌ v{e.estado.terminos.vigente || '—'}</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                              {pOk ? (
+                                <span style={{ color: 'var(--ok)', fontSize: 11 }}>✅ v{e.estado.privacidad.vigente || '—'}<br /><span style={{ fontSize: 9, color: 'var(--mu)' }}>{new Date(e.estado.privacidad.aceptado_fecha).toLocaleDateString('es-AR')}</span></span>
+                              ) : (
+                                <span style={{ color: 'var(--bad)', fontSize: 11 }}>❌ v{e.estado.privacidad.vigente || '—'}</span>
+                              )}
+                            </td>
+                            <td style={{ padding: '8px 6px', textAlign: 'center' }}>
+                              <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 10, fontWeight: 600,
+                                background: ok ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.15)',
+                                color: ok ? 'var(--ok)' : 'var(--bad)' }}>
+                                {ok ? 'Al día' : 'Pendiente'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {(!legalEmpresas || legalEmpresas.length === 0) && (
+                        <tr><td colSpan={5} style={{ padding: 16, textAlign: 'center', color: 'var(--mu)', fontSize: 12 }}>Cargando...</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <div style={{ marginTop: 12 }}>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={loadLegalEstado}>🔄 Actualizar</button>
+                  <button type="button" className="btn btn-secondary btn-sm" style={{ marginLeft: 8 }} onClick={cargarLegalAuditoria}>📋 Ver auditoría</button>
+                </div>
+              </div>
+
+              {/* Auditoría */}
+              {legalAuditData && (
+                <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+                  <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 12 }}>📋 Auditoría de Acciones Legales</h3>
+                  <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid var(--bd)', position: 'sticky', top: 0, background: 'var(--bg)' }}>
+                          <th style={{ textAlign: 'left', padding: '6px', color: 'var(--mu)', fontSize: 10 }}>Fecha</th>
+                          <th style={{ textAlign: 'left', padding: '6px', color: 'var(--mu)', fontSize: 10 }}>Acción</th>
+                          <th style={{ textAlign: 'left', padding: '6px', color: 'var(--mu)', fontSize: 10 }}>Empresa</th>
+                          <th style={{ textAlign: 'left', padding: '6px', color: 'var(--mu)', fontSize: 10 }}>Detalle</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(legalAuditData.auditoria || []).map((a, i) => (
+                          <tr key={i} style={{ borderBottom: '1px solid var(--bd)' }}>
+                            <td style={{ padding: '6px', whiteSpace: 'nowrap', fontSize: 10 }}>{a.fecha ? new Date(a.fecha).toLocaleString('es-AR') : '—'}</td>
+                            <td style={{ padding: '6px', fontSize: 10 }}><code style={{ fontSize: 10 }}>{a.accion}</code></td>
+                            <td style={{ padding: '6px', fontSize: 10 }}>{a.empresa_id || '—'}</td>
+                            <td style={{ padding: '6px', fontSize: 10, maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                              {typeof a.detalle === 'string' && a.detalle.startsWith('{') ? (() => { try { const d = JSON.parse(a.detalle); return d.msg || a.detalle; } catch { return a.detalle; } })() : a.detalle}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
     </div>
   )
 
