@@ -1,6 +1,6 @@
 {
   "name": "pequenoscrm-pro",
-  "version": "2.47.0",
+  "version": "2.48.0",
   "description": "FlexCRM — CRM multi-rubro SaaS multi-tenant",
   "main": "server.js",
   "scripts": {
