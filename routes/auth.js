@@ -224,50 +224,54 @@ router.post('/login', validate(loginSchema), async (req, res) => {
   }
 
   // ── Consent check (per-empresa, admin-only) ──
-  const { getVersionesVigentes, checkConsentimientoEmpresa, isInGracePeriod, getGraceDaysLeft } = require('../lib/legal-versions');
-  const versionesVigentes = getVersionesVigentes();
-  const tiposLegales = ['terminos', 'privacidad'];
-  const missingConsent = [];
-  let gracePeriodActive = true;
-  let minGraceDays = 999;
-  for (const tipo of tiposLegales) {
-    const v = versionesVigentes[tipo];
-    if (!v) continue;
-    const aceptado = checkConsentimientoEmpresa(userDB, empresa, tipo, v);
-    if (!aceptado) {
-      missingConsent.push(tipo);
-      const { getVersionVigente } = require('../db_master');
-      const vigente = getVersionVigente(tipo);
-      if (vigente && !isInGracePeriod(vigente.vigente_desde)) {
-        gracePeriodActive = false;
+  try {
+    const { getVersionesVigentes, checkConsentimientoEmpresa, isInGracePeriod, getGraceDaysLeft } = require('../lib/legal-versions');
+    const versionesVigentes = getVersionesVigentes();
+    const tiposLegales = ['terminos', 'privacidad'];
+    const missingConsent = [];
+    let gracePeriodActive = true;
+    let minGraceDays = 999;
+    for (const tipo of tiposLegales) {
+      const v = versionesVigentes[tipo];
+      if (!v) continue;
+      const aceptado = checkConsentimientoEmpresa(userDB, empresa, tipo, v);
+      if (!aceptado) {
+        missingConsent.push(tipo);
+        const { getVersionVigente } = require('../db_master');
+        const vigente = getVersionVigente(tipo);
+        if (vigente && !isInGracePeriod(vigente.vigente_desde)) {
+          gracePeriodActive = false;
+        }
+        const gd = vigente ? getGraceDaysLeft(vigente.vigente_desde) : 0;
+        if (gd < minGraceDays) minGraceDays = gd;
       }
-      const gd = vigente ? getGraceDaysLeft(vigente.vigente_desde) : 0;
-      if (gd < minGraceDays) minGraceDays = gd;
     }
-  }
-  if (missingConsent.length > 0) {
-    if (user.rol !== 'admin') {
-      return res.status(403).json({ consent_pending: true, error: 'Tu administrador aún no aceptó los términos legales. Contactá al administrador de la empresa.' });
+    if (missingConsent.length > 0) {
+      if (user.rol !== 'admin') {
+        return res.status(403).json({ consent_pending: true, error: 'Tu administrador aún no aceptó los términos legales. Contactá al administrador de la empresa.' });
+      }
+      if (gracePeriodActive) {
+        const msg = 'Hay documentos legales pendientes de aceptación. Tenés ' + minGraceDays + ' día(s) para aceptarlos antes de que se bloquee el acceso.';
+        console.log('[Consent] Grace period: empresa=' + empresa + ' admin=' + user.email + ' días=' + minGraceDays);
+      }
+      const tempToken = jwt.sign(
+        { id: user.id, rol: user.rol, empresa, purpose: 'consent', email: user.email || '' },
+        getSecret(),
+        { expiresIn: '10m' }
+      );
+      const empresaNombre = userDB.getConfig('nombre') || empresa;
+      return res.json({
+        require_consent: true,
+        grace_period: gracePeriodActive,
+        grace_days: gracePeriodActive ? minGraceDays : 0,
+        temp_token: tempToken,
+        versiones: { terminos: versionesVigentes.terminos, privacidad: versionesVigentes.privacidad },
+        empresa_nombre: empresaNombre,
+        user: { nombre: user.nombre, email: user.email || '', rol: user.rol }
+      });
     }
-    if (gracePeriodActive) {
-      const msg = 'Hay documentos legales pendientes de aceptación. Tenés ' + minGraceDays + ' día(s) para aceptarlos antes de que se bloquee el acceso.';
-      console.log('[Consent] Grace period: empresa=' + empresa + ' admin=' + user.email + ' días=' + minGraceDays);
-    }
-    const tempToken = jwt.sign(
-      { id: user.id, rol: user.rol, empresa, purpose: 'consent', email: user.email || '' },
-      getSecret(),
-      { expiresIn: '10m' }
-    );
-    const empresaNombre = userDB.getConfig('nombre') || empresa;
-    return res.json({
-      require_consent: true,
-      grace_period: gracePeriodActive,
-      grace_days: gracePeriodActive ? minGraceDays : 0,
-      temp_token: tempToken,
-      versiones: { terminos: versionesVigentes.terminos, privacidad: versionesVigentes.privacidad },
-      empresa_nombre: empresaNombre,
-      user: { nombre: user.nombre, email: user.email || '', rol: user.rol }
-    });
+  } catch(e) {
+    console.error('[Consent] Error en check — ignorando:', e.message);
   }
 
   const { accessToken, refreshToken } = generateTokens(user, empresa);
