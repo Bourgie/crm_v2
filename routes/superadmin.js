@@ -353,7 +353,7 @@ router.get('/empresas/:codigo', superAuth, (req, res) => {
   } catch(err) { res.json({...e, error: err.message}); }
 });
 
-router.post('/empresas', superAuth, (req, res) => {
+router.post('/empresas', superAuth, async (req, res) => {
   const { codigo, nombre, rubro, plan_id, admin_email, admin_pass, admin_password, vencimiento, usuarios_max, sucursales_max } = req.body;
   const adminPass = admin_password || admin_pass;
   if(!codigo||!nombre) return res.status(400).json({error:'Código y nombre requeridos'});
