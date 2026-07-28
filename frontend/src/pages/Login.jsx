@@ -50,6 +50,7 @@ export function Login() {
     }
     setLoading(true)
     fetch('/api/auth/me', {
+      credentials: 'include',
       headers: { Authorization: 'Bearer ' + token },
     })
       .then(async (r) => {
@@ -68,6 +69,7 @@ export function Login() {
     try {
       const r = await fetch('/api/auth/login', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           usuario: form.usuario.trim(),
@@ -114,6 +116,7 @@ export function Login() {
     try {
       const r = await fetch('/api/auth/2fa/verify-login', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           temp_token: twofaStep.temp_token,
@@ -136,6 +139,7 @@ export function Login() {
     try {
       const r = await fetch('/api/auth/aceptar-terminos', {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ temp_token: consentStep.temp_token, aceptaciones }),
       })

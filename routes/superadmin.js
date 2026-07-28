@@ -991,6 +991,59 @@ router.post('/empresas/:codigo/reset-password', superAuth, (req, res) => {
   res.json({ ok: true, usuario: admin.usuario, mensaje: 'Contrasea reseteada. Entregala de forma segura al administrador de la empresa.' });
 });
 
+// ── Reenviar email de verificación al admin de empresa ──
+router.post('/empresas/:codigo/resend-verification', superAuth, async (req, res) => {
+  const e = getEmpresa(req.params.codigo);
+  if (!e) return res.status(404).json({ error: 'Empresa no encontrada' });
+  const { getEmpresaDB } = require('../db_sqlite');
+  const crypto = require('crypto');
+  const empDB = getEmpresaDB(e.codigo);
+  const admin = empDB.find('usuarios').find(u => u.rol === 'admin' && u.activo !== false && u.email);
+  if (!admin) return res.status(400).json({ error: 'Sin usuario admin con email en esta empresa' });
+  if (admin.email_verificado === 1 || admin.email_verificado === true) return res.status(400).json({ error: 'El email ya está verificado' });
+
+  const verToken = crypto.randomBytes(20).toString('hex');
+  empDB.raw.prepare("UPDATE email_tokens SET usado=1 WHERE usuario_id=?").run(admin.id);
+  empDB.insert('email_tokens', {
+    id: 'vet_' + Date.now(), usuario_id: admin.id, email: admin.email,
+    token_hash: crypto.createHash('sha256').update(verToken).digest('hex'),
+    expires: new Date(Date.now() + 24 * 3600000).toISOString(), usado: 0, creado: new Date().toISOString(),
+  });
+
+  try {
+    const { getGlobalConfig } = require('../db_master');
+    const { decryptValue } = require('../lib/crypto-utils');
+    const h = getGlobalConfig('smtp_host'), p = parseInt(getGlobalConfig('smtp_port')) || 465;
+    const u = getGlobalConfig('smtp_user'), pass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
+    const from = getGlobalConfig('smtp_from') || u || '';
+    const fromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
+    const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
+    const { sendEmail } = require('../lib/send-email');
+    const { verificationEmail } = require('../lib/email-templates');
+    await sendEmail(h, p, u, pass, '"' + fromName + '" <' + from + '>', admin.email, 'Verifica tu email — FlexCRM',
+      verificationEmail(e.nombre || 'FlexCRM', appUrl + '/api/auth/verify-email/' + verToken));
+    saAudit(req.sadmin.id, 'resend_verification', e.id, 'Email verificacion reenviado a ' + admin.email);
+    res.json({ ok: true, mensaje: 'Email de verificacion reenviado a ' + admin.email });
+  } catch (err) {
+    console.error('[SA] Error enviando verificacion:', err.message);
+    res.status(500).json({ error: 'Error al enviar el email: ' + err.message });
+  }
+});
+
+// ── Marcar email como verificado manualmente ──
+router.post('/empresas/:codigo/mark-verified', superAuth, (req, res) => {
+  const e = getEmpresa(req.params.codigo);
+  if (!e) return res.status(404).json({ error: 'Empresa no encontrada' });
+  const { getEmpresaDB } = require('../db_sqlite');
+  const empDB = getEmpresaDB(e.codigo);
+  const admin = empDB.find('usuarios').find(u => u.rol === 'admin' && u.activo !== false);
+  if (!admin) return res.status(404).json({ error: 'Sin usuario admin en esta empresa' });
+  empDB.update('usuarios', admin.id, { email_verificado: 1 });
+  empDB.raw.prepare("UPDATE email_tokens SET usado=1 WHERE usuario_id=?").run(admin.id);
+  saAudit(req.sadmin.id, 'mark_verified', e.id, 'Email marcado como verificado manualmente para admin de ' + e.codigo);
+  res.json({ ok: true, mensaje: 'Email marcado como verificado' });
+});
+
 // ══════════════════════════════════════
 // BACKUP / IMPORT por empresa
 // ══════════════════════════════════════

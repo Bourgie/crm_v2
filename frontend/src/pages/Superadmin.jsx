@@ -1771,7 +1771,27 @@ export default function Superadmin() {
                             <input value={empresaDetail.admin_email||''} disabled style={{flex:1,opacity:.7}}/>
                             {empresaDetail.email_verificado === 1
                               ? <span className="badge badge-green" style={{fontSize:11,whiteSpace:'nowrap'}}>✅ Verificado</span>
-                              : <span className="badge badge-red" style={{fontSize:11,whiteSpace:'nowrap'}}>❌ Pendiente</span>}
+                              : (
+                                <>
+                                  <span className="badge badge-red" style={{fontSize:11,whiteSpace:'nowrap'}}>❌ Pendiente</span>
+                                  {empresaDetail.admin_email && (
+                                    <button type="button" className="btn btn-secondary btn-sm" style={{fontSize:10,padding:'2px 8px'}}
+                                      onClick={async () => {
+                                        try { await saApi('POST', '/empresas/' + empresaDetail.codigo + '/resend-verification'); alert('✅ Email de verificación reenviado'); }
+                                        catch(e) { alert(e.message) }
+                                      }}>Reenviar</button>
+                                  )}
+                                  <button type="button" className="btn btn-secondary btn-sm" style={{fontSize:10,padding:'2px 8px',color:'var(--ok)'}}
+                                    onClick={async () => {
+                                      if (!confirm('¿Marcar email como verificado manualmente?')) return;
+                                      try {
+                                        await saApi('POST', '/empresas/' + empresaDetail.codigo + '/mark-verified');
+                                        const updated = await saApi('GET', '/empresas/' + empresaDetail.codigo);
+                                        setEmpresaDetail(updated);
+                                      } catch(e) { alert(e.message) }
+                                    }}>Marcar verificado</button>
+                                </>
+                              )}
                           </div>
                         </div>
                         <div style={{flex:1}}><label className="" style={{display:'block',marginBottom:4}}>Estado</label><span className={`badge ${empresaDetail.activo?'badge-green':'badge-red'}`} style={{fontSize:12}}>{empresaDetail.activo?'Activo':'Suspendido'}</span></div>
