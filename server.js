@@ -369,6 +369,7 @@ app.use('/api/arca',          arcaRouter);
 app.use('/api/superadmin',    superadminRouter);
 app.use('/api/landing',       require('./routes/landing'));
 app.use('/api/user-data',     require('./routes/user-data'));
+app.use('/api/notificaciones', require('./routes/notificaciones'));
 
 // ── App ecosystem (dinámico primero, estático después) ──
 // El middleware dinámico solo enruta si el slug es una app registrada;

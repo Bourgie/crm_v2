@@ -59,6 +59,7 @@ const SIDEBAR = [
   ['soporte', '🆘 Soporte'],
   ['apps', '🧩 Apps'],
   ['legal', '⚖️ Legal'],
+  ['notificaciones', '🔔 Notificaciones'],
   ['roles', '👤 Roles'],
   ['audit', '📋 Auditoría'],
 ]
@@ -173,6 +174,11 @@ export default function Superadmin() {
   const [legalAuditData, setLegalAuditData] = useState(null)
   const [legalMsg, setLegalMsg] = useState('')
   const [legalMsgErr, setLegalMsgErr] = useState(false)
+
+  const [notifForm, setNotifForm] = useState({ empresa: '', tipo: 'manual', titulo: '', mensaje: '' })
+  const [notifEnviando, setNotifEnviando] = useState(false)
+  const [notifMsg, setNotifMsg] = useState('')
+  const [notifHistorial, setNotifHistorial] = useState(null)
 
   const [empresaDetail, setEmpresaDetail] = useState(null)
   const [empresaDetailTab, setEmpresaDetailTab] = useState('info')
@@ -548,6 +554,27 @@ export default function Superadmin() {
     } catch(e) { setLegalMsg(e.message); setLegalMsgErr(true); }
   }
   useEffect(() => { if (tab === 'legal' && !legalEmpresas) loadLegalEstado(); }, [tab, legalEmpresas]);
+
+  async function enviarNotificacion() {
+    if (!notifForm.titulo.trim()) { setNotifMsg('Título requerido'); return }
+    setNotifEnviando(true); setNotifMsg('');
+    try {
+      const body = {
+        empresa_codigo: notifForm.empresa || '*',
+        tipo: notifForm.tipo,
+        titulo: notifForm.titulo.trim(),
+        mensaje: notifForm.mensaje.trim(),
+      };
+      const r = await saApi('POST', '/notificaciones', body);
+      setNotifMsg(`Enviado a ${r.enviadas} empresa(s).`);
+      setNotifForm({ empresa: '', tipo: 'manual', titulo: '', mensaje: '' });
+    } catch(e) { setNotifMsg(e.message); }
+    finally { setNotifEnviando(false); }
+  }
+  async function loadNotifHistorial() {
+    try { const r = await saApi('GET', '/notificaciones'); setNotifHistorial(r.notificaciones || []); } catch(e) {}
+  }
+  useEffect(() => { if (tab === 'notificaciones' && !notifHistorial) loadNotifHistorial(); }, [tab, notifHistorial]);
 
   async function savePlan() {
     if (!planForm.codigo.trim() || !planForm.nombre.trim()) { alert('Código y nombre requeridos'); return }
@@ -1491,6 +1518,67 @@ export default function Superadmin() {
                   </table>
                 </div>
               </div>}
+            </div>
+          )}
+
+          {/* ═══════ NOTIFICACIONES ═══════ */}
+          {tab === 'notificaciones' && (
+            <div>
+              <h2 style={{ fontSize:18, fontWeight:700, marginBottom:16 }}>🔔 Notificaciones</h2>
+              <div className="card" style={{ padding:16, marginBottom:16 }}>
+                <h3 style={{ fontSize:13, fontWeight:700, marginBottom:12 }}>📤 Enviar notificación</h3>
+                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <div style={{ flex:1 }}>
+                      <label style={{ fontSize:11, color:'var(--mu)', display:'block', marginBottom:4 }}>Empresa</label>
+                      <select value={notifForm.empresa} onChange={e => setNotifForm(p=>({...p,empresa:e.target.value}))} style={S.select}>
+                        <option value="">Todas las empresas</option>
+                        {empresas.filter(e=>e.activo).map(e => <option key={e.id} value={e.codigo}>{e.nombre}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ flex:1 }}>
+                      <label style={{ fontSize:11, color:'var(--mu)', display:'block', marginBottom:4 }}>Tipo</label>
+                      <select value={notifForm.tipo} onChange={e => setNotifForm(p=>({...p,tipo:e.target.value}))} style={S.select}>
+                        <option value="manual">📝 Manual</option>
+                        <option value="renovacion">⚠️ Renovación de plan</option>
+                        <option value="nuevos_terminos">📄 Nuevos términos</option>
+                        <option value="nueva_app">📦 Nueva app</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div><label style={{ fontSize:11, color:'var(--mu)', display:'block', marginBottom:4 }}>Título</label><input value={notifForm.titulo} onChange={e => setNotifForm(p=>({...p,titulo:e.target.value}))} placeholder="Ej: Recordatorio de pago" style={S.input} /></div>
+                  <div><label style={{ fontSize:11, color:'var(--mu)', display:'block', marginBottom:4 }}>Mensaje</label><textarea value={notifForm.mensaje} onChange={e => setNotifForm(p=>({...p,mensaje:e.target.value}))} rows={3} placeholder="Mensaje de la notificación..." style={{...S.textarea, width:'100%'}} /></div>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                    <button type="button" className="btn btn-primary btn-sm" onClick={enviarNotificacion} disabled={notifEnviando}>
+                      {notifEnviando ? '⏳ Enviando...' : '📤 Enviar notificación'}
+                    </button>
+                    {notifMsg && <span style={{ fontSize:12, color:notifMsg.includes('Error')||notifMsg.includes('requerido')?'var(--bad)':'var(--ok)' }}>{notifMsg}</span>}
+                  </div>
+                </div>
+              </div>
+              <div className="card" style={{ padding:16 }}>
+                <h3 style={{ fontSize:13, fontWeight:700, marginBottom:12 }}>📋 Historial de notificaciones</h3>
+                <button type="button" className="btn btn-secondary btn-sm" style={{ marginBottom:12 }} onClick={loadNotifHistorial}>🔄 Cargar historial</button>
+                {notifHistorial && (
+                  <div style={{ maxHeight:400, overflowY:'auto' }}>
+                    <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
+                      <thead><tr style={{ borderBottom:'1px solid var(--bd)' }}><th style={{ textAlign:'left', padding:'6px', color:'var(--mu)', fontSize:10 }}>Fecha</th><th style={{ textAlign:'left', padding:'6px', color:'var(--mu)', fontSize:10 }}>Empresa</th><th style={{ textAlign:'left', padding:'6px', color:'var(--mu)', fontSize:10 }}>Tipo</th><th style={{ textAlign:'left', padding:'6px', color:'var(--mu)', fontSize:10 }}>Título</th><th style={{ textAlign:'center', padding:'6px', color:'var(--mu)', fontSize:10 }}>Leída</th></tr></thead>
+                      <tbody>
+                        {(notifHistorial||[]).map((n,i) => (
+                          <tr key={i} style={{ borderBottom:'1px solid var(--bd)', background:i%2===0?'var(--sf)':'transparent' }}>
+                            <td style={{ padding:'6px', fontSize:10, whiteSpace:'nowrap' }}>{new Date(n.creado).toLocaleString('es-AR')}</td>
+                            <td style={{ padding:'6px', fontSize:10 }}>{n.empresa_codigo}</td>
+                            <td style={{ padding:'6px', fontSize:10 }}><span style={{ padding:'1px 6px', borderRadius:8, fontSize:9, background:'var(--sf)', color:'var(--mu)' }}>{n.tipo}</span></td>
+                            <td style={{ padding:'6px', fontSize:11, fontWeight:600 }}>{n.titulo}</td>
+                            <td style={{ padding:'6px', textAlign:'center', fontSize:10 }}>{n.leida?'✅':'📩'}</td>
+                          </tr>
+                        ))}
+                        {(!notifHistorial || notifHistorial.length === 0) && <tr><td colSpan={5} style={{ padding:16, textAlign:'center', color:'var(--mu)', fontSize:12 }}>Sin notificaciones</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 

@@ -211,6 +211,7 @@ tbody tr:last-child td { border-bottom: none; }
   .hamburger { display: none !important; }
 }
 @media (max-width: 768px) {
+  .hamburger { display: inline-flex !important; }
   .sidebar { transform: translateX(-100%); }
   .sidebar.open { transform: none; }
   .main-content { margin-left: 0; }

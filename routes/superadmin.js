@@ -454,6 +454,15 @@ router.post('/empresas', superAuth, async (req, res) => {
   } catch(err) { console.error('[SA] Error crítico init empresa DB:', err.message, err.stack); }
 
   saAudit(req.sadmin.id, 'crear_empresa', id, `Nueva empresa: ${nombre} (${codigo})`);
+  // Send welcome notification
+  try {
+    master.prepare(
+      "INSERT INTO notificaciones (id, empresa_codigo, tipo, titulo, mensaje, creado, data) VALUES (?,?,?,?,?,?,?)"
+    ).run('notif_' + Date.now() + '_' + codigo, codigo, 'cuenta_activada',
+      '🎉 ¡Bienvenido a FlexCRM!',
+      'Tu empresa fue creada. Revisá tu email para activar la cuenta y configurar tu negocio.',
+      new Date().toISOString(), '{}');
+  } catch(e) { /* non-blocking */ }
   res.json({id, ok:true});
 });
 
@@ -1522,6 +1531,21 @@ router.post('/legal/subir', superAuth, (req, res) => {
   const id = setVersionVigente(tipo, version, hash, req.sadmin.id);
   saAudit(req.sadmin.id, 'legal_nueva_version', null,
     `Nueva versión ${version} de ${tipo} — vigente desde ${new Date().toISOString()}`);
+  // Notify all active companies
+  try {
+    const tipoLabel = tipo === 'terminos' ? 'Términos y Condiciones' : tipo === 'privacidad' ? 'Política de Privacidad' : 'Política de Cookies';
+    const empresas = getEmpresas().filter(e => e.activo === 1);
+    const ahora = new Date().toISOString();
+    const stmt = master.prepare(
+      "INSERT INTO notificaciones (id, empresa_codigo, tipo, titulo, mensaje, creado, data) VALUES (?,?,?,?,?,?,?)"
+    );
+    for (const e of empresas) {
+      stmt.run('notif_' + Date.now() + '_' + e.codigo, e.codigo, 'nuevos_terminos',
+        `📄 Nuevos ${tipoLabel} v${version}`,
+        `Hay una nueva versión de los ${tipoLabel.toLowerCase()}. El administrador debe aceptarlos para seguir usando FlexCRM.`,
+        ahora, JSON.stringify({ accion: '/micuenta' }));
+    }
+  } catch(e) { /* non-blocking */ }
   res.json({ id, ok: true, mensaje: `Versión ${version} de ${tipo} publicada como vigente.` });
 });
 
@@ -1562,6 +1586,52 @@ router.get('/legal/auditoria', superAuth, (req, res) => {
   } catch(e) {
     console.error('[LegalAuditoria] Error:', e.message);
     res.status(500).json({ error: 'Error al obtener auditoría' });
+  }
+});
+
+// ── Notificaciones ──
+
+// POST /api/superadmin/notificaciones — enviar notificación manual
+router.post('/notificaciones', superAuth, (req, res) => {
+  try {
+    const { empresa_codigo, tipo, titulo, mensaje, data } = req.body;
+    if (!titulo) return res.status(400).json({ error: 'Título requerido' });
+    const id = 'notif_' + Date.now();
+    const ahora = new Date().toISOString();
+    const empresas = empresa_codigo === '*' || !empresa_codigo
+      ? getEmpresas().filter(e => e.activo === 1).map(e => e.codigo)
+      : [empresa_codigo];
+    let count = 0;
+    const stmt = master.prepare(
+      "INSERT INTO notificaciones (id, empresa_codigo, tipo, titulo, mensaje, leida, creado, data) VALUES (?,?,?,?,?,0,?,?)"
+    );
+    for (const cod of empresas) {
+      const nid = id + '_' + cod;
+      stmt.run(nid, cod, tipo || 'manual', titulo, mensaje || '', ahora, JSON.stringify(data || {}));
+      count++;
+    }
+    saAudit(req.sadmin.id, 'enviar_notificacion', null,
+      `Notificación enviada: "${titulo}" a ${count} empresa(s)`);
+    res.json({ ok: true, enviadas: count });
+  } catch(e) {
+    console.error('[Notif] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/superadmin/notificaciones — historial de notificaciones enviadas
+router.get('/notificaciones', superAuth, (req, res) => {
+  try {
+    const empresa = req.query.empresa || null;
+    let rows;
+    if (empresa) {
+      rows = master.prepare("SELECT * FROM notificaciones WHERE empresa_codigo=? ORDER BY creado DESC LIMIT 100").all(empresa);
+    } else {
+      rows = master.prepare("SELECT * FROM notificaciones ORDER BY creado DESC LIMIT 200").all();
+    }
+    res.json({ notificaciones: rows });
+  } catch(e) {
+    res.json({ notificaciones: [] });
   }
 });
 

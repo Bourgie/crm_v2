@@ -251,6 +251,18 @@ master.exec(`
     creado TEXT NOT NULL,
     UNIQUE(tipo, version)
   );
+
+  CREATE TABLE IF NOT EXISTS notificaciones (
+    id TEXT PRIMARY KEY,
+    empresa_codigo TEXT,
+    tipo TEXT,
+    titulo TEXT NOT NULL,
+    mensaje TEXT,
+    leida INTEGER DEFAULT 0,
+    creado TEXT NOT NULL,
+    data TEXT DEFAULT '{}'
+  );
+  CREATE INDEX IF NOT EXISTS idx_notif_empresa ON notificaciones(empresa_codigo, leida);
 `);
 
 // Migration: add email and data columns to existing superadmin

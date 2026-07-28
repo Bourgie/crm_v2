@@ -9,6 +9,7 @@ import { useApp, useAuth } from '../store'
 import { chatUnread } from '../stores/chatUnread'
 import { pipelineVencidas, tareasVencidas, pipelineActivity } from '../stores/pipelineCounters'
 import { FooterLegal } from './FooterLegal'
+import { NotifBell } from './NotifBell'
 
 const TITLES = {
   '/app/dashboard': '📊 Dashboard',
@@ -130,6 +131,7 @@ export function Layout() {
             ☰
           </button>
           <div className="topbar-title">{title}</div>
+          <NotifBell />
         </div>
 
         {/* Page content */}
