@@ -72,4 +72,13 @@ function requireRol(...roles) {
   };
 }
 
-module.exports = { authMiddleware, requireRol, getSecret, PERMISOS };
+function permiteSucursal(user, suc_id) {
+  if (!suc_id) return false;
+  if (user.rol === 'admin') return true;
+  let permitidas = user.suc_sesiones_permitidas;
+  if (typeof permitidas === 'string') { try { permitidas = JSON.parse(permitidas); } catch { permitidas = []; } }
+  if (Array.isArray(permitidas) && permitidas.length) return permitidas.includes(String(suc_id));
+  return user.suc_id && String(user.suc_id) === String(suc_id);
+}
+
+module.exports = { authMiddleware, requireRol, getSecret, PERMISOS, permiteSucursal };

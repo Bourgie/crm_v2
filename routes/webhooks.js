@@ -4,9 +4,37 @@ const crypto = require('crypto');
 const { uid, getEmpresaDB } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || require('../db_sqlite').db;
 const { authMiddleware, requireRol } = require('../middleware/auth');
+const { promises: dnsPromises } = require('dns');
 
 // ── Helpers ────────────────────────────────────────────────────
 const EVENTOS = ['venta.cobrada','cliente.creado','producto.actualizado'];
+
+const PRIVATE_IP_RANGES = [
+  /^127\./,
+  /^10\./,
+  /^172\.(1[6-9]|2\d|3[01])\./,
+  /^192\.168\./,
+  /^169\.254\./,
+  /^0\./,
+  /^fc00:/i, /^fd00:/i, /^fe80:/i,
+];
+
+function isPrivateIP(ip) {
+  return PRIVATE_IP_RANGES.some(r => r.test(ip));
+}
+
+async function validateWebhookUrl(rawUrl) {
+  let url;
+  try { url = new URL(rawUrl); } catch { throw new Error('URL inválida'); }
+  if (url.protocol !== 'https:') throw new Error('Solo se permiten URLs HTTPS');
+  try {
+    const { address } = await dnsPromises.lookup(url.hostname, { family: 4 });
+    if (isPrivateIP(address)) throw new Error('No se permiten direcciones IP privadas o reservadas');
+  } catch (e) {
+    if (e.message.includes('privadas') || e.message.includes('HTTPS') || e.message.includes('inválida')) throw e;
+  }
+  return url;
+}
 
 function genToken(empresaCode) {
   return `wh_${empresaCode}_${crypto.randomBytes(16).toString('hex')}`;
@@ -52,7 +80,7 @@ router.get('/', authMiddleware, requireRol('admin','supervisor'), (req, res) => 
   res.json(db.where('webhooks', () => true).sort((a, b) => (a.creado||'').localeCompare(b.creado||'')));
 });
 
-router.post('/', authMiddleware, requireRol('admin','supervisor'), (req, res) => {
+router.post('/', authMiddleware, requireRol('admin','supervisor'), async (req, res) => {
   const db = _getDB(req);
   const { url, eventos } = req.body;
   if (!url) return res.status(400).json({ error: 'URL requerida' });
@@ -60,6 +88,7 @@ router.post('/', authMiddleware, requireRol('admin','supervisor'), (req, res) =>
     return res.status(400).json({ error: 'Seleccioná al menos un evento' });
   const invalido = eventos.find(e => !EVENTOS.includes(e));
   if (invalido) return res.status(400).json({ error: 'Evento inválido: ' + invalido });
+  try { await validateWebhookUrl(url); } catch (e) { return res.status(400).json({ error: e.message }); }
   const empresaCode = req.user && req.user.empresa ? req.user.empresa : 'default';
   const r = db.insert('webhooks', {
     id: uid(), url, eventos, token: genToken(empresaCode),
@@ -68,13 +97,16 @@ router.post('/', authMiddleware, requireRol('admin','supervisor'), (req, res) =>
   res.json(r);
 });
 
-router.put('/:id', authMiddleware, requireRol('admin','supervisor'), (req, res) => {
+router.put('/:id', authMiddleware, requireRol('admin','supervisor'), async (req, res) => {
   const db = _getDB(req);
   const existing = db.findOne('webhooks', req.params.id);
   if (!existing) return res.status(404).json({ error: 'Webhook no encontrado' });
   const { url, eventos, activo } = req.body;
   const updates = {};
-  if (url !== undefined) updates.url = url;
+  if (url !== undefined) {
+    try { await validateWebhookUrl(url); } catch (e) { return res.status(400).json({ error: e.message }); }
+    updates.url = url;
+  }
   if (eventos !== undefined) {
     if (!Array.isArray(eventos) || !eventos.length)
       return res.status(400).json({ error: 'Seleccioná al menos un evento' });
@@ -104,7 +136,7 @@ router.post('/:id/test', authMiddleware, requireRol('admin','supervisor'), async
     });
     res.json({ ok: true, status: resp.status, statusText: resp.statusText });
   } catch (e) {
-    res.status(400).json({ error: 'Error de conexión: ' + e.message });
+    res.status(400).json({ error: 'Error de conexión', detalle: (e.message || '').substring(0, 200) });
   }
 });
 

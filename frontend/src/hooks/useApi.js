@@ -21,11 +21,10 @@ function getCookie(name) {
   return m ? m[1] : null
 }
 
-// Core fetch — used by the hook and standalone
-export async function apiFetch(method, path, body, token, onLogout) {
+// Core fetch — auth via httpOnly cookie (credentials: 'include')
+export async function apiFetch(method, path, body, onLogout) {
   const headers = {
     'Content-Type': 'application/json',
-    Authorization: 'Bearer ' + token,
   }
   if (method.toUpperCase() !== 'GET') {
     const csrf = getCookie('csrf-token')
@@ -50,7 +49,7 @@ export async function apiFetch(method, path, body, token, onLogout) {
 
 // React hook — use inside components
 export function useApi() {
-  const { token, logout } = useAuth()
+  const { logout } = useAuth()
   const { online, enqueue } = useOffline()
   const { toast } = useToast()
 
@@ -58,12 +57,12 @@ export function useApi() {
     // GET: always needs network
     if (method.toUpperCase() === 'GET') {
       if (!online) throw new Error('Sin conexión')
-      return apiFetch(method, path, body, token, logout)
+      return apiFetch(method, path, body, logout)
     }
 
     // Writes: try network, queue if offline
     try {
-      return await apiFetch(method, path, body, token, logout)
+      return await apiFetch(method, path, body, logout)
     } catch (err) {
       if (canQueue(method, path) && !online) {
         const op = enqueue(method, path, body)
@@ -78,14 +77,14 @@ export function useApi() {
 }
 
 // Standalone (non-hook) version for use outside components
-export function createApi(token, logout, online, enqueue) {
+export function createApi(logout, online, enqueue) {
   return async function api(method, path, body) {
     if (method.toUpperCase() === 'GET') {
       if (!online) throw new Error('Sin conexión')
-      return apiFetch(method, path, body, token, logout)
+      return apiFetch(method, path, body, logout)
     }
     try {
-      return await apiFetch(method, path, body, token, logout)
+      return await apiFetch(method, path, body, logout)
     } catch (err) {
       if (canQueue(method, path) && !online) {
         enqueue(method, path, body)

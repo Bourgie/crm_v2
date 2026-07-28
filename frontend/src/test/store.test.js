@@ -14,45 +14,33 @@ describe('useAuth store', () => {
     useAuth.setState({ token: null, me: null, isBooting: false })
   })
 
-  it('starts with no token or user', () => {
-    expect(getAuth().token).toBeNull()
+  it('starts with no user', () => {
     expect(getAuth().me).toBeNull()
   })
 
-  it('sets token and me correctly', () => {
+  it('sets me correctly', () => {
     act(() => {
-      getAuth().setToken('tok_123')
       getAuth().setMe({ id: 'u1', nombre: 'Admin', rol: 'admin' })
     })
-    expect(getAuth().token).toBe('tok_123')
     expect(getAuth().me.nombre).toBe('Admin')
   })
 
-  it('isLoggedIn returns true when token and me set', () => {
+  it('isLoggedIn returns true when me is set', () => {
     act(() => {
-      getAuth().setToken('tok_123')
       getAuth().setMe({ id: 'u1', nombre: 'Admin' })
     })
     expect(getAuth().isLoggedIn()).toBe(true)
   })
 
-  it('isLoggedIn returns false without token', () => {
-    act(() => { getAuth().setMe({ id: 'u1', nombre: 'Admin' }) })
+  it('isLoggedIn returns false when me is null', () => {
     expect(getAuth().isLoggedIn()).toBe(false)
   })
 
-  it('isLoggedIn returns false without me', () => {
-    act(() => { getAuth().setToken('tok_123') })
-    expect(getAuth().isLoggedIn()).toBe(false)
-  })
-
-  it('logout clears token and me', () => {
+  it('logout clears me', () => {
     act(() => {
-      getAuth().setToken('tok_123')
       getAuth().setMe({ id: 'u1', nombre: 'Admin' })
       getAuth().logout()
     })
-    expect(getAuth().token).toBeNull()
     expect(getAuth().me).toBeNull()
   })
 

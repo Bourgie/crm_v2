@@ -2,20 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || require('../db_sqlite').db;
-const { authMiddleware, requireRol } = require('../middleware/auth');
+const { authMiddleware, requireRol, permiteSucursal } = require('../middleware/auth');
 const { validate, ventaCreateSchema } = require('../middleware/validate');
 const { dispararWebhooks } = require('./webhooks');
 const { updateSucStock, getStockSuc, updateVariantStock } = require('./stock_helpers');
 router.use(authMiddleware);
-
-function permiteSucursal(user, suc_id) {
-  if (!suc_id) return false;
-  if (user.rol === 'admin') return true;
-  let permitidas = user.suc_sesiones_permitidas;
-  if (typeof permitidas === 'string') { try { permitidas = JSON.parse(permitidas); } catch { permitidas = []; } }
-  if (Array.isArray(permitidas) && permitidas.length) return permitidas.includes(String(suc_id));
-  return user.suc_id && String(user.suc_id) === String(suc_id);
-}
 
 function enrichVenta(v, db) {
   const sucs=db.all('sucursales'),vends=db.all('vendedores'),users=db.all('usuarios'),clis=db.all('clientes');
@@ -185,6 +176,7 @@ router.post('/:id/cobrar', requireRol('cajero','admin','supervisor'), (req,res) 
   const db = _getDB(req);
   const v=db.findOne('ventas',req.params.id);
   if(!v||v.cobrada===true||v.anulada) return res.status(400).json({error:'Venta no válida'});
+  if(!permiteSucursal(req.user, v.suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
   const hoy=new Date().toISOString().substr(0,10);
   // Buscar caja abierta: primero la del cajero, luego la de la venta
   const cajeroSucId = req.user.suc_id || v.suc_id;
@@ -280,6 +272,7 @@ router.post('/:id/anular', requireRol('admin','supervisor'), (req,res) => {
   const db = _getDB(req);
   const venta = db.findOne('ventas', req.params.id);
   if (!venta || venta.anulada) return res.status(400).json({error:'Venta no válida'});
+  if(!permiteSucursal(req.user, venta.suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
 
   const hoy = new Date().toISOString().substr(0,10);
   // Una venta NO cobrada es EXPLÍCITAMENTE cobrada:false (pendiente en caja)
@@ -403,6 +396,7 @@ router.put('/:id/items', requireRol('admin','supervisor','cajero'), (req,res) =>
   const db = _getDB(req);
   const venta = db.findOne('ventas', req.params.id);
   if(!venta) return res.status(404).json({error:'No encontrada'});
+  if(!permiteSucursal(req.user, venta.suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
   if(venta.cobrada !== false) return res.status(400).json({error:'Solo se puede editar ventas pendientes de cobro'});
   const {items, total} = req.body;
   if(!items||!items.length) return res.status(400).json({error:'Sin items'});
@@ -450,6 +444,7 @@ router.put('/:id/cambiar-pago', requireRol('admin','supervisor','cajero'), (req,
   const db = _getDB(req);
   const venta = db.findOne('ventas', req.params.id);
   if (!venta) return res.status(404).json({ error: 'Venta no encontrada' });
+  if(!permiteSucursal(req.user, venta.suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
   if (venta.anulada) return res.status(400).json({ error: 'No se puede cambiar el pago de una venta anulada' });
   if (!venta.cobrada) return res.status(400).json({ error: 'La venta aún no fue cobrada. Cobrala primero desde Caja.' });
 
@@ -533,6 +528,7 @@ router.get('/:id/comprobante-pdf', (req, res) => {
     const db = _getDB(req);
     const venta = enrichVenta(db.findOne('ventas', req.params.id), db);
     if (!venta) return res.status(404).json({ error: 'Venta no encontrada' });
+    if(!permiteSucursal(req.user, venta.suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
 
     const cfg = db.getConfig();
     const items = db.where('venta_items', i => i.venta_id === req.params.id);

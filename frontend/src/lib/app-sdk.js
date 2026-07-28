@@ -10,14 +10,12 @@ const API_BASE = '/api/apps';
 
 function createApiClient(appSlug) {
   async function request(method, url, body) {
-    const token = useAuth.getState().token;
     const csrfToken = document.cookie.replace(/(?:(?:^|.*;\s*)csrf-token\s*=\s*([^;]*).*$)|^.*$/, '$1');
 
     const opts = {
       method,
       headers: {
         'Content-Type': 'application/json',
-        ...(token ? { Authorization: 'Bearer ' + token } : {}),
         ...(csrfToken ? { 'x-csrf-token': csrfToken } : {}),
       },
       credentials: 'include',

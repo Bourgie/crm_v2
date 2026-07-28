@@ -91,6 +91,16 @@ app.use((req, res, next) => {
       req.body[k] = sanitizeValue(req.body[k]);
     }
   }
+  if (req.query && typeof req.query === 'object') {
+    for (const k of Object.keys(req.query)) {
+      req.query[k] = sanitizeValue(req.query[k]);
+    }
+  }
+  if (req.params && typeof req.params === 'object') {
+    for (const k of Object.keys(req.params)) {
+      req.params[k] = sanitizeValue(req.params[k]);
+    }
+  }
   next();
 });
 

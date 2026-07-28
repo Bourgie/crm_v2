@@ -95,7 +95,7 @@ function buildLoginResponse(user, token, refreshToken, empresaDB) {
   const vendedor = findVendedorForUser(user, userDB);
   userData.vendedor_id = vendedor?.id || null;
   userData.vendedor_nombre = vendedor ? (vendedor.nombre + ' ' + vendedor.apellido) : userData.nombre;
-  return { token, refreshToken, user: userData, sucursal: suc, vendedor };
+  return { user: userData, sucursal: suc, vendedor };
 }
 
 function generateTokens(user, empresa) {
@@ -157,6 +157,8 @@ router.post('/login', validate(loginSchema), async (req, res) => {
 
   const user = userDB.where('usuarios', u => (u.usuario === usuario || u.email === usuario) && u.activo)[0];
   if (!user) {
+    // Dummy bcrypt compare to prevent user enumeration via timing
+    await bcrypt.compare(password, '$2a$10$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX').catch(()=>{});
     const remaining = recordFailedAttempt(userDB, lockKey);
     const { maxAttempts } = getLockoutConfig(userDB);
     const attempts = maxAttempts - remaining;
@@ -184,13 +186,29 @@ router.post('/login', validate(loginSchema), async (req, res) => {
   resetAttempts(userDB, lockKey);
   suspicious.auditLoginSuccess(req, userDB, user)
 
-  // Check email verification
+  // Check email verification — do not reveal account existence
   if (user.email_verificado === 0 || user.email_verificado === false) {
-    return res.status(403).json({
-      error: 'Debés verificar tu email antes de ingresar.',
-      require_verification: true,
-      email: user.email || ''
-    });
+    // Silently resend verification email
+    try {
+      const verToken = crypto.randomBytes(20).toString('hex');
+      const verTokenHash = crypto.createHash('sha256').update(verToken).digest('hex');
+      userDB.raw.prepare("UPDATE email_tokens SET usado=1 WHERE usuario_id=?").run(user.id);
+      userDB.insert('email_tokens', { id: 'vet_'+Date.now(), usuario_id: user.id, email: user.email, token_hash: verTokenHash, expires: new Date(Date.now()+24*3600000).toISOString(), usado: 0, creado: new Date().toISOString() });
+      const cfg = userDB.getConfig();
+      const { getGlobalConfig } = require('../db_master');
+      const { decryptValue } = require('../lib/crypto-utils');
+      let h = cfg.smtp_host, p = parseInt(cfg.smtp_port)||465, u = cfg.smtp_user, pass = cfg.smtp_pass, from = cfg.smtp_from;
+      if (!h || !u || !pass) { h = getGlobalConfig('smtp_host'); p = parseInt(getGlobalConfig('smtp_port'))||465; u = getGlobalConfig('smtp_user'); pass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : ''; from = getGlobalConfig('smtp_from')||u||''; }
+      if (h && u && pass) {
+        const fromName = getGlobalConfig('smtp_from_name')||'FlexCRM';
+        const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
+        const { sendEmail } = require('../lib/send-email');
+        const { verificationEmail } = require('../lib/email-templates');
+        await sendEmail(h, p, u, pass, '"'+fromName+'" <'+from+'>', user.email, 'Verificá tu email — FlexCRM', verificationEmail('FlexCRM', appUrl+'/api/auth/verify-email/'+verToken)).catch(()=>{});
+      }
+    } catch(e) {}
+    await new Promise(r => setTimeout(r, progressiveDelay(1)));
+    return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
   }
 
   if (user.must_change_password) {

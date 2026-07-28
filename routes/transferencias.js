@@ -6,7 +6,7 @@ const express = require('express');
 const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
-const { authMiddleware, requireRol } = require('../middleware/auth');
+const { authMiddleware, requireRol, permiteSucursal } = require('../middleware/auth');
 router.use(authMiddleware);
 
 function enrichTransf(t, empDB) {
@@ -118,6 +118,7 @@ router.post('/:id/enviar', requireRol('admin', 'supervisor', 'cajero'), (req, re
   const db = _getDB(req);
   const t = db.findOne('transferencias', req.params.id);
   if (!t) return res.status(404).json({ error: 'No encontrada' });
+  if (!permiteSucursal(req.user, t.suc_origen)) return res.status(403).json({ error: 'No pertenecés a la sucursal de origen' });
   if (t.estado !== 'borrador') return res.status(400).json({ error: 'Solo se puede enviar desde borrador' });
 
   const items = db.where('transferencia_items', i => i.transferencia_id === req.params.id);
@@ -154,6 +155,7 @@ router.post('/:id/recibir', requireRol('admin', 'supervisor', 'cajero'), (req, r
   const db = _getDB(req);
   const t = db.findOne('transferencias', req.params.id);
   if (!t) return res.status(404).json({ error: 'No encontrada' });
+  if (!permiteSucursal(req.user, t.suc_destino)) return res.status(403).json({ error: 'No pertenecés a la sucursal de destino' });
   if (t.estado !== 'enviada') return res.status(400).json({ error: 'Solo se puede recibir transferencias enviadas' });
 
   // cantidades_recibidas puede diferir de las enviadas (recepción parcial)

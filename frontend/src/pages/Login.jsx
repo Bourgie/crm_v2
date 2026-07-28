@@ -23,7 +23,7 @@ export function Login() {
   const [twofaMode, setTwofaMode] = useState('totp')
   const [consentStep, setConsentStep] = useState(null)
 
-  const { setToken, setMe } = useAuth()
+  const { setMe } = useAuth()
   const { setSucs: setAppSucs, setProds, setClis, setSucSesion, setModulos, setRubro, setCfg } = useApp()
   const { toast } = useToast()
   const navigate = useNavigate()
@@ -156,7 +156,7 @@ export function Login() {
 
   async function proceedWithLogin(data, empresa) {
     const sucR = await fetch('/api/sucursales', {
-      headers: { Authorization: 'Bearer ' + data.token },
+      credentials: 'include',
     })
     const sucData = await sucR.json().catch(() => [])
     const allSucsLogin = Array.isArray(sucData) ? sucData : (sucData.data || [])
@@ -191,18 +191,15 @@ export function Login() {
   }
 
   async function completarLogin(data, sucId, allSucsLogin) {
-    setToken(data.token)
     setMe({ ...data.user, suc_id: sucId, suc_sesion: sucId })
     setSucSesion(sucId)
     setAppSucs(allSucsLogin)
 
     try {
-      const headers = { Authorization: 'Bearer ' + data.token }
-
       const [cfgR, prodsR, clisR] = await Promise.all([
-        fetch('/api/config', { headers }).then((r) => r.json()).catch(() => ({})),
-        fetch('/api/productos', { headers }).then((r) => r.json()).catch(() => []),
-        fetch('/api/clientes', { headers }).then((r) => r.json()).catch(() => []),
+        fetch('/api/config', { credentials: 'include' }).then((r) => r.json()).catch(() => ({})),
+        fetch('/api/productos', { credentials: 'include' }).then((r) => r.json()).catch(() => []),
+        fetch('/api/clientes', { credentials: 'include' }).then((r) => r.json()).catch(() => []),
       ])
 
       setCfg(cfgR)

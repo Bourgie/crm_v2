@@ -2,18 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
-const { authMiddleware, requireRol } = require('../middleware/auth');
+const { authMiddleware, requireRol, permiteSucursal } = require('../middleware/auth');
 const { validate, cajaAbrirSchema } = require('../middleware/validate');
 router.use(authMiddleware);
-
-function permiteSucursal(user, suc_id) {
-  if (!suc_id) return false;
-  if (user.rol === 'admin') return true;
-  let permitidas = user.suc_sesiones_permitidas;
-  if (typeof permitidas === 'string') { try { permitidas = JSON.parse(permitidas); } catch { permitidas = []; } }
-  if (Array.isArray(permitidas) && permitidas.length) return permitidas.includes(String(suc_id));
-  return user.suc_id && String(user.suc_id) === String(suc_id);
-}
 
 // Métodos que entran físicamente a la caja (efectivo)
 const METODOS_EFECTIVO = ['efectivo'];
@@ -131,6 +122,7 @@ router.post('/cerrar-forzado/:id', requireRol('admin', 'supervisor', 'cajero'), 
   const empDB = _getDB(req);
   const caj = empDB.findOne('cajas', req.params.id);
   if (!caj) return res.status(404).json({ error: 'Caja no encontrada' });
+  if (!permiteSucursal(req.user, caj.suc_id)) return res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
   if (caj.estado !== 'abierta') return res.status(400).json({ error: 'La caja ya está cerrada' });
   const est = getCajaEstado(caj.suc_id, empDB);
   empDB.update('cajas', caj.id, {
@@ -178,6 +170,7 @@ router.delete('/movimiento/:id', requireRol('admin'), (req, res) => {
   const empDB = _getDB(req);
   const mov = empDB.findOne('movimientos_caja', req.params.id);
   if (!mov) return res.status(404).json({ error: 'No encontrado' });
+  if (!permiteSucursal(req.user, mov.suc_id)) return res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
   if (mov.auto) return res.status(400).json({ error: 'Los movimientos automáticos no se pueden anular aquí.' });
   empDB.update('movimientos_caja', req.params.id, { anulado: true, anulado_por: req.user.nombre, anulado_fecha: new Date().toISOString() });
   res.json({ ok: true });
@@ -198,6 +191,7 @@ router.get('/movimientos', (req, res) => {
 router.get('/resumen-cierre/:suc_id', (req, res) => {
   const empDB = _getDB(req);
   const suc_id = req.params.suc_id;
+  if (!permiteSucursal(req.user, suc_id)) return res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
   const hoy = new Date().toISOString().substr(0, 10);
 
   // Caja abierta hoy

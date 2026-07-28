@@ -21,25 +21,25 @@ describe('apiFetch', () => {
 
   it('makes GET request with correct headers', async () => {
     mockFetch(200, { ok: true })
-    await apiFetch('GET', '/test', null, 'my_token', () => {})
+    await apiFetch('GET', '/test', null, () => {})
     expect(global.fetch).toHaveBeenCalledWith(
       '/api/test',
       expect.objectContaining({
         method: 'GET',
-        headers: expect.objectContaining({ Authorization: 'Bearer my_token' }),
+        headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
       })
     )
   })
 
   it('returns parsed JSON on success', async () => {
     mockFetch(200, { items: [1, 2, 3] })
-    const result = await apiFetch('GET', '/items', null, 'tok', () => {})
+    const result = await apiFetch('GET', '/items', null, () => {})
     expect(result).toEqual({ items: [1, 2, 3] })
   })
 
   it('sends body for POST requests', async () => {
     mockFetch(200, { id: 'abc' })
-    await apiFetch('POST', '/ventas', { total: 500 }, 'tok', () => {})
+    await apiFetch('POST', '/ventas', { total: 500 }, () => {})
     const call = global.fetch.mock.calls[0]
     expect(call[1].body).toBe(JSON.stringify({ total: 500 }))
     expect(call[1].method).toBe('POST')
@@ -48,26 +48,26 @@ describe('apiFetch', () => {
   it('calls onLogout and throws on 401', async () => {
     mockFetch(401, { error: 'Unauthorized' })
     const onLogout = vi.fn()
-    await expect(apiFetch('GET', '/protected', null, 'bad_tok', onLogout))
+    await expect(apiFetch('GET', '/protected', null, onLogout))
       .rejects.toThrow('Sesión expirada')
     expect(onLogout).toHaveBeenCalledOnce()
   })
 
   it('throws with error message on non-ok response', async () => {
     mockFetch(400, { error: 'Datos inválidos' })
-    await expect(apiFetch('POST', '/clientes', {}, 'tok', () => {}))
+    await expect(apiFetch('POST', '/clientes', {}, () => {}))
       .rejects.toThrow('Datos inválidos')
   })
 
   it('throws generic error when response has no error field', async () => {
     mockFetch(500, {})
-    await expect(apiFetch('GET', '/crash', null, 'tok', () => {}))
+    await expect(apiFetch('GET', '/crash', null, () => {}))
       .rejects.toThrow('Error')
   })
 
   it('propagates network errors', async () => {
     mockFetchFail()
-    await expect(apiFetch('GET', '/offline', null, 'tok', () => {}))
+    await expect(apiFetch('GET', '/offline', null, () => {}))
       .rejects.toThrow('Network error')
   })
 })
@@ -75,7 +75,7 @@ describe('apiFetch', () => {
 // ── Offline queueing via useApi ────────────────────────────────
 describe('offline queueing', () => {
   beforeEach(() => {
-    useAuth.setState({ token: 'test_token', me: { id: 'u1' } })
+    useAuth.setState({ me: { id: 'u1' } })
     useOffline.setState({ online: false, queue: [] })
   })
   afterEach(() => {

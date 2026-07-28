@@ -2,23 +2,22 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
 // ── Auth store (persisted) ────────────────────────────────────
+// Token is now httpOnly cookie (no JS access) — auth via credentials: 'include'
 export const useAuth = create(
   persist(
     (set, get) => ({
-      token: null,
       me: null,
       isBooting: false,
 
-      setToken: (token) => set({ token }),
       setMe: (me) => set({ me }),
       setBooting: (v) => set({ isBooting: v }),
 
       logout: () => {
-        set({ token: null, me: null })
+        set({ me: null })
         localStorage.removeItem('crm_suc')
       },
 
-      isLoggedIn: () => !!get().token && !!get().me,
+      isLoggedIn: () => !!get().me,
     }),
     {
       name: 'flexcrm-auth',

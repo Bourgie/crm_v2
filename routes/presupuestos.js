@@ -3,7 +3,7 @@ const router = express.Router();
 const PDFDocument = require('pdfkit');
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
-const { authMiddleware, requireRol } = require('../middleware/auth');
+const { authMiddleware, requireRol, permiteSucursal } = require('../middleware/auth');
 router.use(authMiddleware);
 
 function enrichPres(p, db) {
@@ -267,6 +267,7 @@ router.post('/:id/convertir', authMiddleware, requireRol('admin','supervisor','v
   const db = _getDB(req);
   const pres = db.findOne('presupuestos', req.params.id);
   if(!pres) return res.status(404).json({error:'No encontrado'});
+  if(!permiteSucursal(req.user, pres.suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
   if(pres.estado !== 'aceptado') return res.status(400).json({error:'Solo presupuestos aceptados pueden convertirse en venta'});
   const items = db.where('presupuesto_items', i=>i.presupuesto_id===req.params.id);
   if(!items.length) return res.status(400).json({error:'Sin items'});

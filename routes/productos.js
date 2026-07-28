@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
-const { authMiddleware, requireRol } = require('../middleware/auth');
+const { authMiddleware, requireRol, permiteSucursal } = require('../middleware/auth');
 const { validate, productoSchema } = require('../middleware/validate');
 const { updateSucStock } = require('./stock_helpers');
 router.use(authMiddleware);
@@ -241,6 +241,7 @@ router.post('/:id/ajuste', requireRol('admin','supervisor','cajero'), (req,res) 
   const delta = tipo==='salida' ? -Math.abs(cantidad) : Math.abs(cantidad);
   const suc_id = req.body.suc_id || (req.user && req.user.suc_id);
   if (!suc_id) return res.status(400).json({error:'Sucursal requerida para ajuste de stock'});
+  if (!permiteSucursal(req.user, suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
   const res2 = updateSucStock(db, req.params.id, suc_id, delta);
   if (res2) db.insert('stock_movimientos',{id:uid(),prod_id:req.params.id,nombre_prod:p.nombre,tipo,cantidad:delta,stock_antes:res2.before,stock_despues:res2.after,motivo:motivo||tipo,usuario_id:req.user.id,usuario:req.user.nombre,fecha:new Date().toISOString(),suc_id});
   try { const { dispararWebhooks } = require('./webhooks'); dispararWebhooks(db, 'producto.actualizado', { prod_id: p.id, nombre: p.nombre, sku: p.sku, stock_actual: res2 ? res2.after : 0, suc_id, tipo_ajuste: tipo, cantidad: delta }); } catch(e) {}

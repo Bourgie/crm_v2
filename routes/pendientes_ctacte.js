@@ -2,7 +2,7 @@ const express = require('express');
 const {updateSucStock} = require('./stock_helpers');
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
-const { authMiddleware, requireRol } = require('../middleware/auth');
+const { authMiddleware, requireRol, permiteSucursal } = require('../middleware/auth');
 
 // ── PENDIENTES ────────────────────────────────────────────────
 const pendRouter = express.Router();
@@ -97,6 +97,7 @@ pendRouter.patch('/:id/estado',(req,res)=>{
   const {estado, comprobante_emitido, comprobante}=req.body;
   const p=db.findOne('pendientes',req.params.id);
   if(!p) return res.status(404).json({error:'No encontrado'});
+  if(!permiteSucursal(req.user, p.suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
   if(p.estado==='entregado'||p.estado==='cancelado') return res.status(400).json({error:'El pedido ya está '+p.estado});
   const upd={estado};
   if(comprobante_emitido!==undefined) upd.comprobante_emitido=comprobante_emitido;
@@ -155,6 +156,7 @@ pendRouter.delete('/:id', authMiddleware, (req,res)=>{
   const db = _getDB(req);
   const p = db.findOne('pendientes', req.params.id);
   if (!p) return res.status(404).json({error:'No encontrado'});
+  if(!permiteSucursal(req.user, p.suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
   if (p.estado === 'entregado') return res.status(400).json({error:'No se puede eliminar un pedido entregado'});
   // Cancelar el pedido (libera stock)
   const items = db.where('pendiente_items', i => i.pendiente_id === req.params.id);
@@ -238,6 +240,7 @@ pendRouter.post('/:id/entregar', authMiddleware, (req,res) => {
   const db = _getDB(req);
   const pend = db.findOne('pendientes', req.params.id);
   if (!pend || pend.estado === 'entregado') return res.status(400).json({error:'Pedido no válido o ya entregado'});
+  if(!permiteSucursal(req.user, pend.suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
 
   const {items_entregar} = req.body;
   // Read items from pendiente_items table (source of truth)
@@ -328,6 +331,7 @@ ctacteRouter.put('/obs/:id', authMiddleware, (req,res) => {
   const db = _getDB(req);
   const existing = db.findOne('ctacte_movimientos', req.params.id);
   if(!existing) return res.status(404).json({error:'No encontrado'});
+  if (existing.suc_id && !permiteSucursal(req.user, existing.suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
   const prev = existing.observaciones ? existing.observaciones + '\n' : '';
   db.update('ctacte_movimientos', req.params.id, {observaciones: prev + (req.body.observaciones||'')});
   res.json({ok:true});

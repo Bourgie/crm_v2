@@ -5,7 +5,7 @@ import { PasswordInput } from '../components/PasswordInput'
 
 export function Signup() {
   const navigate = useNavigate()
-  const { setToken, setMe } = useAuth()
+  const { setMe } = useAuth()
   const [form, setForm] = useState({ empresa_nombre: '', email: '', password: '', rubro: 'general' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -30,7 +30,6 @@ export function Signup() {
       })
       const data = await r.json()
       if (!r.ok) throw new Error(data.error || 'Error al crear la cuenta')
-      setToken(data.token)
       setMe({ nombre: data.nombre, empresa: data.empresa, rol: 'admin' })
       setSuccess(data.mensaje || 'Cuenta creada')
       setTimeout(() => navigate('/app/dashboard', { replace: true }), 1500)

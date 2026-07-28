@@ -7,14 +7,13 @@ import { useAuth, useApp } from '../store'
 // ── Multi-tenant isolation ────────────────────────────────────
 describe('Multi-Tenant Isolation', () => {
   beforeEach(() => {
-    useAuth.setState({ token: null, me: null })
+    useAuth.setState({ me: null })
     useApp.setState({ allSucs: [], sucSesion: null, modulos: null })
     localStorage.clear()
   })
   afterEach(() => { vi.restoreAllMocks() })
 
   it('stores empresa code on login', () => {
-    useAuth.getState().setToken('tok_emp_a')
     useAuth.getState().setMe({ id: 'u1', nombre: 'Admin', empresa: 'empresa_a' })
     expect(useAuth.getState().me.empresa).toBe('empresa_a')
   })
@@ -23,17 +22,13 @@ describe('Multi-Tenant Isolation', () => {
     expect(useAuth.getState().me).toBeNull()
   })
 
-  it('logout clears empresa and token', () => {
-    useAuth.getState().setToken('tok_emp_a')
+  it('logout clears empresa and me', () => {
     useAuth.getState().setMe({ id: 'u1', nombre: 'Admin', empresa: 'empresa_a' })
     useAuth.getState().logout()
-    expect(useAuth.getState().token).toBeNull()
     expect(useAuth.getState().me).toBeNull()
   })
 
-  it('isLoggedIn requires both token and me', () => {
-    expect(useAuth.getState().isLoggedIn()).toBe(false)
-    useAuth.getState().setToken('tok')
+  it('isLoggedIn requires me', () => {
     expect(useAuth.getState().isLoggedIn()).toBe(false)
     useAuth.getState().setMe({ id: 'u1' })
     expect(useAuth.getState().isLoggedIn()).toBe(true)
@@ -41,7 +36,7 @@ describe('Multi-Tenant Isolation', () => {
 
   it('login page sends empresa code in body', async () => {
     global.fetch = vi.fn()
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'tok', user: { id: 'u1', nombre: 'Admin', rol: 'admin', empresa: 'mi_emp' } }) })
+      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ user: { id: 'u1', nombre: 'Admin', rol: 'admin', empresa: 'mi_emp' } }) })
       .mockResolvedValue({ ok: true, status: 200, json: async () => ([]) })
     const Login = (await import('../pages/Login')).Login
     render(<MemoryRouter><Login /></MemoryRouter>)
@@ -60,33 +55,23 @@ describe('Multi-Tenant Isolation', () => {
 // ── Authentication ────────────────────────────────────────────
 describe('Authentication', () => {
   beforeEach(() => {
-    useAuth.setState({ token: null, me: null })
+    useAuth.setState({ me: null })
     localStorage.clear()
   })
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('token persisted and restored from localStorage', () => {
-    useAuth.getState().setToken('persisted_tok')
+  it('me persisted and restored from localStorage', () => {
     useAuth.getState().setMe({ id: 'u1' })
     const raw = localStorage.getItem('flexcrm-auth')
     expect(raw).not.toBeNull()
     const parsed = JSON.parse(raw)
-    expect(parsed.state.token).toBe('persisted_tok')
     expect(parsed.state.me.id).toBe('u1')
   })
 
-  it('setToken stores to localStorage', () => {
-    useAuth.getState().setToken('new_tok')
-    const stored = JSON.parse(localStorage.getItem('flexcrm-auth'))
-    expect(stored.state.token).toBe('new_tok')
-  })
-
-  it('logout clears localStorage token', () => {
-    useAuth.getState().setToken('tok')
+  it('logout clears localStorage me', () => {
     useAuth.getState().setMe({ id: 'u1' })
     useAuth.getState().logout()
     const stored = JSON.parse(localStorage.getItem('flexcrm-auth'))
-    expect(stored.state.token).toBeNull()
     expect(stored.state.me).toBeNull()
   })
 
@@ -173,7 +158,7 @@ describe('CSRF Protection', () => {
     document.cookie = 'csrf-token=test_csrf_val'
     global.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({}) })
     const { apiFetch } = await import('../hooks/useApi')
-    await apiFetch('POST', '/ventas', { total: 100 }, 'tok', () => {})
+    await apiFetch('POST', '/ventas', { total: 100 }, () => {})
     const headers = global.fetch.mock.calls[0][1].headers
     expect(headers['x-csrf-token']).toBe('test_csrf_val')
   })

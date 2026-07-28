@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
-const { authMiddleware, requireRol } = require('../middleware/auth');
+const { authMiddleware, requireRol, permiteSucursal } = require('../middleware/auth');
 const { validate, gastoSchema } = require('../middleware/validate');
 router.use(authMiddleware);
 
@@ -75,6 +75,7 @@ router.post('/', requireRol('admin','supervisor','cajero'), validate(gastoSchema
           metodo_pago, suc_id, recurrente_id, nro_comprobante, notas,
           pagado_por, genera_egreso_caja } = req.body;
   if (!nombre || !monto) return res.status(400).json({error:'Nombre y monto requeridos'});
+  if (suc_id && !permiteSucursal(req.user, suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
   const cat = categoria_id ? db.findOne('gastos_categorias', categoria_id) : null;
   const fechaGasto = fecha || new Date().toISOString().substr(0,10);
   const id = 'g'+uid();
@@ -117,6 +118,7 @@ router.put('/:id', requireRol('admin','supervisor'), (req, res) => {
   const db = _getDB(req);
   const existing = db.findOne('gastos', req.params.id);
   if (!existing) return res.status(404).json({error:'No encontrado'});
+  if (existing.suc_id && !permiteSucursal(req.user, existing.suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
   const { nombre, monto, fecha, fecha_vencimiento, estado, metodo_pago, suc_id, recurrente_id, nro_comprobante, notas, registrado_por, pagado_por, genera_egreso_caja, categoria_id, categoria_nombre } = req.body;
   const updates = {};
   for (const [k, v] of Object.entries({ nombre, monto, fecha, fecha_vencimiento, estado, metodo_pago, suc_id, recurrente_id, nro_comprobante, notas, registrado_por, pagado_por, genera_egreso_caja, categoria_id, categoria_nombre })) {
@@ -132,8 +134,9 @@ router.put('/:id', requireRol('admin','supervisor'), (req, res) => {
 
 router.delete('/:id', requireRol('admin'), (req, res) => {
   const db = _getDB(req);
-  db.delete('gastos', req.params.id);
-  res.json({ok:true});
+  const existing = db.findOne('gastos', req.params.id);
+  if (!existing) return res.status(404).json({error:'No encontrado'});
+  if (existing.suc_id && !permiteSucursal(req.user, existing.suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
 });
 
 // ── Resumen mensual ──

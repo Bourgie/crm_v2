@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
-const { authMiddleware, requireRol } = require('../middleware/auth');
+const { authMiddleware, requireRol, permiteSucursal } = require('../middleware/auth');
 router.use(authMiddleware);
 
 const TIPOS_FACTURA = { 'A': 1, 'B': 6, 'C': 11 };
@@ -60,6 +60,7 @@ router.post('/ventas/:id/facturar', requireRol('admin', 'supervisor', 'cajero'),
 
   const venta = db.findOne('ventas', req.params.id);
   if (!venta) return res.status(404).json({ error: 'Venta no encontrada' });
+  if (!permiteSucursal(req.user, venta.suc_id)) return res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
   if (!venta.cobrada) return res.status(400).json({ error: 'La venta debe estar cobrada' });
   if (venta.facturada) return res.status(400).json({ error: 'Ya facturada' });
 
@@ -121,6 +122,7 @@ router.post('/ventas/:id/nota-credito', requireRol('admin', 'supervisor'), async
   const { monto, motivo } = req.body;
   const venta = db.findOne('ventas', req.params.id);
   if (!venta) return res.status(404).json({ error: 'Venta no encontrada' });
+  if (!permiteSucursal(req.user, venta.suc_id)) return res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
   if (!venta.facturada || !venta.factura_cae) return res.status(400).json({ error: 'La venta no está facturada electrónicamente' });
   if (venta.factura_nc_cae) return res.status(400).json({ error: 'Ya tiene una nota de crédito emitida' });
 

@@ -63,7 +63,12 @@ function superAuth(req, res, next) {
 router.post('/login', superadminLoginLimiter, validate(superadminLoginSchema), async (req, res) => {
   const { usuario, password } = req.body;
   const sa = master.prepare("SELECT * FROM superadmin WHERE usuario=? AND activo=1").get(usuario);
-  if(!sa || !await bcrypt.compare(password, sa.password))
+  if(!sa) {
+    // Dummy bcrypt compare to prevent user enumeration via timing
+    await bcrypt.compare(password, '$2a$10$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
+    return res.status(401).json({error:'Credenciales incorrectas'});
+  }
+  if(!await bcrypt.compare(password, sa.password))
     return res.status(401).json({error:'Credenciales incorrectas'});
 
   if (sa.must_change_password) {

@@ -116,15 +116,13 @@ describe('Auth integration', () => {
   })
   afterEach(() => { vi.restoreAllMocks() })
 
-  it('isLoggedIn false → true after setting token + me', () => {
+  it('isLoggedIn false → true after setting me', () => {
     expect(useAuth.getState().isLoggedIn()).toBe(false)
-    useAuth.getState().setToken('tok_xyz')
     useAuth.getState().setMe({ id: 'u1', nombre: 'Ana' })
     expect(useAuth.getState().isLoggedIn()).toBe(true)
   })
 
   it('isLoggedIn becomes false after logout', () => {
-    useAuth.getState().setToken('tok_xyz')
     useAuth.getState().setMe({ id: 'u1', nombre: 'Ana' })
     expect(useAuth.getState().isLoggedIn()).toBe(true)
     useAuth.getState().logout()

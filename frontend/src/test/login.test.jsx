@@ -11,7 +11,7 @@ const renderLogin = () => render(<MemoryRouter><Login /></MemoryRouter>)
 const mockLoginSuccess = (user = { id: 'u1', nombre: 'Admin', rol: 'admin' }, sucs = [{ id: 's1', nombre: 'Centro' }]) => {
   global.fetch = vi.fn()
     // First call: /api/auth/login
-    .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ token: 'tok_abc', user }) })
+    .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ user }) })
     // Second call: /api/sucursales
     .mockResolvedValueOnce({ ok: true, status: 200, json: async () => sucs })
     // Subsequent calls: /api/config, /api/productos, /api/clientes
@@ -26,7 +26,7 @@ const mockLoginFail = (errorMsg = 'Credenciales inválidas') => {
 
 describe('Login page', () => {
   beforeEach(() => {
-    useAuth.setState({ token: null, me: null })
+    useAuth.setState({ me: null })
     useApp.setState({ allSucs: [], sucSesion: null })
     localStorage.clear()
   })
@@ -104,7 +104,8 @@ describe('Login page', () => {
     await user.type(screen.getByPlaceholderText(/tu contraseña/i), '123456')
     await user.click(screen.getByRole('button', { name: /ingresar/i }))
     await waitFor(() => {
-      expect(useAuth.getState().token).toBe('tok_abc')
+      expect(useAuth.getState().me).toBeTruthy()
+      expect(useAuth.getState().me.nombre).toBe('Admin')
     })
   })
 

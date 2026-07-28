@@ -39,7 +39,8 @@ router.get('/callback', async (req, res) => {
 
     res.send(`<!DOCTYPE html><html><body style="display:flex;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;background:#0f172a;color:#fff"><div style="text-align:center"><div style="font-size:48px">✅</div><h2>MercadoLibre conectado</h2><p style="color:#94a3b8">Ya podés cerrar esta ventana</p><script>setTimeout(window.close,1500)</script></div></body></html>`);
   } catch (e) {
-    res.status(500).send(`Error: ${e.message}`);
+    console.error('[MeliCallback] Error:', e.message);
+    res.status(500).json({ error: 'Error al conectar con MercadoLibre' });
   }
 });
 
