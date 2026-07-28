@@ -259,7 +259,11 @@ app.post('/api/csp-report', express.json({ type: 'application/csp-report', limit
 
 // ── Empresa tenant middleware — runs on all /api/* routes ──
 app.use('/api', (req, res, next) => {
-  const token = (req.headers.authorization || '').replace('Bearer ', '');
+  let token = (req.headers.authorization || '').replace('Bearer ', '');
+  // Fallback to access-token cookie (httpOnly, set on login)
+  if ((!token || token === 'null' || token === 'undefined') && req.cookies && req.cookies['access-token']) {
+    token = req.cookies['access-token'];
+  }
   if (token && token !== 'null' && token !== 'undefined') {
     try {
       const jwt = require('jsonwebtoken');
