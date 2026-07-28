@@ -3,11 +3,16 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import { RequireAuth } from './components/RequireAuth'
 import { Dashboard } from './pages/Dashboard'
+import { CookieBanner } from './components/CookieBanner'
 
 const Login = lazy(() => import('./pages/Login').then(m => ({ default: m.Login })))
 const Signup = lazy(() => import('./pages/Signup').then(m => ({ default: m.Signup })))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword').then(m => ({ default: m.ForgotPassword })))
 const ResetPassword = lazy(() => import('./pages/ResetPassword').then(m => ({ default: m.ResetPassword })))
+const Terminos = lazy(() => import('./pages/Terminos').then(m => ({ default: m.Terminos })))
+const Privacidad = lazy(() => import('./pages/Privacidad').then(m => ({ default: m.Privacidad })))
+const CookiesPolicy = lazy(() => import('./pages/CookiesPolicy').then(m => ({ default: m.CookiesPolicy })))
+const ActivarCuenta = lazy(() => import('./pages/ActivarCuenta').then(m => ({ default: m.ActivarCuenta })))
 const Clientes = lazy(() => import('./pages/Clientes').then(m => ({ default: m.Clientes })))
 const Gastos = lazy(() => import('./pages/Gastos').then(m => ({ default: m.Gastos })))
 const Productos = lazy(() => import('./pages/Productos').then(m => ({ default: m.Productos })))
@@ -43,14 +48,20 @@ function L({ children }) {
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/admin" element={<L><Superadmin /></L>} />
-      <Route path="/app/superadmin" element={<Navigate to="/admin" replace />} />
-      <Route path="/app/login" element={<L><Login /></L>} />
-      <Route path="/app/signup" element={<L><Signup /></L>} />
-      <Route path="/app/forgot-password" element={<L><ForgotPassword /></L>} />
-      <Route path="/app/reset-password" element={<L><ResetPassword /></L>} />
-      <Route path="/app" element={<RequireAuth><Layout /></RequireAuth>}>
+    <>
+      <CookieBanner />
+      <Routes>
+        <Route path="/admin" element={<L><Superadmin /></L>} />
+        <Route path="/app/superadmin" element={<Navigate to="/admin" replace />} />
+        <Route path="/app/login" element={<L><Login /></L>} />
+        <Route path="/app/signup" element={<L><Signup /></L>} />
+        <Route path="/app/forgot-password" element={<L><ForgotPassword /></L>} />
+        <Route path="/app/reset-password" element={<L><ResetPassword /></L>} />
+        <Route path="/terminos-y-condiciones" element={<L><Terminos /></L>} />
+        <Route path="/politica-de-privacidad" element={<L><Privacidad /></L>} />
+        <Route path="/politica-de-cookies" element={<L><CookiesPolicy /></L>} />
+        <Route path="/app/activar-cuenta" element={<L><ActivarCuenta /></L>} />
+        <Route path="/app" element={<RequireAuth><Layout /></RequireAuth>}>
         <Route index element={<Navigate to="/app/dashboard" replace />} />
         <Route path="dashboard"      element={<Dashboard />} />
         <Route path="clientes"       element={<L><Clientes /></L>} />
@@ -80,7 +91,8 @@ export default function App() {
         <Route path="marketplace"    element={<L><Marketplace /></L>} />
         <Route path="marketplace/:slug" element={<L><AppDetail /></L>} />
       </Route>
-      <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
-    </Routes>
+        <Route path="*" element={<Navigate to="/app/dashboard" replace />} />
+      </Routes>
+    </>
   )
 }

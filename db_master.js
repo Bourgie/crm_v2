@@ -241,6 +241,16 @@ master.exec(`
     fecha TEXT,
     estado TEXT DEFAULT 'pendiente'
   );
+
+  CREATE TABLE IF NOT EXISTS textos_legales (
+    id TEXT PRIMARY KEY,
+    tipo TEXT NOT NULL,
+    version TEXT NOT NULL,
+    contenido_hash TEXT NOT NULL,
+    vigente_desde TEXT NOT NULL,
+    creado TEXT NOT NULL,
+    UNIQUE(tipo, version)
+  );
 `);
 
 // Migration: add email and data columns to existing superadmin
@@ -740,5 +750,46 @@ function getVencimientosProximos(dias) {
   return master.prepare("SELECT COUNT(*) as n FROM mantenimiento_items WHERE fecha_vencimiento IS NOT NULL AND fecha_vencimiento <= ? AND estado = 'activo'").get(limite).n || 0;
 }
 
+// ── Textos Legales ──
+function getVersionVigente(tipo) {
+  return master.prepare("SELECT * FROM textos_legales WHERE tipo=? ORDER BY CAST(version AS REAL) DESC LIMIT 1").get(tipo) || null;
+}
+function getAllVersiones(tipo) {
+  if (tipo) return master.prepare("SELECT * FROM textos_legales WHERE tipo=? ORDER BY CAST(version AS REAL) DESC").all(tipo);
+  return master.prepare("SELECT * FROM textos_legales ORDER BY tipo, CAST(version AS REAL) DESC").all();
+}
+function setVersionVigente(tipo, version, contenidoHash, adminId) {
+  const id = 'tl_' + Date.now();
+  const vigenteDesde = new Date().toISOString();
+  master.prepare("INSERT INTO textos_legales (id, tipo, version, contenido_hash, vigente_desde, creado) VALUES (?,?,?,?,?,?)")
+    .run(id, tipo, version, contenidoHash, vigenteDesde, new Date().toISOString());
+  saAudit(adminId, 'nueva_version_legal', null, 'Nueva versión ' + version + ' de ' + tipo + ' vigente desde ' + vigenteDesde);
+  return id;
+}
+
+// ── Consentimiento por Empresa (read from tenant DB for superadmin) ──
+function getConsentimientoEstado(empresaCodigo, tipos) {
+  const { getEmpresaDB } = require('./db_sqlite');
+  try {
+    const empDB = getEmpresaDB(empresaCodigo);
+    const estado = {};
+    for (const tipo of tipos) {
+      const vigente = getVersionVigente(tipo);
+      if (!vigente) { estado[tipo] = { vigente: null, aceptado: false }; continue; }
+      const aceptado = empDB.raw.prepare(
+        "SELECT * FROM consentimientos_empresa WHERE empresa_codigo=? AND tipo=? AND version=? ORDER BY creado DESC LIMIT 1"
+      ).get(empresaCodigo, tipo, vigente.version);
+      estado[tipo] = {
+        vigente: vigente.version,
+        vigente_desde: vigente.vigente_desde,
+        aceptado: !!aceptado,
+        aceptado_por: aceptado ? aceptado.aceptado_por : null,
+        aceptado_fecha: aceptado ? aceptado.creado : null,
+      };
+    }
+    return estado;
+  } catch(e) { return {}; }
+}
+
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
-module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos };
+module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado };

@@ -10,11 +10,13 @@ export function Signup() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [aceptaTerminos, setAceptaTerminos] = useState(false)
 
   const set = (f) => (e) => setForm(p => ({ ...p, [f]: e.target.value }))
 
   async function handleSignup() {
     setError(''); setSuccess('')
+    if (!aceptaTerminos) { setError('Debés aceptar los términos y la política de privacidad'); return }
     if (!form.empresa_nombre.trim() || !form.email.trim() || !form.password) {
       setError('Todos los campos son obligatorios'); return
     }
@@ -24,7 +26,7 @@ export function Signup() {
       const r = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify({ ...form, acepta_terminos: true, acepta_privacidad: true }),
       })
       const data = await r.json()
       if (!r.ok) throw new Error(data.error || 'Error al crear la cuenta')
@@ -85,8 +87,19 @@ export function Signup() {
         <button type="button" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: 12 }} onClick={handleSignup} disabled={loading}>
           {loading ? '⏳ Creando cuenta...' : '🚀 Comenzar prueba gratis'}
         </button>
-        <p style={{ fontSize: 11, color: 'var(--mu)', textAlign: 'center', marginTop: 14 }}>
-          Al crear tu cuenta aceptás los términos del servicio.<br />
+        <div style={{ marginTop: 12 }}>
+          <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--tx)', lineHeight: 1.5 }}>
+            <input type="checkbox" checked={aceptaTerminos} onChange={e => setAceptaTerminos(e.target.checked)}
+              style={{ marginTop: 2, cursor: 'pointer' }} />
+            <span>
+              Soy mayor de 18 años y acepto los{' '}
+              <a href="/terminos-y-condiciones" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontWeight: 600 }}>Términos y Condiciones</a>
+              {' '}y la{' '}
+              <a href="/politica-de-privacidad" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontWeight: 600 }}>Política de Privacidad</a>.
+            </span>
+          </label>
+        </div>
+        <p style={{ fontSize: 11, color: 'var(--mu)', textAlign: 'center', marginTop: 10 }}>
           Sin compromiso. 14 días gratis.
         </p>
       </div>

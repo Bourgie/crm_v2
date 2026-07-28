@@ -223,6 +223,53 @@ router.post('/login', validate(loginSchema), async (req, res) => {
     return res.json({ require_2fa: true, temp_token: tempToken, user: { nombre: user.nombre, email: user.email || '' } });
   }
 
+  // ── Consent check (per-empresa, admin-only) ──
+  const { getVersionesVigentes, checkConsentimientoEmpresa, isInGracePeriod, getGraceDaysLeft } = require('../lib/legal-versions');
+  const versionesVigentes = getVersionesVigentes();
+  const tiposLegales = ['terminos', 'privacidad'];
+  const missingConsent = [];
+  let gracePeriodActive = true;
+  let minGraceDays = 999;
+  for (const tipo of tiposLegales) {
+    const v = versionesVigentes[tipo];
+    if (!v) continue;
+    const aceptado = checkConsentimientoEmpresa(userDB, empresa, tipo, v);
+    if (!aceptado) {
+      missingConsent.push(tipo);
+      const { getVersionVigente } = require('../db_master');
+      const vigente = getVersionVigente(tipo);
+      if (vigente && !isInGracePeriod(vigente.vigente_desde)) {
+        gracePeriodActive = false;
+      }
+      const gd = vigente ? getGraceDaysLeft(vigente.vigente_desde) : 0;
+      if (gd < minGraceDays) minGraceDays = gd;
+    }
+  }
+  if (missingConsent.length > 0) {
+    if (user.rol !== 'admin') {
+      return res.status(403).json({ consent_pending: true, error: 'Tu administrador aún no aceptó los términos legales. Contactá al administrador de la empresa.' });
+    }
+    if (gracePeriodActive) {
+      const msg = 'Hay documentos legales pendientes de aceptación. Tenés ' + minGraceDays + ' día(s) para aceptarlos antes de que se bloquee el acceso.';
+      console.log('[Consent] Grace period: empresa=' + empresa + ' admin=' + user.email + ' días=' + minGraceDays);
+    }
+    const tempToken = jwt.sign(
+      { id: user.id, rol: user.rol, empresa, purpose: 'consent', email: user.email || '' },
+      getSecret(),
+      { expiresIn: '10m' }
+    );
+    const empresaNombre = userDB.getConfig('nombre') || empresa;
+    return res.json({
+      require_consent: true,
+      grace_period: gracePeriodActive,
+      grace_days: gracePeriodActive ? minGraceDays : 0,
+      temp_token: tempToken,
+      versiones: { terminos: versionesVigentes.terminos, privacidad: versionesVigentes.privacidad },
+      empresa_nombre: empresaNombre,
+      user: { nombre: user.nombre, email: user.email || '', rol: user.rol }
+    });
+  }
+
   const { accessToken, refreshToken } = generateTokens(user, empresa);
 
   enforceSessionLimit(userDB, user.id);
@@ -242,6 +289,119 @@ router.post('/login', validate(loginSchema), async (req, res) => {
   setRefreshCookie(res, refreshToken);
   setAccessCookie(res, accessToken);
   res.json(buildLoginResponse(user, accessToken, refreshToken, userDB));
+});
+
+// ── POST /api/auth/aceptar-terminos ──
+router.post('/aceptar-terminos', async (req, res) => {
+  const { temp_token, aceptaciones } = req.body;
+  if (!temp_token || !aceptaciones || !Array.isArray(aceptaciones) || aceptaciones.length === 0) {
+    return res.status(400).json({ error: 'Token y aceptaciones requeridos' });
+  }
+  try {
+    const payload = jwt.verify(temp_token, getSecret());
+    if (payload.purpose !== 'consent') return res.status(400).json({ error: 'Token inválido' });
+    if (payload.rol !== 'admin') return res.status(403).json({ error: 'Solo el administrador puede aceptar los términos' });
+
+    const empresa = payload.empresa;
+    const { getEmpresaDB } = require('../db_sqlite');
+    const userDB = getEmpresaDB(empresa);
+    const user = userDB.findOne('usuarios', payload.id);
+    if (!user || !user.activo) return res.status(401).json({ error: 'Usuario no válido' });
+
+    const { registrarConsentimiento } = require('../lib/legal-versions');
+    const { saAuditExtended } = require('../db_master');
+
+    for (const a of aceptaciones) {
+      if (!a.tipo || !a.version) continue;
+      registrarConsentimiento(userDB, empresa, a.tipo, a.version, user.id, req);
+      saAuditExtended('system', 'consentimiento_aceptado', empresa,
+        'Admin ' + (user.email || user.usuario) + ' aceptó ' + a.tipo + ' v' + a.version, { ip: req.ip || '', email: user.email || '' });
+      userDB.audit(user, user.suc_id, 'legal', 'aceptar_terminos',
+        a.tipo + ' v' + a.version + ' aceptado por ' + (user.nombre || user.usuario), null,
+        { ip: req.ip || '', version: a.version });
+    }
+
+    // Generate tokens and proceed with login
+    const { accessToken, refreshToken } = generateTokens(user, empresa);
+    enforceSessionLimit(userDB, user.id);
+
+    const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    userDB.insert('password_reset_tokens', {
+      id: 'rt_' + uid(), usuario_id: user.id, email: user.email || '',
+      token: refreshHash, expires: new Date(Date.now() + REFRESH_TOKEN_EXPIRY).toISOString(),
+      usado: 0, creado: new Date().toISOString(),
+    });
+
+    setRefreshCookie(res, refreshToken);
+    setAccessCookie(res, accessToken);
+    res.json(buildLoginResponse(user, accessToken, refreshToken, userDB));
+  } catch(e) {
+    if (e.name === 'TokenExpiredError') return res.status(401).json({ error: 'Token expirado. Volvé a iniciar sesión.' });
+    if (e.name === 'JsonWebTokenError') return res.status(400).json({ error: 'Token inválido.' });
+    console.error('[AceptarTerminos] Error:', e.message);
+    res.status(500).json({ error: 'Error al registrar aceptación' });
+  }
+});
+
+// ── GET /api/auth/activar-cuenta/verify ──
+router.get('/activar-cuenta/verify', async (req, res) => {
+  const { token, empresa } = req.query;
+  if (!token || !empresa) return res.status(400).json({ error: 'Token y empresa requeridos' });
+  try {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const { getEmpresaDB } = require('../db_sqlite');
+    const empDB = getEmpresaDB(empresa);
+    const row = empDB.raw.prepare(
+      "SELECT et.*, u.email, u.nombre, u.usuario FROM email_tokens et JOIN usuarios u ON u.id = et.usuario_id WHERE et.token_hash=? AND et.usado=0"
+    ).get(tokenHash);
+    if (!row) return res.status(400).json({ error: 'Link inválido o ya usado.' });
+    if (new Date(row.expires) < new Date()) return res.status(400).json({ error: 'Link expirado.' });
+    res.json({ ok: true, email: row.email, nombre: row.nombre, usuario: row.usuario, empresa });
+  } catch(e) {
+    console.error('[ActivarCuentaVerify] Error:', e.message);
+    res.status(500).json({ error: 'Error al verificar token' });
+  }
+});
+
+// ── POST /api/auth/activar-cuenta ──
+router.post('/activar-cuenta', async (req, res) => {
+  const { token, empresa, password, acepta_terminos, acepta_privacidad } = req.body;
+  if (!token || !empresa || !password) return res.status(400).json({ error: 'Token, empresa y contraseña requeridos' });
+  if (!acepta_terminos || !acepta_privacidad) return res.status(400).json({ error: 'Debés aceptar los términos y la política de privacidad' });
+  if (password.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+
+  try {
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const { getEmpresaDB } = require('../db_sqlite');
+    const { saAuditExtended } = require('../db_master');
+    const empDB = getEmpresaDB(empresa);
+    const row = empDB.raw.prepare("SELECT * FROM email_tokens WHERE token_hash=? AND usado=0").get(tokenHash);
+    if (!row) return res.status(400).json({ error: 'Link inválido o ya usado.' });
+    if (new Date(row.expires) < new Date()) return res.status(400).json({ error: 'Link expirado.' });
+
+    const hash = await bcrypt.hash(password, 10);
+    empDB.raw.prepare("UPDATE usuarios SET password=?, email_verificado=1, password_changed_at=? WHERE id=?").run(hash, new Date().toISOString(), row.usuario_id);
+    empDB.raw.prepare("UPDATE email_tokens SET usado=1 WHERE id=?").run(row.id);
+
+    // Register consent
+    const { registrarConsentimiento, getVersionesVigentes } = require('../lib/legal-versions');
+    const versiones = getVersionesVigentes();
+    if (acepta_terminos && versiones.terminos) {
+      registrarConsentimiento(empDB, empresa, 'terminos', versiones.terminos, row.usuario_id, req);
+    }
+    if (acepta_privacidad && versiones.privacidad) {
+      registrarConsentimiento(empDB, empresa, 'privacidad', versiones.privacidad, row.usuario_id, req);
+    }
+    saAuditExtended('system', 'cuenta_activada', empresa,
+      'Usuario activó su cuenta y aceptó términos para empresa ' + empresa, { ip: req.ip || '', email: row.email || '' });
+    empDB.audit(null, null, 'legal', 'activar_cuenta',
+      'Cuenta activada por ' + (row.email || row.usuario_id) + ' con aceptación de términos', null);
+
+    res.json({ ok: true, mensaje: 'Cuenta activada correctamente. Ya podés iniciar sesión.' });
+  } catch(e) {
+    console.error('[ActivarCuenta] Error:', e.message);
+    res.status(500).json({ error: 'Error al activar la cuenta' });
+  }
 });
 
 // POST /api/auth/refresh
@@ -536,6 +696,18 @@ router.post('/signup', async (req, res) => {
 
   try { const { saAuditExtended } = require('../db_master'); saAuditExtended('system', 'signup_exitoso', finalCodigo, 'Empresa: '+empresa_nombre, { ip: req.ip||'', email }); } catch {}
   console.log('[Signup] Nueva:', finalCodigo, email);
+
+  // Register consent for admin
+  try {
+    const { registrarConsentimiento, getVersionesVigentes } = require('../lib/legal-versions');
+    const versiones = getVersionesVigentes();
+    if (req.body.acepta_terminos && versiones.terminos) {
+      registrarConsentimiento(empDB, finalCodigo, 'terminos', versiones.terminos, adminId, req);
+    }
+    if (req.body.acepta_privacidad && versiones.privacidad) {
+      registrarConsentimiento(empDB, finalCodigo, 'privacidad', versiones.privacidad, adminId, req);
+    }
+  } catch(e) { console.error('[Signup] Consent error:', e.message); }
 
   // Send verification email inline (not setImmediate)
   try {

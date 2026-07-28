@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useAuth, useApp, useToast } from '../store'
 import { PasswordInput } from '../components/PasswordInput'
+import { ConsentModal } from '../components/ConsentModal'
 
 function parseJwt(token) {
   try {
@@ -20,6 +21,7 @@ export function Login() {
   const [twofaStep, setTwofaStep] = useState(null)
   const [twofaCode, setTwofaCode] = useState('')
   const [twofaMode, setTwofaMode] = useState('totp')
+  const [consentStep, setConsentStep] = useState(null)
 
   const { setToken, setMe } = useAuth()
   const { setSucs: setAppSucs, setProds, setClis, setSucSesion, setModulos, setRubro, setCfg } = useApp()
@@ -82,6 +84,22 @@ export function Login() {
         return
       }
 
+      // Consent required
+      if (data.require_consent) {
+        setConsentStep({
+          temp_token: data.temp_token,
+          versiones: data.versiones,
+          empresa_nombre: data.empresa_nombre || (form.empresa.trim() || 'default'),
+          user: data.user
+        })
+        return
+      }
+
+      if (data.consent_pending) {
+        setError(data.error || 'Tu empresa no aceptó los términos. Contactá al administrador.')
+        return
+      }
+
       await proceedWithLogin(data, form.empresa.trim() || 'default')
     } catch (err) {
       setError(err.message || 'Error de conexión')
@@ -111,6 +129,29 @@ export function Login() {
     } finally {
       setLoading(false)
     }
+  }
+
+  async function handleConsentAccept({ tempToken, aceptaciones }) {
+    setError(''); setLoading(true)
+    try {
+      const r = await fetch('/api/auth/aceptar-terminos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temp_token: consentStep.temp_token, aceptaciones }),
+      })
+      const data = await r.json()
+      if (!r.ok) { setError(data.error || 'Error'); return }
+      await proceedWithLogin(data, consentStep.user?.empresa || form.empresa.trim() || 'default')
+    } catch (err) {
+      setError(err.message || 'Error de conexión')
+    } finally {
+      setLoading(false); setConsentStep(null)
+    }
+  }
+
+  function handleConsentReject() {
+    setConsentStep(null)
+    setError('Si no aceptás los términos no podrás usar FlexCRM.')
   }
 
   async function proceedWithLogin(data, empresa) {
@@ -227,6 +268,18 @@ export function Login() {
     )
   }
 
+  if (consentStep) {
+    return (
+      <ConsentModal
+        onAccept={handleConsentAccept}
+        onReject={handleConsentReject}
+        versiones={consentStep.versiones}
+        tempToken={consentStep.temp_token}
+        empresaNombre={consentStep.empresa_nombre}
+      />
+    )
+  }
+
   if (sucs) {
     return (
       <div style={styles.wrap}>
@@ -283,6 +336,14 @@ export function Login() {
             <Link to="/app/forgot-password" style={{ color: 'var(--mu)' }}>¿Olvidaste tu contraseña?</Link>
           </p>
         </form>
+
+        <p style={{ textAlign: 'center', marginTop: 16, fontSize: 11, color: 'var(--mu)', borderTop: '1px solid var(--bd)', paddingTop: 12 }}>
+          <a href="/terminos-y-condiciones" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--mu)', textDecoration: 'underline' }}>Términos</a>
+          {' · '}
+          <a href="/politica-de-privacidad" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--mu)', textDecoration: 'underline' }}>Privacidad</a>
+          {' · '}
+          <a href="/politica-de-cookies" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--mu)', textDecoration: 'underline' }}>Cookies</a>
+        </p>
 
         <p style={{ textAlign: 'center', marginTop: 20, fontSize: 12, color: 'var(--mu)' }}>
           <a href="/landing.html" style={{ color: 'var(--ac)' }}>← Volver al inicio</a>

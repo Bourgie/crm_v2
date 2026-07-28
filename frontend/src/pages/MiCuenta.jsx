@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApi } from '../hooks/useApi'
 import { useAuth, useToast } from '../store'
 import { PageHeader, Field, Loader } from '../components/UI'
@@ -8,12 +8,34 @@ const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', cajero: 'Cajero'
 export function MiCuenta() {
   const { api } = useApi()
   const { toast } = useToast()
-  const { me } = useAuth()
+  const { me, token } = useAuth()
 
   const [form, setForm] = useState({ password_actual: '', password_nuevo: '', password_repetir: '' })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteSent, setDeleteSent] = useState(false)
+  const [consentData, setConsentData] = useState(null)
+  const [exportando, setExportando] = useState(false)
+
+  useEffect(() => {
+    api('GET', '/user-data/mis-consentimientos').then(data => setConsentData(data)).catch(() => {})
+  }, [])
+
+  async function exportarDatos() {
+    setExportando(true)
+    try {
+      const r = await fetch('/api/user-data/mis-datos/exportar', {
+        headers: { Authorization: 'Bearer ' + token },
+      })
+      const blob = await r.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url; a.download = 'mis-datos.json'; a.click()
+      URL.revokeObjectURL(url)
+      toast('Datos exportados', 'ok')
+    } catch (e) { toast(e.message, 'err') }
+    finally { setExportando(false) }
+  }
 
   async function cambiarPass() {
     if (!form.password_actual || !form.password_nuevo) return toast('Completá todos los campos', 'err')
@@ -69,6 +91,70 @@ export function MiCuenta() {
         <button type="button" className="btn btn-primary" onClick={cambiarPass} disabled={saving} style={{ marginTop: 8 }}>
           {saving ? '⏳ Cambiando...' : 'Cambiar contraseña'}
         </button>
+      </div>
+
+      {me?.rol === 'admin' && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>📋 Documentos Legales Vigentes</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div>
+              📄 <a href="/terminos-y-condiciones" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)' }}>Términos y Condiciones v1.0</a>
+            </div>
+            <div>
+              📄 <a href="/politica-de-privacidad" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)' }}>Política de Privacidad v1.0</a>
+            </div>
+            <div>
+              📄 <a href="/politica-de-cookies" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)' }}>Política de Cookies v1.0</a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>📝 Consentimientos</div>
+        {consentData && consentData.consentimientos && consentData.consentimientos.length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {consentData.consentimientos.map((c, i) => (
+              <div key={i} style={{ fontSize: 12, color: 'var(--mu)', padding: '6px 0', borderBottom: '1px solid var(--bd)' }}>
+                ✓ {c.tipo === 'terminos' ? 'Términos y Condiciones' : c.tipo === 'privacidad' ? 'Política de Privacidad' : c.tipo} v{c.version} — {new Date(c.creado).toLocaleDateString('es-AR')} — IP: {c.ip || '—'}
+              </div>
+            ))}
+            <p style={{ fontSize: 11, color: 'var(--mu)', marginTop: 4 }}>
+              {me?.rol === 'admin' ? 'Como administrador, aceptaste estos documentos en nombre de tu empresa.' : 'Tu administrador aceptó estos documentos en nombre de la empresa.'}
+            </p>
+          </div>
+        ) : (
+          <div style={{ fontSize: 12, color: 'var(--mu)', padding: '8px 0' }}>
+            {consentData && consentData.isAdmin ? 'Aún no aceptaste los documentos legales.' : 'Tu empresa aún no aceptó los documentos legales.'}
+          </div>
+        )}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>📦 Tus Datos</div>
+        <p style={{ fontSize: 12, color: 'var(--mu)', marginBottom: 12 }}>
+          De acuerdo a la Ley 25.326, tenés derecho a acceder, rectificar, cancelar y oponerte al tratamiento de tus datos personales.
+        </p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={exportarDatos} disabled={exportando}>
+            {exportando ? '⏳ Exportando...' : '📥 Exportar mis datos'}
+          </button>
+          {!deleteSent && (
+            <button type="button" className="btn btn-secondary btn-sm" onClick={solicitarEliminacion} disabled={deleting}
+              style={{ background: 'rgba(239,68,68,.08)', color: 'var(--bad)' }}>
+              {deleting ? '⏳ Solicitando...' : '🗑️ Solicitar baja'}
+            </button>
+          )}
+        </div>
+        {deleteSent && (
+          <div style={{ marginTop: 8, padding: '10px 12px', background: 'rgba(99,102,241,.06)', borderRadius: 8, fontSize: 12 }}>
+            ✓ Solicitud de baja enviada. El administrador la procesará a la brevedad.
+          </div>
+        )}
+        <p style={{ fontSize: 11, color: 'var(--mu)', marginTop: 12 }}>
+          Para más información, consultá nuestra{' '}
+          <a href="/politica-de-privacidad" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)' }}>Política de Privacidad</a>.
+        </p>
       </div>
 
       <div className="card" style={{ borderColor: 'rgba(239,68,68,.3)' }}>

@@ -583,6 +583,8 @@ try { sqlite.exec("CREATE TABLE IF NOT EXISTS user_sessions (id TEXT PRIMARY KEY
 // Email verification
 try { sqlite.exec("ALTER TABLE usuarios ADD COLUMN email_verificado INTEGER DEFAULT 1"); } catch(e) {}
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS email_tokens (id TEXT PRIMARY KEY, usuario_id TEXT NOT NULL, email TEXT, token_hash TEXT NOT NULL, expires TEXT, usado INTEGER DEFAULT 0, creado TEXT)"); } catch(e) {}
+try { sqlite.exec("CREATE TABLE IF NOT EXISTS consentimientos_empresa (id TEXT PRIMARY KEY, empresa_codigo TEXT NOT NULL, tipo TEXT NOT NULL, version TEXT NOT NULL, aceptado_por TEXT NOT NULL, ip TEXT, user_agent TEXT, creado TEXT NOT NULL)"); } catch(e) {}
+try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_consentimiento_empresa ON consentimientos_empresa(empresa_codigo, tipo)"); } catch(e) {}
 }
 sqlite.prepare("INSERT OR REPLACE INTO schema_version(version) VALUES(?)").run(CURRENT_SCHEMA_VERSION);
 
@@ -864,6 +866,7 @@ const COLS = {
   ausencias:['id','empleado_id','tipo','fecha_inicio','fecha_fin','motivo','certificado','aprobado_por','creado'],
   asistencias:['id','empleado_id','tipo','fecha_hora','suc_id','notas','creado'],
   historial_salarios:['id','empleado_id','salario_anterior','salario_nuevo','fecha','motivo','modificado_por'],
+  consentimientos_empresa:['id','empresa_codigo','tipo','version','aceptado_por','ip','user_agent','creado'],
 };
 
 function prepareRow(table, obj) {

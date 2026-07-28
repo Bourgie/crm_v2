@@ -1,5 +1,10 @@
 require('dotenv').config();
 
+// Legal / compliance defaults
+const PRIVACY_EMAIL = process.env.PRIVACY_EMAIL || 'privacidad@flexcrm.com.ar';
+const LEGAL_JURISDICTION = process.env.LEGAL_JURISDICTION || 'San Fernando del Valle de Catamarca, Provincia de Catamarca';
+const CONSENT_GRACE_DAYS = parseInt(process.env.CONSENT_GRACE_DAYS) || 7;
+
 const isProd = process.env.NODE_ENV === 'production';
 const log = (...args) => { if (!isProd) console.log(...args); };
 
@@ -353,6 +358,7 @@ app.use('/api/tareas',        require('./routes/tareas'));
 app.use('/api/arca',          arcaRouter);
 app.use('/api/superadmin',    superadminRouter);
 app.use('/api/landing',       require('./routes/landing'));
+app.use('/api/user-data',     require('./routes/user-data'));
 
 // ── App ecosystem (dinámico primero, estático después) ──
 // El middleware dinámico solo enruta si el slug es una app registrada;

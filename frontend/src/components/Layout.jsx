@@ -8,6 +8,7 @@ import { useApi } from '../hooks/useApi'
 import { useApp, useAuth } from '../store'
 import { chatUnread } from '../stores/chatUnread'
 import { pipelineVencidas, tareasVencidas, pipelineActivity } from '../stores/pipelineCounters'
+import { FooterLegal } from './FooterLegal'
 
 const TITLES = {
   '/app/dashboard': '📊 Dashboard',
@@ -135,6 +136,7 @@ export function Layout() {
         <div className="page-content">
           <Outlet />
         </div>
+        <FooterLegal />
       </div>
 
       {/* Inactivity warning modal */}

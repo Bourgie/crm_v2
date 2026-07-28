@@ -383,9 +383,43 @@ router.post('/empresas', superAuth, (req, res) => {
     if(admin_email && adminPass) {
       try {
         const hash = bcrypt.hashSync(adminPass, 10);
-        empDB.insert('usuarios', {id:uid(), nombre:'Admin', apellido:'', usuario:admin_email.split('@')[0],
-          email:admin_email, password:hash, rol:'admin', activo:true, roles:JSON.stringify(['admin']), creado:new Date().toISOString()});
+        const adminId = uid();
+        empDB.insert('usuarios', {id:adminId, nombre:'Admin', apellido:'', usuario:admin_email.split('@')[0],
+          email:admin_email, password:hash, rol:'admin', activo:true, roles:JSON.stringify(['admin']),
+          email_verificado: 0, creado:new Date().toISOString(), password_changed_at: new Date().toISOString()});
         console.log('[SA] PASO 4 - usuario admin creado:', admin_email);
+
+        // Generate activation token and send email
+        const crypto = require('crypto');
+        const actToken = crypto.randomBytes(20).toString('hex');
+        const actTokenHash = crypto.createHash('sha256').update(actToken).digest('hex');
+        empDB.insert('email_tokens', {
+          id: 'vet_' + Date.now(), usuario_id: adminId, email: admin_email,
+          token_hash: actTokenHash, expires: new Date(Date.now() + 72*3600000).toISOString(), usado: 0, creado: new Date().toISOString()
+        });
+        try {
+          const { getGlobalConfig } = require('../db_master');
+          const { decryptValue } = require('../lib/crypto-utils');
+          const smtpHost = getGlobalConfig('smtp_host');
+          const smtpPort = parseInt(getGlobalConfig('smtp_port'))||465;
+          const smtpUser = getGlobalConfig('smtp_user');
+          const smtpPass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
+          const smtpFrom = getGlobalConfig('smtp_from') || smtpUser || '';
+          const fromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
+          if (smtpHost && smtpUser && smtpPass && smtpFrom) {
+            const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
+            const activateLink = `${appUrl}/app/activar-cuenta?token=${actToken}&empresa=${codigo}`;
+            const { activationEmail } = require('../lib/email-templates');
+            const html = activationEmail(nombre, admin_email, activateLink);
+            const nodemailer = require('nodemailer');
+            const transporter = nodemailer.createTransport({
+              host: smtpHost, port: smtpPort, secure: smtpPort === 465,
+              auth: { user: smtpUser, pass: smtpPass },
+            });
+            await transporter.sendMail({ from: `"${fromName}" <${smtpFrom}>`, to: admin_email, subject: 'Activá tu cuenta — FlexCRM', html });
+            console.log('[SA] Email de activación enviado a:', admin_email);
+          }
+        } catch(ee) { console.error('[SA] Error enviando email activación:', ee.message); }
       } catch(eu) { console.error('[SA] Error usuario:', eu.message); }
     } else {
       console.log('[SA] PASO 4 - sin credenciales admin, se omite creación de usuario');
@@ -1455,6 +1489,75 @@ router.delete('/mantenimiento/:id', superAuth, (req, res) => {
   deleteMantenimientoItem(req.params.id);
   saAudit(req.sadmin.id, 'eliminar_mantenimiento', null, `Item: ${req.params.id}`);
   res.json({ ok: true });
+});
+
+// ── Legal / Cumplimiento ──
+
+// GET /api/superadmin/legal/versiones — historial de versiones
+router.get('/legal/versiones', superAuth, (req, res) => {
+  const { getAllVersiones, getVersionVigente } = require('../db_master');
+  const tipo = req.query.tipo || null;
+  const versiones = getAllVersiones(tipo);
+  const vigentes = {};
+  ['terminos','privacidad','cookies'].forEach(t => {
+    const v = getVersionVigente(t);
+    vigentes[t] = v ? v.version : null;
+  });
+  res.json({ versiones, vigentes });
+});
+
+// POST /api/superadmin/legal/subir — subir nueva versión de texto legal
+router.post('/legal/subir', superAuth, (req, res) => {
+  const { tipo, version, contenido } = req.body;
+  if (!tipo || !version || !contenido) return res.status(400).json({ error: 'tipo, version y contenido requeridos' });
+  if (!['terminos','privacidad','cookies'].includes(tipo)) return res.status(400).json({ error: 'Tipo inválido. Usar: terminos, privacidad, cookies' });
+  const crypto = require('crypto');
+  const hash = crypto.createHash('sha256').update(contenido).digest('hex');
+  const { setVersionVigente } = require('../db_master');
+  const id = setVersionVigente(tipo, version, hash, req.sadmin.id);
+  saAudit(req.sadmin.id, 'legal_nueva_version', null,
+    `Nueva versión ${version} de ${tipo} — vigente desde ${new Date().toISOString()}`);
+  res.json({ id, ok: true, mensaje: `Versión ${version} de ${tipo} publicada como vigente.` });
+});
+
+// GET /api/superadmin/legal/estado — estado de consentimientos por empresa
+router.get('/legal/estado', superAuth, (req, res) => {
+  try {
+    const { getEmpresas, getConsentimientoEstado } = require('../db_master');
+    const empresas = getEmpresas().filter(e => e.activo === 1);
+    const tipos = ['terminos', 'privacidad'];
+    const estado = empresas.map(e => ({
+      codigo: e.codigo,
+      nombre: e.nombre,
+      admin_email: e.admin_email,
+      estado: getConsentimientoEstado(e.codigo, tipos)
+    }));
+    res.json({ empresas: estado });
+  } catch(e) {
+    console.error('[LegalEstado] Error:', e.message);
+    res.status(500).json({ error: 'Error al obtener estado' });
+  }
+});
+
+// GET /api/superadmin/legal/auditoria — log de acciones legales
+router.get('/legal/auditoria', superAuth, (req, res) => {
+  try {
+    const empresa = req.query.empresa || null;
+    let rows;
+    if (empresa) {
+      rows = master.prepare(
+        "SELECT * FROM sa_audit_log WHERE (accion LIKE 'legal_%' OR accion LIKE 'consentimiento_%' OR accion = 'nueva_version_legal' OR accion LIKE '%_oposicion' OR accion = 'cuenta_activada') AND empresa_id LIKE ? ORDER BY fecha DESC LIMIT 200"
+      ).all('%' + empresa + '%');
+    } else {
+      rows = master.prepare(
+        "SELECT * FROM sa_audit_log WHERE accion LIKE 'legal_%' OR accion LIKE 'consentimiento_%' OR accion = 'nueva_version_legal' OR accion LIKE '%_oposicion' OR accion = 'cuenta_activada' ORDER BY fecha DESC LIMIT 200"
+      ).all();
+    }
+    res.json({ auditoria: rows });
+  } catch(e) {
+    console.error('[LegalAuditoria] Error:', e.message);
+    res.status(500).json({ error: 'Error al obtener auditoría' });
+  }
 });
 
 module.exports = router;
