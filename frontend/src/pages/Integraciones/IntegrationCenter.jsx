@@ -10,7 +10,7 @@ export function IntegrationCenter() {
   const [syncStatus, setSyncStatus] = useState({})
 
   if (loading) return <Loader />
-  if (error) return <PageHeader title="Integraciones" subtitle="Error: " + error />
+  if (error) return <PageHeader title="Integraciones" subtitle={`Error: ${error}`} />
 
   const integraciones = status?.integraciones || {}
   const totalConectadas = status?.conectadas || 0
