@@ -534,6 +534,7 @@ function createEmpresa(data) {
     new Date().toISOString(), data.admin_email||null, data.vencimiento||null,
     data.usuarios_max||5, data.sucursales_max||1
   );
+  try { syncEmpresaIntegracionesDesdePlan(id, data.plan_id); } catch(_) {}
   return id;
 }
 function updateEmpresa(id, data) {
@@ -901,6 +902,17 @@ if (provCount === 0) {
   provDefaults.forEach(p => upsertOAuthProvider(p));
   console.log('✓ OAuth providers sembrados:', provDefaults.length, '— ARCA, MercadoLibre, Tiendanube');
 }
+
+// Backfill: sync integraciones from plan for empresas that lack records
+try {
+  const empresasSinInteg = master.prepare(
+    "SELECT DISTINCT e.id, e.plan_id FROM empresas e LEFT JOIN empresa_integraciones ei ON ei.empresa_id = e.id WHERE ei.id IS NULL AND e.activo = 1"
+  ).all();
+  if (empresasSinInteg.length > 0) {
+    empresasSinInteg.forEach(e => { try { syncEmpresaIntegracionesDesdePlan(e.id, e.plan_id); } catch(_) {} });
+    console.log('✓ Backfill integraciones: ' + empresasSinInteg.length + ' empresas sincronizadas desde su plan');
+  }
+} catch(_) {}
 
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
 module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado, getOAuthProviders, getOAuthProvider, upsertOAuthProvider, getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas, setEmpresaIntegracion, setEmpresaIntegracionesBatch, syncEmpresaIntegracionesDesdePlan };

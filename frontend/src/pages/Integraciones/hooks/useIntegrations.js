@@ -53,6 +53,9 @@ export function useIntegrations() {
           }, 1000)
         })
       }
+      // Non-OAuth provider — auto-connected
+      await load()
+      return !!(res.connected || res.success)
     } catch (e) {
       throw e
     }
