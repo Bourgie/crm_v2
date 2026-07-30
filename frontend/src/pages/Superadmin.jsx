@@ -811,11 +811,66 @@ export default function Superadmin() {
                         </div>
                       )) })()}
                     </div>
-                  </div>
-                )}
-              </>}
-            </>
-          )}
+                    </div>
+                  )}
+
+                  {/* ═══ Tab Integraciones ═══ */}
+                  {empresaDetailTab === 'integraciones' && (
+                    <div>
+                      {!empresaDetail?.integraciones?.habilitadas?.length ? (
+                        <div style={{textAlign:'center',padding:24,color:'var(--mu)'}}>Sin integraciones habilitadas.</div>
+                      ) : (
+                        <div style={{display:'flex',flexDirection:'column',gap:10}}>
+                          {empresaDetail.integraciones.habilitadas.map(provider => {
+                            const estado = empresaDetail.integraciones.estados?.[provider];
+                            const isConnected = !!estado?.connected;
+                            const statusLabel = estado?.status === 'connected' ? '🟢 Conectado'
+                              : estado?.status === 'error' ? '🔴 Error' : '⚪ Desconectado';
+                            const icons = {arca:'📄',mercadolibre:'🛒',tiendanube:'🛍️'};
+                            const names = {arca:'ARCA / AFIP',mercadolibre:'MercadoLibre',tiendanube:'Tiendanube'};
+                            return (
+                              <div key={provider} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:8,border:'1px solid var(--bd)',background:'var(--sf)'}}>
+                                <span style={{fontSize:20}}>{icons[provider]||'🔌'}</span>
+                                <div style={{flex:1}}>
+                                  <div style={{fontWeight:600,fontSize:13}}>{names[provider]||provider}</div>
+                                  <div style={{fontSize:11,color:'var(--mu)'}}>
+                                    {statusLabel}
+                                    {estado?.external_account_id ? ` · ${estado.external_account_id}` : ''}
+                                    {estado?.last_sync ? ` · Sync: ${new Date(estado.last_sync).toLocaleDateString('es-AR')}` : ''}
+                                  </div>
+                                </div>
+                                <label style={{cursor:'pointer'}}>
+                                  <input type="checkbox" checked={true}
+                                    onChange={async () => {
+                                      try {
+                                        await saApi('POST','/empresas/'+empresaDetail.codigo+'/integraciones',{provider,habilitado:false});
+                                        const u = await saApi('GET','/empresas/'+empresaDetail.codigo);
+                                        setEmpresaDetail(u);
+                                      } catch(e) { alert(e.message) }
+                                    }} />
+                                </label>
+                              </div>
+                            );
+                          })}
+                          <div style={{marginTop:4}}>
+                            <button type="button" className="btn btn-sm btn-secondary" style={{fontSize:11}}
+                              onClick={async () => {
+                                try {
+                                  const logs = await saApi('GET','/empresas/'+empresaDetail.codigo+'/integraciones/logs?limit=50');
+                                  const text = logs.map(l=>`[${new Date(l.created_at).toLocaleString('es-AR')}] ${l.provider} · ${l.tipo} · ${l.status} · ${l.mensaje||''}`).join('\n');
+                                  alert(text||'Sin logs.');
+                                } catch(e) { alert('Error: '+e.message) }
+                              }}>
+                              📋 Ver logs de integración
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                </>
+              )}
 
           {/* ═══════ EMPRESAS ═══════ */}
           {tab === 'empresas' && (
@@ -1744,7 +1799,7 @@ export default function Superadmin() {
             <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
               {/* Tabs */}
               <div style={{display:'flex',gap:4,marginBottom:14,borderBottom:'2px solid var(--bd)',paddingBottom:8,flexWrap:'wrap'}}>
-                {[['info','📋 Info'],['audit','📋 Auditoría'],['apps','📦 Apps'],['notas','📝 Notas']].map(([k,l]) => (
+                {[['info','📋 Info'],['audit','📋 Auditoría'],['apps','📦 Apps'],['integraciones','🔌 Integraciones'],['notas','📝 Notas']].map(([k,l]) => (
                   <button key={k} type="button" className={`btn btn-sm ${empresaDetailTab===k?'btn-primary':'btn-secondary'}`} onClick={() => setEmpresaDetailTab(k)}>{l}</button>
                 ))}
               </div>

@@ -263,6 +263,30 @@ master.exec(`
     data TEXT DEFAULT '{}'
   );
   CREATE INDEX IF NOT EXISTS idx_notif_empresa ON notificaciones(empresa_codigo, leida);
+
+  CREATE TABLE IF NOT EXISTS oauth_providers (
+    id TEXT PRIMARY KEY,
+    provider TEXT UNIQUE NOT NULL,
+    nombre TEXT NOT NULL,
+    icono TEXT DEFAULT '🔌',
+    categoria TEXT DEFAULT 'ecommerce',
+    config_schema TEXT DEFAULT '{}',
+    env_keys TEXT DEFAULT '[]',
+    enabled INTEGER DEFAULT 1,
+    orden INTEGER DEFAULT 99,
+    created_at TEXT,
+    updated_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS empresa_integraciones (
+    id TEXT PRIMARY KEY,
+    empresa_id TEXT NOT NULL,
+    provider TEXT NOT NULL,
+    habilitado INTEGER DEFAULT 0,
+    creado TEXT,
+    actualizado TEXT,
+    UNIQUE(empresa_id, provider)
+  );
 `);
 
 // Migration: add email and data columns to existing superadmin
@@ -805,5 +829,61 @@ function getConsentimientoEstado(empresaCodigo, tipos) {
   } catch(e) { return {}; }
 }
 
+// ── OAuth Providers (Integration Center) ──
+function getOAuthProviders() {
+  return master.prepare("SELECT * FROM oauth_providers WHERE enabled=1 ORDER BY orden").all()
+    .map(p => ({ ...p, config_schema: JSON.parse(p.config_schema || '{}'), env_keys: JSON.parse(p.env_keys || '[]') }));
+}
+function getOAuthProvider(provider) {
+  const p = master.prepare("SELECT * FROM oauth_providers WHERE provider=?").get(provider);
+  if (!p) return null;
+  return { ...p, config_schema: JSON.parse(p.config_schema || '{}'), env_keys: JSON.parse(p.env_keys || '[]') };
+}
+function upsertOAuthProvider(data) {
+  const existing = master.prepare("SELECT id FROM oauth_providers WHERE provider=?").get(data.provider);
+  const ahora = new Date().toISOString();
+  if (existing) {
+    master.prepare("UPDATE oauth_providers SET nombre=?,icono=?,categoria=?,config_schema=?,env_keys=?,enabled=?,orden=?,updated_at=? WHERE provider=?")
+      .run(data.nombre, data.icono || '🔌', data.categoria || 'ecommerce', JSON.stringify(data.config_schema || {}), JSON.stringify(data.env_keys || []), data.enabled !== false ? 1 : 0, data.orden || 99, ahora, data.provider);
+  } else {
+    master.prepare("INSERT INTO oauth_providers (id,provider,nombre,icono,categoria,config_schema,env_keys,enabled,orden,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
+      .run('prov_' + Date.now(), data.provider, data.nombre, data.icono || '🔌', data.categoria || 'ecommerce', JSON.stringify(data.config_schema || {}), JSON.stringify(data.env_keys || []), data.enabled !== false ? 1 : 0, data.orden || 99, ahora);
+  }
+}
+
+// ── Empresa Integraciones (per-company integration toggles) ──
+function getEmpresaIntegraciones(empresaId) {
+  return master.prepare("SELECT * FROM empresa_integraciones WHERE empresa_id=? ORDER BY provider").all(empresaId);
+}
+function getEmpresaIntegracionesHabilitadas(empresaId) {
+  return master.prepare("SELECT provider FROM empresa_integraciones WHERE empresa_id=? AND habilitado=1").all(empresaId).map(r => r.provider);
+}
+function setEmpresaIntegracion(empresaId, provider, habilitado) {
+  const ahora = new Date().toISOString();
+  const existing = master.prepare("SELECT id FROM empresa_integraciones WHERE empresa_id=? AND provider=?").get(empresaId, provider);
+  if (existing) {
+    master.prepare("UPDATE empresa_integraciones SET habilitado=?, actualizado=? WHERE empresa_id=? AND provider=?")
+      .run(habilitado ? 1 : 0, ahora, empresaId, provider);
+  } else {
+    master.prepare("INSERT INTO empresa_integraciones (id,empresa_id,provider,habilitado,creado,actualizado) VALUES (?,?,?,?,?,?)")
+      .run('ei_' + Date.now(), empresaId, provider, habilitado ? 1 : 0, ahora, ahora);
+  }
+}
+function setEmpresaIntegracionesBatch(empresaId, providers) {
+  providers.forEach(({ provider, habilitado }) => setEmpresaIntegracion(empresaId, provider, habilitado));
+}
+
+// Seed oauth_providers
+const provCount = master.prepare("SELECT COUNT(*) as n FROM oauth_providers").get().n;
+if (provCount === 0) {
+  const provDefaults = [
+    { provider: 'arca', nombre: 'ARCA / AFIP', icono: '📄', categoria: 'fiscal', env_keys: ['ARCA_ACCESS_TOKEN'], orden: 1 },
+    { provider: 'mercadolibre', nombre: 'MercadoLibre', icono: '🛒', categoria: 'ecommerce', env_keys: ['MELI_APP_ID', 'MELI_CLIENT_SECRET'], orden: 2 },
+    { provider: 'tiendanube', nombre: 'Tiendanube', icono: '🛍️', categoria: 'ecommerce', env_keys: ['TN_CLIENT_ID', 'TN_CLIENT_SECRET'], orden: 3 },
+  ];
+  provDefaults.forEach(p => upsertOAuthProvider(p));
+  console.log('✓ OAuth providers sembrados:', provDefaults.length, '— ARCA, MercadoLibre, Tiendanube');
+}
+
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
-module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado };
+module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado, getOAuthProviders, getOAuthProvider, upsertOAuthProvider, getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas, setEmpresaIntegracion, setEmpresaIntegracionesBatch };

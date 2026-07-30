@@ -41,6 +41,7 @@ const Superadmin = lazy(() => import('./pages/Superadmin'))
 const AppShell = lazy(() => import('./components/AppShell'))
 const Marketplace = lazy(() => import('./pages/Marketplace'))
 const AppDetail = lazy(() => import('./pages/AppDetail'))
+const IntegrationCenter = lazy(() => import('./pages/Integraciones/IntegrationCenter').then(m => ({ default: m.IntegrationCenter })))
 
 function L({ children }) {
   return <Suspense fallback={<div className="p-8 text-center text-gray-400">Cargando...</div>}>{children}</Suspense>
@@ -83,6 +84,7 @@ export default function App() {
         <Route path="sucursales"     element={<L><Sucursales /></L>} />
         <Route path="micuenta"       element={<L><MiCuenta /></L>} />
         <Route path="config"         element={<L><Config /></L>} />
+        <Route path="integraciones"  element={<L><IntegrationCenter /></L>} />
         <Route path="2fa"            element={<L><Setup2FA /></L>} />
         <Route path="proveedores"    element={<L><Proveedores /></L>} />
         <Route path="rrhh"           element={<L><RRHH /></L>} />

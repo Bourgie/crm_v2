@@ -30,6 +30,7 @@ const NAV = [
   { to: '/app/sucursales', icon: '🏪', label: 'Sucursales', mod: null, adminOnly: true },
   { to: '/app/micuenta',  icon: '👤', label: 'Mi Cuenta', mod: null },
   { to: '/app/config',    icon: '⚙️', label: 'Configuración', mod: null, adminOnly: true },
+  { to: '/app/integraciones', icon: '🔌', label: 'Integraciones', mod: null, roles: ['admin'] },
 ]
 
 export function Sidebar({ mobile, onClose }) {

@@ -12,7 +12,10 @@ const { master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa,
         getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos,
         getAppsDisponibles, getAppDisponible, upsertAppDisponible,
         getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig,
-        logAppEvent, getAppStats } = require('../db_master');
+        logAppEvent, getAppStats,
+        getOAuthProviders, getOAuthProvider,
+        getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas,
+        setEmpresaIntegracion, setEmpresaIntegracionesBatch } = require('../db_master');
 const { getEmpresaDB } = require('../db_sqlite');
 const { validate, superadminLoginSchema } = require('../middleware/validate');
 
@@ -354,7 +357,28 @@ router.get('/empresas/:codigo', superAuth, (req, res) => {
     const clientes = db.find('clientes').filter(c=>c.activo!==false).length;
     const cfg = db.getConfig();
     const modulos = cfg.modulos_habilitados ? (typeof cfg.modulos_habilitados === 'string' ? JSON.parse(cfg.modulos_habilitados) : cfg.modulos_habilitados) : [];
-    res.json({...e, email_verificado: adminUser ? adminUser.email_verificado : null, admin_email: e.admin_email, config: { rubro: cfg.rubro || '', modulos_habilitados: modulos }, usuarios, sucursales, ventas, clientes});
+
+    // Integration Center info
+    const habilitadas = getEmpresaIntegracionesHabilitadas(e.id);
+    const integraciones = { habilitadas, estados: {} };
+    for (const provider of habilitadas) {
+      try {
+        const row = db.raw.prepare("SELECT * FROM company_integrations WHERE provider = ?").get(provider);
+        if (row) {
+          integraciones.estados[provider] = {
+            status: row.status || 'disconnected',
+            external_account_id: row.external_account_id,
+            last_sync: row.last_sync,
+            last_error: row.last_error,
+            health_status: row.health_status || 'unknown',
+            last_health_check: row.last_health_check,
+            connected: row.status === 'connected',
+          };
+        }
+      } catch {}
+    }
+
+    res.json({...e, email_verificado: adminUser ? adminUser.email_verificado : null, admin_email: e.admin_email, config: { rubro: cfg.rubro || '', modulos_habilitados: modulos }, usuarios, sucursales, ventas, clientes, integraciones});
   } catch(err) { res.json({...e, error: err.message}); }
 });
 
@@ -611,6 +635,121 @@ router.delete('/empresas/:id', superAuth, (req, res) => {
     console.error('[DeleteEmpresa] Error:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ══════════════════════════════════════
+// INTEGRACIONES (Integration Center)
+// ══════════════════════════════════════
+
+// Obtener todos los OAuth providers configurados
+router.get('/integraciones/providers', superAuth, (req, res) => {
+  try {
+    const providers = getOAuthProviders().map(p => ({
+      ...p,
+      env_configured: (() => {
+        const keys = p.env_keys || [];
+        return keys.every(k => process.env[k]);
+      })(),
+    }));
+    res.json(providers);
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Obtener integraciones de una empresa (habilitadas + estado real)
+router.get('/empresas/:codigo/integraciones', superAuth, (req, res) => {
+  try {
+    const e = getEmpresa(req.params.codigo) || master.prepare("SELECT * FROM empresas WHERE codigo=?").get(req.params.codigo);
+    if (!e) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+    const { getEmpresaDB } = require('../db_sqlite');
+    const habilitadas = getEmpresaIntegracionesHabilitadas(e.id);
+    const empDB = getEmpresaDB(e.codigo);
+    const estados = {};
+
+    for (const provider of habilitadas) {
+      try {
+        const row = empDB.raw.prepare(
+          "SELECT * FROM company_integrations WHERE provider = ?"
+        ).get(provider);
+        if (row) {
+          estados[provider] = {
+            status: row.status,
+            external_account_id: row.external_account_id,
+            external_user_id: row.external_user_id,
+            last_sync: row.last_sync,
+            last_error: row.last_error,
+            health_status: row.health_status,
+            last_health_check: row.last_health_check,
+            expires_at: row.expires_at,
+            connected: row.status === 'connected',
+          };
+        }
+      } catch {}
+    }
+
+    res.json({ habilitadas, estados });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Habilitar/deshabilitar una integración para una empresa
+router.post('/empresas/:codigo/integraciones', superAuth, (req, res) => {
+  try {
+    const e = getEmpresa(req.params.codigo) || master.prepare("SELECT * FROM empresas WHERE codigo=?").get(req.params.codigo);
+    if (!e) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+    const { provider, habilitado } = req.body;
+    if (!provider) return res.status(400).json({ error: 'Falta provider' });
+
+    setEmpresaIntegracion(e.id, provider, !!habilitado);
+    saAudit(req.sadmin.id,
+      habilitado ? 'integracion_habilitar' : 'integracion_deshabilitar',
+      e.id,
+      `${habilitado ? 'Habilitada' : 'Deshabilitada'} integración "${provider}" para empresa ${e.codigo}`
+    );
+
+    res.json({ ok: true, provider, habilitado: !!habilitado });
+  } catch (eb) { res.status(500).json({ error: eb.message }); }
+});
+
+// Batch update de integraciones habilitadas
+router.post('/empresas/:codigo/integraciones/batch', superAuth, (req, res) => {
+  try {
+    const e = getEmpresa(req.params.codigo) || master.prepare("SELECT * FROM empresas WHERE codigo=?").get(req.params.codigo);
+    if (!e) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+    const { providers } = req.body;
+    if (!Array.isArray(providers)) return res.status(400).json({ error: 'providers debe ser un array' });
+
+    setEmpresaIntegracionesBatch(e.id, providers);
+    saAudit(req.sadmin.id, 'integracion_batch', e.id,
+      `Integraciones actualizadas: ${JSON.stringify(providers.map(p => `${p.provider}=${p.habilitado ? 'ON' : 'OFF'}`))}`);
+
+    res.json({ ok: true, count: providers.length });
+  } catch (eb) { res.status(500).json({ error: eb.message }); }
+});
+
+// Logs de integración de una empresa
+router.get('/empresas/:codigo/integraciones/logs', superAuth, (req, res) => {
+  try {
+    const e = getEmpresa(req.params.codigo) || master.prepare("SELECT * FROM empresas WHERE codigo=?").get(req.params.codigo);
+    if (!e) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+    const { getEmpresaDB } = require('../db_sqlite');
+    const empDB = getEmpresaDB(e.codigo);
+    const { provider, tipo, limit } = req.query;
+
+    let sql = "SELECT * FROM integration_logs WHERE 1=1";
+    const params = [];
+
+    if (provider) { sql += " AND provider = ?"; params.push(provider); }
+    if (tipo) { sql += " AND tipo = ?"; params.push(tipo); }
+
+    sql += " ORDER BY created_at DESC LIMIT ?";
+    params.push(parseInt(limit) || 200);
+
+    const logs = empDB.raw.prepare(sql).all(...params);
+    res.json(logs);
+  } catch (eb) { res.status(500).json({ error: eb.message }); }
 });
 
 // Download a specific backup file

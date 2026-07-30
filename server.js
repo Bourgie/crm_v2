@@ -375,6 +375,11 @@ app.use('/api/landing',       require('./routes/landing'));
 app.use('/api/user-data',     require('./routes/user-data'));
 app.use('/api/notificaciones', require('./routes/notificaciones'));
 
+// ── Integrations Center ──
+app.use('/api/integration-center', require('./routes/integration-center/oauth.routes'));
+app.use('/api/integration-center', require('./routes/integration-center/company.routes'));
+app.use('/api/integration-center/webhooks', require('./routes/integration-center/webhooks.routes'));
+
 // ── App ecosystem (dinámico primero, estático después) ──
 // El middleware dinámico solo enruta si el slug es una app registrada;
 // si no, pasa al siguiente (routes/apps.js)

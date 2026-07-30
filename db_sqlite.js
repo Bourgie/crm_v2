@@ -540,6 +540,45 @@ CREATE TABLE IF NOT EXISTS tareas (
 );
 `);
 
+// ─── INTEGRATION CENTER ──────────────────────────────────────
+sqlite.exec(`
+CREATE TABLE IF NOT EXISTS company_integrations (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  external_account_id TEXT,
+  external_user_id TEXT,
+  seller_id TEXT,
+  access_token TEXT,
+  refresh_token TEXT,
+  expires_at TEXT,
+  config_json TEXT DEFAULT '{}',
+  status TEXT DEFAULT 'disconnected',
+  last_sync TEXT,
+  last_error TEXT,
+  last_health_check TEXT,
+  health_status TEXT DEFAULT 'unknown',
+  created_at TEXT,
+  updated_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ci_provider ON company_integrations(provider);
+
+CREATE TABLE IF NOT EXISTS integration_logs (
+  id TEXT PRIMARY KEY,
+  provider TEXT NOT NULL,
+  tipo TEXT NOT NULL,
+  status TEXT DEFAULT 'success',
+  mensaje TEXT,
+  usuario_id TEXT,
+  usuario_nombre TEXT,
+  ip TEXT,
+  respuesta_ms INTEGER,
+  created_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_il_provider ON integration_logs(provider);
+CREATE INDEX IF NOT EXISTS idx_il_tipo ON integration_logs(tipo);
+CREATE INDEX IF NOT EXISTS idx_il_created ON integration_logs(created_at);
+`);
+
 // ─── MIGRATIONS (version-gated) ──
 if (ensureVersion(1)) {
 try { sqlite.exec("ALTER TABLE pipeline_etapas ADD COLUMN data TEXT DEFAULT '{}'"); } catch(e) {}
@@ -873,6 +912,8 @@ const COLS = {
   asistencias:['id','empleado_id','tipo','fecha_hora','suc_id','notas','creado'],
   historial_salarios:['id','empleado_id','salario_anterior','salario_nuevo','fecha','motivo','modificado_por'],
   consentimientos_empresa:['id','empresa_codigo','tipo','version','aceptado_por','ip','user_agent','creado'],
+  company_integrations:['id','provider','external_account_id','external_user_id','seller_id','access_token','refresh_token','expires_at','config_json','status','last_sync','last_error','last_health_check','health_status','created_at','updated_at'],
+  integration_logs:['id','provider','tipo','status','mensaje','usuario_id','usuario_nombre','ip','respuesta_ms','created_at'],
 };
 
 function prepareRow(table, obj) {
