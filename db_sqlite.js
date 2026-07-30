@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS clientes (
   lista INTEGER DEFAULT 1, limite_credito REAL DEFAULT 0,
   puntos INTEGER DEFAULT 0, suc_origen TEXT,
   activo INTEGER DEFAULT 1, creado TEXT,
+  condicion_fiscal TEXT DEFAULT 'cf',
   data TEXT DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS puntos_movimientos (
@@ -152,6 +153,7 @@ CREATE TABLE IF NOT EXISTS pendientes (
 `);
 try { sqlite.exec("ALTER TABLE pendientes ADD COLUMN concepto TEXT DEFAULT ''"); } catch(e) {}
 try { sqlite.exec("ALTER TABLE pendientes ADD COLUMN suc_cobro TEXT DEFAULT ''"); } catch(e) {}
+try { sqlite.exec("ALTER TABLE clientes ADD COLUMN condicion_fiscal TEXT DEFAULT 'cf'"); } catch(e) {}
 sqlite.exec(`
 CREATE TABLE IF NOT EXISTS pendiente_items (
   id TEXT PRIMARY KEY, pendiente_id TEXT, prod_id TEXT,
@@ -823,7 +825,7 @@ const COLS = {
   sucursales:['id','nombre','dir','ciudad','tel','email','responsable','activo'],
   usuarios:['id','nombre','usuario','email','password','rol','roles','suc_id','suc_sesiones_permitidas','activo','creado'],
   vendedores:['id','nombre','apellido','dni','tel','email','rol','suc_id','suc_nombre','usuario_id','comision','activo'],
-  clientes:['id','nombre','apellido','dni','tel','email','ciudad','bebe_nac','notas','lista','limite_credito','puntos','suc_origen','activo','creado'],
+  clientes:['id','nombre','apellido','dni','tel','email','ciudad','bebe_nac','notas','lista','limite_credito','puntos','suc_origen','activo','creado','condicion_fiscal'],
   productos:['id','nombre','sku','codigo_barras','categoria','talle','color','temporada','costo','precio_l1','precio_l2','precio_l3','unidad','stock_min','stock_max','favorito','activo'],
   stock_suc:['prod_id','suc_id','cantidad'],
   stock_movimientos:['id','prod_id','nombre_prod','tipo','cantidad','stock_antes','stock_despues','motivo','usuario_id','usuario','fecha','suc_id'],

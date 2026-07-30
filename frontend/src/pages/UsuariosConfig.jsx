@@ -225,7 +225,7 @@ export function Config() {
     puntos_peso:'0', puntos_minimo_canje:'0', puntos_valor_canje:'0',
     objetivo_mes:'', objetivo_suc:'',
     comision:'5',
-    arca_access_token:'', arca_cuit:'', arca_punto_venta:'1', arca_ambiente:'dev', arca_iva_pct:'21', arca_cert:'', arca_key:'',
+    arca_access_token:'', arca_cuit:'', arca_punto_venta:'1', arca_ambiente:'dev', arca_iva_pct:'21', arca_condicion_fiscal:'responsable_inscripto', arca_cert:'', arca_key:'',
     tienda_suc_online_id:'', tienda_woo_url:'', tienda_woo_key:'', tienda_woo_secret:'',
     tienda_tn_store_id:'', tienda_tn_access_token:'',
     tienda_meli_app_id:'', tienda_meli_client_secret:'', tienda_meli_access_token:'', tienda_meli_refresh_token:'', tienda_meli_seller_id:'', tienda_meli_user_id:'', tienda_meli_expires_at:'',
@@ -243,6 +243,9 @@ export function Config() {
 
   const [emailTesting, setEmailTesting] = useState(false)
   const [emailTestRes, setEmailTestRes] = useState(null)
+
+  const [arcaTesting, setArcaTesting] = useState(false)
+  const [arcaTestRes, setArcaTestRes] = useState(null)
 
   useEffect(() => {
     api('GET', '/config').then((d) => {
@@ -287,6 +290,39 @@ export function Config() {
       toast('Mail de prueba enviado','ok')
     } catch(e) { setEmailTestRes({ ok: false, msg: e.message }); toast(e.message,'err') }
     finally { setEmailTesting(false) }
+  }
+
+  function validarCUIT(cuit) {
+    const limpio = String(cuit || '').replace(/[-\s]/g, '')
+    if (!limpio) return null
+    if (!/^\d{11}$/.test(limpio)) return 'El CUIT debe tener 11 dígitos numéricos'
+    return null
+  }
+
+  async function testArca() {
+    if (!form.arca_access_token || form.arca_access_token === true) {
+      toast('Configurá el Access Token primero', 'err'); return
+    }
+    if (!form.arca_cuit) { toast('Configurá el CUIT', 'err'); return }
+    setArcaTesting(true); setArcaTestRes(null)
+    try {
+      const r = await api('GET', '/arca/status')
+      if (r.ok) {
+        const info = []
+        info.push(`Ambiente: ${r.ambiente === 'prod' ? 'Producción' : 'Desarrollo'}`)
+        info.push(`Punto de venta: ${r.punto_venta}`)
+        if (r.ultimos_comprobantes) {
+          info.push(`Últimos: ${Object.entries(r.ultimos_comprobantes).map(([t, n]) => `Factura ${t} #${n}`).join(', ')}`)
+        }
+        if (r.tiene_certificados) info.push('Certificados: cargados')
+        setArcaTestRes({ ok: true, msg: 'Conexión exitosa con AFIP', detail: info.join(' · ') })
+        toast('Conexión ARCA exitosa', 'ok')
+      } else {
+        setArcaTestRes({ ok: false, msg: r.error || 'Error desconocido' })
+        toast(r.error || 'Error al conectar', 'err')
+      }
+    } catch (e) { setArcaTestRes({ ok: false, msg: e.message }); toast(e.message, 'err') }
+    finally { setArcaTesting(false) }
   }
 
   if (loading) return <Loader/>
@@ -506,6 +542,13 @@ export function Config() {
               📄 ARCA (ex AFIP) — Facturación electrónica. Necesitás un <strong>Access Token</strong> de <a href="https://app.afipsdk.com" target="_blank" rel="noopener" style={{color:'var(--ac)'}}>Afip SDK</a> para conectarte.
               Modo desarrollo usa el CUIT 20-40937847-2 sin certificados. Para producción necesitás certificado digital.
             </div>
+            <Field label="Condición fiscal de la empresa">
+              <select value={form.arca_condicion_fiscal || 'responsable_inscripto'} onChange={set('arca_condicion_fiscal')}>
+                <option value="responsable_inscripto">Responsable Inscripto — emite Factura A, B y C</option>
+                <option value="monotributista">Monotributista — solo Factura C</option>
+                <option value="exento">Exento — solo Factura C</option>
+              </select>
+            </Field>
             <div className="fr">
               <Field label="Access Token">
                 {form.arca_access_token === true ? (
@@ -519,6 +562,9 @@ export function Config() {
               </Field>
               <Field label="CUIT">
                 <input value={form.arca_cuit} onChange={set('arca_cuit')} placeholder="20111111112" style={{fontFamily:'monospace'}}/>
+                {validarCUIT(form.arca_cuit) && (
+                  <div style={{fontSize:11,color:'var(--bad)',marginTop:4}}>{validarCUIT(form.arca_cuit)}</div>
+                )}
               </Field>
             </div>
             <div className="fr">
@@ -555,6 +601,18 @@ export function Config() {
                 <textarea value={form.arca_key} onChange={set('arca_key')} rows={4} placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style={{fontSize:11,fontFamily:'monospace'}}/>
               )}
             </Field>
+            {arcaTestRes && (
+              <div style={{padding:'10px 14px',borderRadius:8,fontSize:12,
+                background:arcaTestRes.ok?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)',
+                border:'1px solid '+(arcaTestRes.ok?'rgba(34,197,94,.3)':'rgba(239,68,68,.3)'),
+                color:arcaTestRes.ok?'var(--ok)':'var(--bad)',marginBottom:8}}>
+                {arcaTestRes.ok ? '✅ ' : '❌ '}{arcaTestRes.msg}
+                {arcaTestRes.detail && <div style={{fontSize:11,marginTop:2,opacity:.8}}>{arcaTestRes.detail}</div>}
+              </div>
+            )}
+            <button type="button" className="btn btn-secondary" onClick={testArca} disabled={arcaTesting} style={{marginTop:4}}>
+              {arcaTesting ? '⏳ Probando...' : '🔌 Probar Conexión ARCA'}
+            </button>
           </>
         )}
 

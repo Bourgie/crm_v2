@@ -7,7 +7,7 @@ import { SearchBar, PageHeader, Field, ConfirmDialog, EmptyRow, Loader, Paginati
 import { exportExcel, importExcel, pickFile } from '../utils/excel'
 
 const PER_PAGE = 25
-const EMPTY = { nombre: '', apellido: '', tel: '', email: '', dni: '', dir: '', notas: '', es_ctacte: false, limite_ctacte: '', lista: 1, suc_id: '' }
+const EMPTY = { nombre: '', apellido: '', tel: '', email: '', dni: '', dir: '', notas: '', es_ctacte: false, limite_ctacte: '', lista: 1, suc_id: '', condicion_fiscal: 'cf' }
 
 function Badge({ estado }) {
   const map = {
@@ -37,6 +37,14 @@ function ClienteForm({ form, setForm }) {
         <Field label="Dirección"><input value={form.dir} onChange={set('dir')} placeholder="Calle y número" /></Field>
       </div>
       <div className="fr">
+        <Field label="Condición fiscal">
+          <select value={form.condicion_fiscal || 'cf'} onChange={set('condicion_fiscal')}>
+            <option value="cf">Consumidor Final</option>
+            <option value="ri">Responsable Inscripto</option>
+            <option value="mt">Monotributista</option>
+            <option value="exento">Exento</option>
+          </select>
+        </Field>
         <Field label="Lista de precios">
           <select value={form.lista || 1} onChange={set('lista')}>
             <option value={1}>Lista 1 (precio base)</option>

@@ -272,14 +272,18 @@ function ModalCobro({ open, onClose, venta, pagosMethods, onConfirm }) {
 }
 
 // ── Selector tipo comprobante (ctacte) ─────────────────────────
-function ModalComprobante({ open, onClose, venta, onConfirm }) {
+function ModalComprobante({ open, onClose, venta, onConfirm, cfg }) {
   if (!venta) return null
-  const TIPOS = [
+  const condFiscal = (cfg && cfg.arca_condicion_fiscal) || 'responsable_inscripto'
+  const TIPOS_ALL = [
     ['ticket', '🏷️ Ticket (sin factura)'],
     ['facB', '📄 Factura B — Consumidor final'],
     ['facA', '📄 Factura A — Responsable inscripto'],
     ['facC', '📄 Factura C — Monotributista/exento'],
   ]
+  const TIPOS = condFiscal === 'responsable_inscripto'
+    ? TIPOS_ALL
+    : TIPOS_ALL.filter(([t]) => t === 'ticket' || t === 'facC')
   return (
     <Modal open={open} onClose={onClose} title="🧾 Tipo de comprobante" size="sm">
       <div style={{ background: 'var(--sf)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13 }}>
@@ -1090,7 +1094,7 @@ export function Caja() {
       <ModalMovimiento key={modalMov || 'closed'} open={!!modalMov} onClose={() => setModalMov(null)} tipo={modalMov} onGuardar={registrarMovimiento} />
       <ModalCierre open={modalCierre} onClose={() => setModalCierre(false)} estado={estado} onCerrar={cerrar} />
       <ModalCobro key={modalCobro?.id || 'cobro-closed'} open={!!modalCobro} onClose={() => setModalCobro(null)} venta={modalCobro} pagosMethods={pagosMethods} onConfirm={confirmarCobro} />
-      <ModalComprobante open={!!modalComprobante} onClose={() => setModalComprobante(null)} venta={modalComprobante} onConfirm={confirmarComprobante} />
+      <ModalComprobante open={!!modalComprobante} onClose={() => setModalComprobante(null)} venta={modalComprobante} onConfirm={confirmarComprobante} cfg={cfg} />
       <ModalEditarVenta open={!!modalEditarVenta} onClose={() => setModalEditarVenta(null)} venta={modalEditarVenta} onSave={guardarEditarVenta} />
       <ModalQR open={!!modalQR} onClose={() => setModalQR(null)} venta={modalQR?.venta}
         onConfirm={async () => {
@@ -1113,33 +1117,41 @@ export function Caja() {
                 <div style={{ color: 'var(--mu)' }}>{modalCompTipo.venta?.cli_nombre || 'Consumidor final'} · {fmt(modalCompTipo.venta?.total)}</div>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {[['ticket','🏷️ Ticket (sin factura)'],
-                  ['facB','📄 Factura B — Consumidor final'],
-                  ['facA','📄 Factura A — Responsable inscripto'],
-                  ['facC','📄 Factura C — Monotributista/exento'],
-                ].map(([tipo, label]) => (
-                  <button type="button" key={tipo} className="btn btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px', fontSize: 14 }}
-                    onClick={async () => {
-                      const ventaId = modalCompTipo.venta.id
-                      setModalCompTipo(null)
-                      let facturaInfo = null
-                      if (tipo !== 'ticket') {
-                        const tipoMap = { facB: 'B', facA: 'A', facC: 'C' }
-                        try {
-                          facturaInfo = await api('POST', '/arca/ventas/' + ventaId + '/facturar', { tipo: tipoMap[tipo] })
-                          toast('✅ Factura ' + tipoMap[tipo] + ' #' + facturaInfo.numero + ' — CAE: ' + facturaInfo.cae, 'ok')
-                        } catch (e) {
-                          toast('⚠️ ' + (e.message || 'Error al facturar. Verificá la config de ARCA en Ajustes.'), 'err')
+                {(() => {
+                  const condFiscal = cfg.arca_condicion_fiscal || 'responsable_inscripto'
+                  const TIPOS_ALL = [
+                    ['ticket','🏷️ Ticket (sin factura)'],
+                    ['facB','📄 Factura B — Consumidor final'],
+                    ['facA','📄 Factura A — Responsable inscripto'],
+                    ['facC','📄 Factura C — Monotributista/exento'],
+                  ]
+                  const TIPOS = condFiscal === 'responsable_inscripto'
+                    ? TIPOS_ALL
+                    : TIPOS_ALL.filter(([t]) => t === 'ticket' || t === 'facC')
+                  return TIPOS.map(([tipo, label]) => (
+                    <button type="button" key={tipo} className="btn btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px', fontSize: 14 }}
+                      onClick={async () => {
+                        const ventaId = modalCompTipo.venta.id
+                        setModalCompTipo(null)
+                        let facturaInfo = null
+                        if (tipo !== 'ticket') {
+                          const tipoMap = { facB: 'B', facA: 'A', facC: 'C' }
+                          try {
+                            facturaInfo = await api('POST', '/arca/ventas/' + ventaId + '/facturar', { tipo: tipoMap[tipo] })
+                            toast('✅ Factura ' + tipoMap[tipo] + ' #' + facturaInfo.numero + ' — CAE: ' + facturaInfo.cae, 'ok')
+                          } catch (e) {
+                            toast('⚠️ ' + (e.message || 'Error al facturar. Verificá la config de ARCA en Ajustes.'), 'err')
+                          }
                         }
-                      }
-                      try {
-                        const vtaFull = await api('GET', '/ventas/' + ventaId)
-                        imprimir({ ...vtaFull, _comprobante: tipo, _cae: facturaInfo?.cae, _cae_vto: facturaInfo?.vencimiento }, modalCompTipo.pagos, cfg)
-                      } catch { /* non-fatal */ }
-                    }}>
-                    {label}
-                  </button>
-                ))}
+                        try {
+                          const vtaFull = await api('GET', '/ventas/' + ventaId)
+                          imprimir({ ...vtaFull, _comprobante: tipo, _cae: facturaInfo?.cae, _cae_vto: facturaInfo?.vencimiento }, modalCompTipo.pagos, cfg)
+                        } catch { /* non-fatal */ }
+                      }}>
+                      {label}
+                    </button>
+                  ))
+                })()}
               </div>
               <button type="button" className="btn btn-secondary btn-sm" style={{ width: '100%', justifyContent: 'center', marginTop: 10, color: 'var(--mu)' }}
                 onClick={() => setModalCompTipo(null)}>

@@ -47,7 +47,24 @@ router.get('/status', async (req, res) => {
     const Afip = require('@afipsdk/afip.js');
     const afip = new Afip(getAfipConfig(cfg));
     const status = await afip.ElectronicBilling.getServerStatus();
-    res.json({ ok: true, status });
+
+    const ptoVta = parseInt(cfg.arca_punto_venta) || 1;
+    let lastVouchers = {};
+    try {
+      for (const [tipo, cod] of Object.entries(TIPOS_FACTURA)) {
+        lastVouchers[tipo] = await afip.ElectronicBilling.getLastVoucher(ptoVta, cod);
+      }
+    } catch (_) { /* no fatal si falla getLastVoucher */ }
+
+    res.json({
+      ok: true,
+      ambiente: cfg.arca_ambiente || 'dev',
+      cuit: cfg.arca_cuit || '',
+      punto_venta: ptoVta,
+      server: status,
+      ultimos_comprobantes: lastVouchers,
+      tiene_certificados: !!(cfg.arca_cert && cfg.arca_key),
+    });
   } catch (e) {
     res.json({ ok: false, error: e.message });
   }
@@ -67,6 +84,15 @@ router.post('/ventas/:id/facturar', requireRol('admin', 'supervisor', 'cajero'),
   const cfg = db.getConfig();
   if (!cfg.arca_access_token) return res.status(400).json({ error: 'Configurá ARCA en Ajustes' });
 
+  // Validar condición fiscal de la empresa vs tipo de factura
+  const condicionFiscalEmpresa = cfg.arca_condicion_fiscal || 'responsable_inscripto';
+  if (condicionFiscalEmpresa === 'monotributista' && tipo !== 'C') {
+    return res.status(400).json({ error: 'Los monotributistas solo pueden emitir Factura C' });
+  }
+  if (condicionFiscalEmpresa === 'exento' && tipo !== 'C') {
+    return res.status(400).json({ error: 'Los exentos solo pueden emitir Factura C' });
+  }
+
   try {
     const Afip = require('@afipsdk/afip.js');
     const afip = new Afip(getAfipConfig(cfg));
@@ -77,6 +103,17 @@ router.post('/ventas/:id/facturar', requireRol('admin', 'supervisor', 'cajero'),
     const voucherNumber = lastVoucher + 1;
 
     const cliente = venta.cliente_id ? db.findOne('clientes', venta.cliente_id) : null;
+
+    // Validar condición fiscal del cliente vs tipo de factura
+    if (cliente) {
+      const cliCondFiscal = cliente.condicion_fiscal || 'cf';
+      if (tipo === 'A' && cliCondFiscal !== 'ri') {
+        return res.status(400).json({ error: 'Factura A requiere un cliente Responsable Inscripto con CUIT' });
+      }
+    } else if (tipo === 'A') {
+      return res.status(400).json({ error: 'Factura A requiere un cliente registrado como Responsable Inscripto' });
+    }
+
     const docTipo = getDocTipo(cliente);
     const docNro = docTipo === 99 ? 0 : parseInt(String(cliente?.dni || '0').replace(/[-\s]/g, '')) || 0;
     const condicionIva = getCondicionIVA(tipo);
