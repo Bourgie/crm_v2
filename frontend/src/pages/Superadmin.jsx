@@ -1872,31 +1872,51 @@ export default function Superadmin() {
                   {/* ═══ Tab Integraciones ═══ */}
                   {empresaDetailTab === 'integraciones' && (
                     <div>
-                      {!empresaDetail?.integraciones?.habilitadas?.length ? (
-                        <div style={{textAlign:'center',padding:24,color:'var(--mu)'}}>Sin integraciones habilitadas para esta empresa.</div>
+                      {!empresaDetail?.integraciones?.todos_providers?.length ? (
+                        <div style={{textAlign:'center',padding:24,color:'var(--mu)'}}>No hay providers de integración configurados en el sistema.</div>
                       ) : (
                         <div style={{display:'flex',flexDirection:'column',gap:10}}>
-                          {empresaDetail?.integraciones?.habilitadas?.map(provider => {
-                            const estado = empresaDetail.integraciones.estados?.[provider] || {};
-                            const statusLabel = estado.status === 'connected' ? '🟢 Conectado' : estado.status === 'error' ? '🔴 Error' : '⚪ Desconectado';
+                          <div style={{display:'flex',gap:4,marginBottom:4}}>
+                            <button type="button" className="btn btn-sm btn-accent" style={{fontSize:11}}
+                              onClick={async () => {
+                                try {
+                                  await saApi('POST','/empresas/'+empresaDetail.codigo+'/integraciones/batch',{
+                                    providers: empresaDetail.integraciones.todos_providers.map(p=>({provider:p.provider,habilitado:p.en_plan}))
+                                  });
+                                  const u = await saApi('GET','/empresas/'+empresaDetail.codigo);
+                                  setEmpresaDetail(u);
+                                } catch(err) { alert(err.message) }
+                              }}>
+                              ⚡ Activar integraciones del plan
+                            </button>
+                          </div>
+                          {empresaDetail.integraciones.todos_providers.map(p => {
+                            const estado = empresaDetail.integraciones.estados?.[p.provider] || {};
                             const icons = {arca:'📄',mercadolibre:'🛒',tiendanube:'🛍️'};
                             const names = {arca:'ARCA / AFIP',mercadolibre:'MercadoLibre',tiendanube:'Tiendanube'};
                             return (
-                              <div key={provider} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:8,border:'1px solid var(--bd)',background:'var(--sf)'}}>
-                                <span style={{fontSize:20}}>{icons[provider]||'🔌'}</span>
+                              <div key={p.provider} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:8,border:'1px solid var(--bd)',background:'var(--sf)',opacity:p.habilitado?1:.6}}>
+                                <span style={{fontSize:20}}>{p.icono||icons[p.provider]||'🔌'}</span>
                                 <div style={{flex:1}}>
-                                  <div style={{fontWeight:600,fontSize:13}}>{names[provider]||provider}</div>
-                                  <div style={{fontSize:11,color:'var(--mu)'}}>
-                                    {statusLabel}
-                                    {estado.external_account_id ? ' · '+estado.external_account_id : ''}
-                                    {estado.last_sync ? ' · Sync: '+new Date(estado.last_sync).toLocaleDateString('es-AR') : ''}
+                                  <div style={{display:'flex',alignItems:'center',gap:6}}>
+                                    <span style={{fontWeight:600,fontSize:13}}>{p.nombre||names[p.provider]||p.provider}</span>
+                                    {p.en_plan && <span className="badge badge-blue" style={{fontSize:9}}>Plan</span>}
+                                    {p.habilitado && (
+                                      <span style={{fontSize:10,color:estado.status==='connected'?'var(--ok)':estado.status==='error'?'var(--bad)':'var(--mu)'}}>
+                                        {estado.status==='connected'?'🟢':estado.status==='error'?'🔴':'⚪'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div style={{fontSize:10,color:'var(--mu)'}}>
+                                    {estado.external_account_id ? estado.external_account_id+' · ' : ''}
+                                    {estado.last_sync ? 'Sync: '+new Date(estado.last_sync).toLocaleDateString('es-AR') : ''}
                                   </div>
                                 </div>
                                 <label style={{cursor:'pointer'}}>
-                                  <input type="checkbox" checked={true}
+                                  <input type="checkbox" checked={p.habilitado}
                                     onChange={async () => {
                                       try {
-                                        await saApi('POST','/empresas/'+empresaDetail.codigo+'/integraciones',{provider,habilitado:false});
+                                        await saApi('POST','/empresas/'+empresaDetail.codigo+'/integraciones',{provider:p.provider,habilitado:!p.habilitado});
                                         const u = await saApi('GET','/empresas/'+empresaDetail.codigo);
                                         setEmpresaDetail(u);
                                       } catch(err) { alert(err.message) }
