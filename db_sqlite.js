@@ -52,8 +52,8 @@ CREATE TABLE IF NOT EXISTS vendedores (
   data TEXT DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS clientes (
-  id TEXT PRIMARY KEY, nombre TEXT, apellido TEXT, dni TEXT,
-  tel TEXT, email TEXT, ciudad TEXT, bebe_nac TEXT, notas TEXT,
+  id TEXT PRIMARY KEY, nombre TEXT, apellido TEXT, dni TEXT UNIQUE,
+  tel TEXT UNIQUE, email TEXT UNIQUE, ciudad TEXT, bebe_nac TEXT, notas TEXT,
   lista INTEGER DEFAULT 1, limite_credito REAL DEFAULT 0,
   puntos INTEGER DEFAULT 0, suc_origen TEXT,
   activo INTEGER DEFAULT 1, creado TEXT,
@@ -586,6 +586,9 @@ try { sqlite.exec("CREATE TABLE IF NOT EXISTS email_tokens (id TEXT PRIMARY KEY,
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS consentimientos_empresa (id TEXT PRIMARY KEY, empresa_codigo TEXT NOT NULL, tipo TEXT NOT NULL, version TEXT NOT NULL, aceptado_por TEXT NOT NULL, ip TEXT, user_agent TEXT, creado TEXT NOT NULL)"); } catch(e) {}
 try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_consentimiento_empresa ON consentimientos_empresa(empresa_codigo, tipo)"); } catch(e) {}
 try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_email ON usuarios(email)"); } catch(e) {}
+try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_clientes_dni ON clientes(dni)"); } catch(e) {}
+try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_clientes_email ON clientes(email)"); } catch(e) {}
+try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_clientes_tel ON clientes(tel)"); } catch(e) {}
 }
 sqlite.prepare("INSERT OR REPLACE INTO schema_version(version) VALUES(?)").run(CURRENT_SCHEMA_VERSION);
 

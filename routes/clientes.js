@@ -76,12 +76,37 @@ router.post('/', validate(clienteSchema), (req,res) => {
   const db = _getDB(req);
   if(!req.body.nombre) return res.status(400).json({error:'Nombre obligatorio'});
   const { nombre, apellido, dni, tel, email, ciudad, bebe_nac, notas, lista, limite_credito, suc_origen, direccion, provincia, cp, fecha_nac, genero, categoria, vend_id, tipo_doc, web_id, puntos } = req.body;
+  if (dni) {
+    const dniExiste = db.where('clientes', c => c.dni === dni && c.activo !== false && c.activo != 0)[0];
+    if (dniExiste) return res.status(400).json({ error: 'El DNI/CUIT ya está registrado en otro cliente' });
+  }
+  if (email) {
+    const emailExiste = db.where('clientes', c => c.email?.toLowerCase() === email.toLowerCase() && c.activo !== false && c.activo != 0)[0];
+    if (emailExiste) return res.status(400).json({ error: 'El email ya está registrado en otro cliente' });
+  }
+  if (tel) {
+    const telExiste = db.where('clientes', c => c.tel === tel && c.activo !== false && c.activo != 0)[0];
+    if (telExiste) return res.status(400).json({ error: 'El teléfono ya está registrado en otro cliente' });
+  }
   const r = db.insert('clientes',{id:'c'+uid(),lista:lista??1,limite_credito:limite_credito??20000,activo:true,creado:new Date().toISOString(),nombre,apellido,dni,tel,email,ciudad,bebe_nac,notas,suc_origen,direccion,provincia,cp,fecha_nac,genero,categoria,vend_id,tipo_doc,web_id,puntos});
   try { const { dispararWebhooks } = require('./webhooks'); dispararWebhooks(db, 'cliente.creado', { cliente_id: r.id, nombre: r.nombre, tel: r.tel, email: r.email }); } catch(e) {}
   res.json(r);
 });
-router.put('/:id', (req,res) => {
+router.put('/:id', validate(clienteSchema), (req,res) => {
   const db = _getDB(req);
+  const { dni, email, tel } = req.body;
+  if (dni) {
+    const dniExiste = db.where('clientes', c => c.dni === dni && c.id !== req.params.id && c.activo !== false && c.activo != 0)[0];
+    if (dniExiste) return res.status(400).json({ error: 'El DNI/CUIT ya está registrado en otro cliente' });
+  }
+  if (email) {
+    const emailExiste = db.where('clientes', c => c.email?.toLowerCase() === email.toLowerCase() && c.id !== req.params.id && c.activo !== false && c.activo != 0)[0];
+    if (emailExiste) return res.status(400).json({ error: 'El email ya está registrado en otro cliente' });
+  }
+  if (tel) {
+    const telExiste = db.where('clientes', c => c.tel === tel && c.id !== req.params.id && c.activo !== false && c.activo != 0)[0];
+    if (telExiste) return res.status(400).json({ error: 'El teléfono ya está registrado en otro cliente' });
+  }
   const r=db.update('clientes',req.params.id,req.body);
   if(r){db.audit(req.user, null, 'clientes', 'editar', 'Edit cliente '+req.params.id, req.params.id);res.json({ok:true});}else{res.status(404).json({error:'No encontrado'});}
 });
