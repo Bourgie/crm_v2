@@ -244,9 +244,6 @@ export function Config() {
   const [emailTesting, setEmailTesting] = useState(false)
   const [emailTestRes, setEmailTestRes] = useState(null)
 
-  const [arcaTesting, setArcaTesting] = useState(false)
-  const [arcaTestRes, setArcaTestRes] = useState(null)
-
   useEffect(() => {
     api('GET', '/config').then((d) => {
       setForm((p) => ({ ...p, ...Object.fromEntries(Object.entries(d).filter(([,v])=>v!=null&&v!==undefined)) }))
@@ -292,42 +289,9 @@ export function Config() {
     finally { setEmailTesting(false) }
   }
 
-  function validarCUIT(cuit) {
-    const limpio = String(cuit || '').replace(/[-\s]/g, '')
-    if (!limpio) return null
-    if (!/^\d{11}$/.test(limpio)) return 'El CUIT debe tener 11 dígitos numéricos'
-    return null
-  }
-
-  async function testArca() {
-    if (!form.arca_access_token || form.arca_access_token === true) {
-      toast('Configurá el Access Token primero', 'err'); return
-    }
-    if (!form.arca_cuit) { toast('Configurá el CUIT', 'err'); return }
-    setArcaTesting(true); setArcaTestRes(null)
-    try {
-      const r = await api('GET', '/arca/status')
-      if (r.ok) {
-        const info = []
-        info.push(`Ambiente: ${r.ambiente === 'prod' ? 'Producción' : 'Desarrollo'}`)
-        info.push(`Punto de venta: ${r.punto_venta}`)
-        if (r.ultimos_comprobantes) {
-          info.push(`Últimos: ${Object.entries(r.ultimos_comprobantes).map(([t, n]) => `Factura ${t} #${n}`).join(', ')}`)
-        }
-        if (r.tiene_certificados) info.push('Certificados: cargados')
-        setArcaTestRes({ ok: true, msg: 'Conexión exitosa con AFIP', detail: info.join(' · ') })
-        toast('Conexión ARCA exitosa', 'ok')
-      } else {
-        setArcaTestRes({ ok: false, msg: r.error || 'Error desconocido' })
-        toast(r.error || 'Error al conectar', 'err')
-      }
-    } catch (e) { setArcaTestRes({ ok: false, msg: e.message }); toast(e.message, 'err') }
-    finally { setArcaTesting(false) }
-  }
-
   if (loading) return <Loader/>
 
-  const TABS = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['email','📧 Email'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['seguridad','🔒 Seguridad'],['webhooks','🔗 Webhooks'],['arca','📄 ARCA'],['tienda','🛒 Tienda'],['plan','📦 Plan'],['backups','💾 Backups'],['ayuda','🆘 Ayuda']]
+  const TABS = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['email','📧 Email'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['seguridad','🔒 Seguridad'],['webhooks','🔗 Webhooks'],['plan','📦 Plan'],['backups','💾 Backups'],['ayuda','🆘 Ayuda']]
 
   return (
     <div>
@@ -536,86 +500,6 @@ export function Config() {
 
         {tab==='webhooks' && <WebhooksTab api={api} toast={toast} />}
 
-        {tab==='arca' && (
-          <>
-            <div style={{background:'rgba(37,99,235,.06)',border:'1px solid rgba(37,99,235,.2)',borderRadius:8,padding:'10px 14px',fontSize:13,marginBottom:14}}>
-              📄 ARCA (ex AFIP) — Facturación electrónica. Necesitás un <strong>Access Token</strong> de <a href="https://app.afipsdk.com" target="_blank" rel="noopener" style={{color:'var(--ac)'}}>Afip SDK</a> para conectarte.
-              Modo desarrollo usa el CUIT 20-40937847-2 sin certificados. Para producción necesitás certificado digital.
-            </div>
-            <Field label="Condición fiscal de la empresa">
-              <select value={form.arca_condicion_fiscal || 'responsable_inscripto'} onChange={set('arca_condicion_fiscal')}>
-                <option value="responsable_inscripto">Responsable Inscripto — emite Factura A, B y C</option>
-                <option value="monotributista">Monotributista — solo Factura C</option>
-                <option value="exento">Exento — solo Factura C</option>
-              </select>
-            </Field>
-            <div className="fr">
-              <Field label="Access Token">
-                {form.arca_access_token === true ? (
-                  <div style={{display:'flex',alignItems:'center',gap:8,height:36}}>
-                    <span style={{fontSize:13,color:'var(--ok)',fontWeight:600}}>✅ Configurado</span>
-                    <button type="button" className="btn btn-xs" onClick={() => setForm(p => ({...p, arca_access_token: ''}))}>Cambiar</button>
-                  </div>
-                ) : (
-                  <input value={form.arca_access_token} onChange={set('arca_access_token')} placeholder="tu-access-token" style={{fontFamily:'monospace',fontSize:12}}/>
-                )}
-              </Field>
-              <Field label="CUIT">
-                <input value={form.arca_cuit} onChange={set('arca_cuit')} placeholder="20111111112" style={{fontFamily:'monospace'}}/>
-                {validarCUIT(form.arca_cuit) && (
-                  <div style={{fontSize:11,color:'var(--bad)',marginTop:4}}>{validarCUIT(form.arca_cuit)}</div>
-                )}
-              </Field>
-            </div>
-            <div className="fr">
-              <Field label="Punto de venta">
-                <input type="number" value={form.arca_punto_venta} onChange={set('arca_punto_venta')} min="1" placeholder="1"/>
-              </Field>
-              <Field label="Ambiente">
-                <select value={form.arca_ambiente} onChange={set('arca_ambiente')}>
-                  <option value="dev">🧪 Desarrollo (testing)</option>
-                  <option value="prod">🚀 Producción</option>
-                </select>
-              </Field>
-              <Field label="IVA %">
-                <input type="number" value={form.arca_iva_pct} onChange={set('arca_iva_pct')} min="0" max="100" placeholder="21"/>
-              </Field>
-            </div>
-            <Field label="Certificado (solo producción)">
-              {form.arca_cert === true ? (
-                <div style={{display:'flex',alignItems:'center',gap:8,height:36}}>
-                  <span style={{fontSize:13,color:'var(--ok)',fontWeight:600}}>✅ Configurado</span>
-                  <button type="button" className="btn btn-xs" onClick={() => setForm(p => ({...p, arca_cert: ''}))}>Cambiar</button>
-                </div>
-              ) : (
-                <textarea value={form.arca_cert} onChange={set('arca_cert')} rows={4} placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----" style={{fontSize:11,fontFamily:'monospace'}}/>
-              )}
-            </Field>
-            <Field label="Clave privada (solo producción)">
-              {form.arca_key === true ? (
-                <div style={{display:'flex',alignItems:'center',gap:8,height:36}}>
-                  <span style={{fontSize:13,color:'var(--ok)',fontWeight:600}}>✅ Configurado</span>
-                  <button type="button" className="btn btn-xs" onClick={() => setForm(p => ({...p, arca_key: ''}))}>Cambiar</button>
-                </div>
-              ) : (
-                <textarea value={form.arca_key} onChange={set('arca_key')} rows={4} placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----" style={{fontSize:11,fontFamily:'monospace'}}/>
-              )}
-            </Field>
-            {arcaTestRes && (
-              <div style={{padding:'10px 14px',borderRadius:8,fontSize:12,
-                background:arcaTestRes.ok?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)',
-                border:'1px solid '+(arcaTestRes.ok?'rgba(34,197,94,.3)':'rgba(239,68,68,.3)'),
-                color:arcaTestRes.ok?'var(--ok)':'var(--bad)',marginBottom:8}}>
-                {arcaTestRes.ok ? '✅ ' : '❌ '}{arcaTestRes.msg}
-                {arcaTestRes.detail && <div style={{fontSize:11,marginTop:2,opacity:.8}}>{arcaTestRes.detail}</div>}
-              </div>
-            )}
-            <button type="button" className="btn btn-secondary" onClick={testArca} disabled={arcaTesting} style={{marginTop:4}}>
-              {arcaTesting ? '⏳ Probando...' : '🔌 Probar Conexión ARCA'}
-            </button>
-          </>
-        )}
-
         {tab==='plan' && (
           <PlanTab api={api} toast={toast}/>
         )}
@@ -626,10 +510,6 @@ export function Config() {
 
         {tab==='backups' && (
           <BackupsTab api={api} toast={toast}/>
-        )}
-
-        {tab==='tienda' && (
-          <TiendaTab api={api} toast={toast} form={form} set={set} allSucs={allSucs} cfg={cfg} setForm={setForm} />
         )}
 
         {tab==='ayuda' && (
@@ -1456,170 +1336,5 @@ function BackupsTab({ api, toast }) {
   )
 }
 
-function TiendaSection({ id, icon, label, fields, configurado, openSection, setOpenSection, syncing, doPush, doPull }) {
-  const isOpen = openSection === id
-  return (
-    <div style={{border:'1px solid var(--bd)',borderRadius:10,marginBottom:10,overflow:'hidden'}}>
-      <div onClick={() => setOpenSection(isOpen ? null : id)} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',cursor:'pointer',background:'var(--sf)',userSelect:'none',borderBottom: isOpen ? '1px solid var(--bd)' : 'none'}}>
-        <span style={{fontSize:12,opacity:.6}}>{isOpen ? '▼' : '▶'}</span>
-        <span style={{fontSize:18}}>{icon}</span>
-        <span style={{fontWeight:600,fontSize:13,flex:1}}>{label}</span>
-        <span style={{fontSize:11,color: configurado ? 'var(--ok)' : 'var(--mu)'}}>{configurado ? '✅ Configurado' : '❌ Sin configurar'}</span>
-      </div>
-      {isOpen && (
-        <div style={{padding:'10px 14px'}}>
-          {fields}
-          <div style={{display:'flex',gap:8,marginTop:12,flexWrap:'wrap'}}>
-            <button type="button" className="btn btn-primary btn-sm" disabled={syncing} onClick={() => doPush(id)}>📤 Push stock</button>
-            <button type="button" className="btn btn-secondary btn-sm" disabled={syncing} onClick={() => doPull(id)}>📥 Pull pedidos</button>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
-function TiendaTab({ api, toast, form, set, allSucs, setForm }) {
-  const [openSection, setOpenSection] = useState('woocommerce')
-  const [syncing, setSyncing] = useState(false)
-
-  useEffect(() => {
-    api('POST', '/sync-tienda/ensure-sucursal').catch(() => {})
-  }, [])
-
-  async function doPush(p) {
-    setSyncing(true)
-    try {
-      const r = p ? await api('POST', `/sync-tienda/push-stock/${p}`) : await api('POST', '/sync-tienda/push-stock')
-      const res = p ? { [p]: r } : r.results
-      const msgs = Object.entries(res).map(([k, v]) => `${k}: ${v.ok||0} OK, ${v.fail||0} fail`)
-      toast(`✅ Stock sincronizado\n${msgs.join('\n')}`, 'ok')
-      if (r.errors?.length) console.warn('Errores sync:', r.errors.slice(0, 5))
-      const cfg = await api('GET', '/config')
-      setForm(prev => ({ ...prev, tienda_ultima_sync: cfg.tienda_ultima_sync }))
-    } catch (e) { toast('⚠️ ' + e.message, 'err') }
-    setSyncing(false)
-  }
-
-  async function doPull(p) {
-    setSyncing(true)
-    try {
-      const r = p ? await api('POST', `/sync-tienda/pull-orders/${p}`) : await api('POST', '/sync-tienda/pull-orders')
-      const res = p ? { [p]: r } : r.results
-      const msgs = Object.entries(res).map(([k, v]) => `${k}: ${v.importadas||0} pedidos`)
-      toast(`📥 ${msgs.join(' | ')}`, 'ok')
-    } catch (e) { toast('⚠️ ' + e.message, 'err') }
-    setSyncing(false)
-  }
-
-  return (
-    <>
-      <div style={{background:'rgba(37,99,235,.06)',border:'1px solid rgba(37,99,235,.2)',borderRadius:8,padding:'10px 14px',fontSize:13,marginBottom:14}}>
-        🛒 Sincronización multiplataforma. Configurá una o más tiendas. El stock se toma de la sucursal <strong>Tienda Online</strong> (creada automáticamente) — transferí stock desde la sucursal física usando <strong>Transferencias</strong>.
-      </div>
-
-      <TiendaSection
-        id="woocommerce"
-        icon="🟣"
-        label="WooCommerce"
-        configurado={!!(form.tienda_woo_url && form.tienda_woo_key && form.tienda_woo_secret)}
-        openSection={openSection} setOpenSection={setOpenSection} syncing={syncing} doPush={doPush} doPull={doPull}
-        fields={<>
-          <Field label="URL de la tienda">
-            <input value={form.tienda_woo_url} onChange={set('tienda_woo_url')} placeholder="https://tutienda.com" style={{fontFamily:'monospace',fontSize:12}}/>
-          </Field>
-          <div className="fr">
-            <Field label="Consumer Key">
-              <input value={form.tienda_woo_key} onChange={set('tienda_woo_key')} placeholder="ck_..." style={{fontFamily:'monospace',fontSize:11}}/>
-            </Field>
-            <Field label="Consumer Secret">
-              <input value={form.tienda_woo_secret} onChange={set('tienda_woo_secret')} placeholder="cs_..." style={{fontFamily:'monospace',fontSize:11}}/>
-            </Field>
-          </div>
-        </>}
-      />
-
-      <TiendaSection
-        id="tiendanube"
-        icon="🔵"
-        label="Tienda Nube"
-        configurado={!!(form.tienda_tn_store_id && form.tienda_tn_access_token)}
-        openSection={openSection} setOpenSection={setOpenSection} syncing={syncing} doPush={doPush} doPull={doPull}
-        fields={<>
-          <div className="fr">
-            <Field label="Store ID">
-              <input value={form.tienda_tn_store_id} onChange={set('tienda_tn_store_id')} placeholder="123456" style={{fontFamily:'monospace',fontSize:12}}/>
-            </Field>
-            <Field label="Access Token">
-              <input value={form.tienda_tn_access_token} onChange={set('tienda_tn_access_token')} placeholder="bearer token" style={{fontFamily:'monospace',fontSize:11}}/>
-            </Field>
-          </div>
-        </>}
-      />
-
-      <TiendaSection
-        id="mercadolibre"
-        icon="🟡"
-        label="MercadoLibre"
-        configurado={!!(form.tienda_meli_access_token && form.tienda_meli_seller_id)}
-        openSection={openSection} setOpenSection={setOpenSection} syncing={syncing} doPush={doPush} doPull={doPull}
-        fields={<>
-          <div style={{fontSize:11,color:'var(--mu)',marginBottom:10}}>Necesitás crear una aplicación en <a href="https://developers.mercadolibre.com" target="_blank" rel="noopener" style={{color:'var(--ac)'}}>developers.mercadolibre.com</a> para obtener APP ID y Client Secret.</div>
-          <div className="fr">
-            <Field label="APP ID">
-              <input value={form.tienda_meli_app_id} onChange={set('tienda_meli_app_id')} placeholder="..." style={{fontFamily:'monospace',fontSize:12}}/>
-            </Field>
-            <Field label="Client Secret">
-              <input value={form.tienda_meli_client_secret} onChange={set('tienda_meli_client_secret')} placeholder="..." style={{fontFamily:'monospace',fontSize:11}}/>
-            </Field>
-          </div>
-          <div className="fr">
-            <Field label="Seller ID">
-              <input value={form.tienda_meli_seller_id} onChange={set('tienda_meli_seller_id')} placeholder="..." style={{fontFamily:'monospace',fontSize:12}}/>
-            </Field>
-            <Field label="User ID">
-              <input value={form.tienda_meli_user_id} onChange={set('tienda_meli_user_id')} placeholder="opcional" style={{fontFamily:'monospace',fontSize:12}}/>
-            </Field>
-          </div>
-          <Field label="Access Token">
-            <input value={form.tienda_meli_access_token} onChange={set('tienda_meli_access_token')} placeholder="token..." style={{fontFamily:'monospace',fontSize:11}}/>
-          </Field>
-          <Field label="Refresh Token">
-            <input value={form.tienda_meli_refresh_token} onChange={set('tienda_meli_refresh_token')} placeholder="refresh..." style={{fontFamily:'monospace',fontSize:11}}/>
-          </Field>
-          {form.tienda_meli_expires_at && (
-            <div style={{fontSize:11,color:'var(--mu)',marginTop:4}}>Expira: {new Date(form.tienda_meli_expires_at).toLocaleString('es-AR')}</div>
-          )}
-          <div style={{display:'flex',gap:8,marginTop:8,flexWrap:'wrap'}}>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={async () => {
-              const empresa = (await api('GET', '/config')).empresa || 'default'
-              try {
-                const r = await api('GET', `/sync-tienda/meli/auth-url?empresa=${encodeURIComponent(empresa)}`)
-                window.open(r.url, '_blank', 'width=600,height=700')
-              } catch (e) { toast('⚠️ ' + e.message, 'err') }
-            }}>🔗 Obtener token ML</button>
-            <button type="button" className="btn btn-secondary btn-sm" onClick={async () => {
-              try {
-                await api('POST', '/sync-tienda/meli/refresh')
-                toast('✅ Token refrescado', 'ok')
-                const cfg = await api('GET', '/config')
-                setForm(prev => ({ ...prev, tienda_meli_access_token: cfg.tienda_meli_access_token, tienda_meli_refresh_token: cfg.tienda_meli_refresh_token, tienda_meli_expires_at: cfg.tienda_meli_expires_at }))
-              } catch (e) { toast('⚠️ ' + e.message, 'err') }
-            }}>🔄 Refrescar token</button>
-          </div>
-        </>}
-      />
-
-      {form.tienda_ultima_sync && (
-        <div style={{fontSize:12,color:'var(--mu)',marginTop:8,marginBottom:12}}>
-          Última sincronización: {new Date(form.tienda_ultima_sync).toLocaleString('es-AR')}
-        </div>
-      )}
-      <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
-        <button type="button" className="btn btn-primary" disabled={syncing} onClick={() => doPush(null)}>🔄 Sincronizar TODO</button>
-        <button type="button" className="btn btn-secondary" disabled={syncing} onClick={() => doPull(null)}>📥 Importar TODO</button>
-      </div>
-    </>
-  )
-}
 

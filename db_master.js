@@ -297,6 +297,8 @@ try { master.exec("ALTER TABLE superadmin ADD COLUMN must_change_password INTEGE
 try { master.prepare("UPDATE superadmin SET email='admin@flexcrm.local' WHERE email IS NULL").run(); } catch(e) {}
 // Migration: unique index on admin_email
 try { master.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_empresas_admin_email ON empresas(admin_email)"); } catch(e) {}
+// Migration: integraciones column in planes
+try { master.exec("ALTER TABLE planes ADD COLUMN integraciones TEXT DEFAULT '[]'"); } catch(e) {}
 
 // Seed superadmin if not exists
 const sa = master.prepare("SELECT id FROM superadmin LIMIT 1").get();
@@ -370,46 +372,50 @@ if(planCount === 0) {
     {
       id:'plan_trial', codigo:'trial', nombre:'Prueba (14 días)', precio:0, orden:0,
       modulos:JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','reportes']),
-      limites:JSON.stringify({usuarios_max:5, sucursales_max:1})
+      limites:JSON.stringify({usuarios_max:5, sucursales_max:1}),
+      integraciones:JSON.stringify([])
     },
     {
       id:'plan_basic', codigo:'basic', nombre:'Básico', precio:15, orden:1,
       modulos:JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','proveedores','gastos','reportes']),
-      limites:JSON.stringify({usuarios_max:3, sucursales_max:1})
+      limites:JSON.stringify({usuarios_max:3, sucursales_max:1}),
+      integraciones:JSON.stringify([])
     },
     {
       id:'plan_pro', codigo:'pro', nombre:'Pro', precio:40, orden:2,
       modulos:JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda']),
-      limites:JSON.stringify({usuarios_max:10, sucursales_max:3})
+      limites:JSON.stringify({usuarios_max:10, sucursales_max:3}),
+      integraciones:JSON.stringify(['arca','mercadolibre','tiendanube'])
     },
     {
       id:'plan_enterprise', codigo:'enterprise', nombre:'Enterprise', precio:90, orden:3,
       modulos:JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','listabebe','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda']),
-      limites:JSON.stringify({usuarios_max:999, sucursales_max:999})
+      limites:JSON.stringify({usuarios_max:999, sucursales_max:999}),
+      integraciones:JSON.stringify(['arca','mercadolibre','tiendanube'])
     },
   ];
-  const stmtPlan = master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,modulos,limites,orden) VALUES (?,?,?,?,?,?,?)");
-  PLANES_DEFAULT.forEach(p => stmtPlan.run(p.id,p.codigo,p.nombre,p.precio,p.modulos,p.limites,p.orden));
+  const stmtPlan = master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,modulos,limites,integraciones,orden) VALUES (?,?,?,?,?,?,?,?)");
+  PLANES_DEFAULT.forEach(p => stmtPlan.run(p.id,p.codigo,p.nombre,p.precio,p.modulos,p.limites,p.integraciones,p.orden));
   console.log('✓ Planes por defecto sembrados:', PLANES_DEFAULT.length);
 }
 
 // Ensure plan_trial always exists
-master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,modulos,limites,orden) VALUES ('plan_trial','trial','Prueba (14 dias)',0,?,?,0)")
-  .run(JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','reportes']), JSON.stringify({usuarios_max:5, sucursales_max:1}));
+master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,modulos,limites,integraciones,orden) VALUES ('plan_trial','trial','Prueba (14 dias)',0,?,?,?,0)")
+  .run(JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','reportes']), JSON.stringify({usuarios_max:5, sucursales_max:1}), JSON.stringify([]));
 
 // Seed annual plans
-master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,periodo,modulos,limites,orden) VALUES (?,?,?,?,?,?,?,?)")
+master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,periodo,modulos,limites,integraciones,orden) VALUES (?,?,?,?,?,?,?,?,?)")
   .run('plan_basic_anual','basic_anual','Básico Anual',150,'anual',
     JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','proveedores','gastos','reportes']),
-    JSON.stringify({usuarios_max:3, sucursales_max:1}), 10);
-master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,periodo,modulos,limites,orden) VALUES (?,?,?,?,?,?,?,?)")
+    JSON.stringify({usuarios_max:3, sucursales_max:1}), JSON.stringify([]), 10);
+master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,periodo,modulos,limites,integraciones,orden) VALUES (?,?,?,?,?,?,?,?,?)")
   .run('plan_pro_anual','pro_anual','Pro Anual',400,'anual',
     JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda']),
-    JSON.stringify({usuarios_max:10, sucursales_max:3}), 20);
-master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,periodo,modulos,limites,orden) VALUES (?,?,?,?,?,?,?,?)")
+    JSON.stringify({usuarios_max:10, sucursales_max:3}), JSON.stringify(['arca','mercadolibre','tiendanube']), 20);
+master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,periodo,modulos,limites,integraciones,orden) VALUES (?,?,?,?,?,?,?,?,?)")
   .run('plan_enterprise_anual','enterprise_anual','Enterprise Anual',900,'anual',
     JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','listabebe','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda']),
-    JSON.stringify({usuarios_max:999, sucursales_max:999}), 30);
+    JSON.stringify({usuarios_max:999, sucursales_max:999}), JSON.stringify(['arca','mercadolibre','tiendanube']), 30);
 
 // Seed default modules
 var modCount = master.prepare("SELECT COUNT(*) as n FROM modulos").get().n;
@@ -437,11 +443,11 @@ if(modCount === 0) {
 var planCount = master.prepare("SELECT COUNT(*) as n FROM planes").get().n;
 if(planCount === 0) {
   var PLANES = [
-    ['plan_basic','basic','Basico',15,JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','proveedores','gastos','reportes']),JSON.stringify({usuarios_max:3,sucursales_max:1}),1],
-    ['plan_pro','pro','Pro',40,JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline']),JSON.stringify({usuarios_max:10,sucursales_max:3}),2],
-    ['plan_enterprise','enterprise','Enterprise',90,JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','listabebe','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline']),JSON.stringify({usuarios_max:999,sucursales_max:999}),3],
+    ['plan_basic','basic','Basico',15,JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','proveedores','gastos','reportes']),JSON.stringify({usuarios_max:3,sucursales_max:1}),JSON.stringify([]),1],
+    ['plan_pro','pro','Pro',40,JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline']),JSON.stringify({usuarios_max:10,sucursales_max:3}),JSON.stringify(['arca','mercadolibre','tiendanube']),2],
+    ['plan_enterprise','enterprise','Enterprise',90,JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','listabebe','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline']),JSON.stringify({usuarios_max:999,sucursales_max:999}),JSON.stringify(['arca','mercadolibre','tiendanube']),3],
   ];
-  var sp = master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,modulos,limites,activo,orden) VALUES (?,?,?,?,?,?,1,?)");
+  var sp = master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,modulos,limites,integraciones,activo,orden) VALUES (?,?,?,?,?,?,?,1,?)");
   PLANES.forEach(p=>sp.run(...p));
   console.log('✓ Planes sembrados:', PLANES.length);
 }
@@ -456,12 +462,12 @@ if(!def) {
 
 function getPlanes() {
   return master.prepare("SELECT * FROM planes WHERE activo=1 ORDER BY orden").all()
-    .map(p => ({...p, modulos: JSON.parse(p.modulos||'[]'), limites: JSON.parse(p.limites||'{}')}));
+    .map(p => ({...p, modulos: JSON.parse(p.modulos||'[]'), limites: JSON.parse(p.limites||'{}'), integraciones: JSON.parse(p.integraciones||'[]')}));
 }
 function getPlan(id_or_codigo) {
   const p = master.prepare("SELECT * FROM planes WHERE id=? OR codigo=?").get(id_or_codigo, id_or_codigo);
   if(!p) return null;
-  return {...p, modulos: JSON.parse(p.modulos||'[]'), limites: JSON.parse(p.limites||'{}')};
+  return {...p, modulos: JSON.parse(p.modulos||'[]'), limites: JSON.parse(p.limites||'{}'), integraciones: JSON.parse(p.integraciones||'[]')};
 }
 function getModulos() {
   return master.prepare("SELECT * FROM modulos WHERE activo=1 ORDER BY orden").all();
@@ -873,6 +879,17 @@ function setEmpresaIntegracionesBatch(empresaId, providers) {
   providers.forEach(({ provider, habilitado }) => setEmpresaIntegracion(empresaId, provider, habilitado));
 }
 
+function syncEmpresaIntegracionesDesdePlan(empresaId, planId) {
+  const plan = getPlan(planId);
+  if (!plan) return;
+  const integracionesPlan = plan.integraciones || [];
+  const allProviders = getOAuthProviders().map(p => p.provider);
+  for (const provider of allProviders) {
+    const habilitado = integracionesPlan.includes(provider);
+    setEmpresaIntegracion(empresaId, provider, habilitado);
+  }
+}
+
 // Seed oauth_providers
 const provCount = master.prepare("SELECT COUNT(*) as n FROM oauth_providers").get().n;
 if (provCount === 0) {
@@ -886,4 +903,4 @@ if (provCount === 0) {
 }
 
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
-module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado, getOAuthProviders, getOAuthProvider, upsertOAuthProvider, getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas, setEmpresaIntegracion, setEmpresaIntegracionesBatch };
+module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado, getOAuthProviders, getOAuthProvider, upsertOAuthProvider, getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas, setEmpresaIntegracion, setEmpresaIntegracionesBatch, syncEmpresaIntegracionesDesdePlan };

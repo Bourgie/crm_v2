@@ -15,7 +15,8 @@ const { master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa,
         logAppEvent, getAppStats,
         getOAuthProviders, getOAuthProvider,
         getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas,
-        setEmpresaIntegracion, setEmpresaIntegracionesBatch } = require('../db_master');
+        setEmpresaIntegracion, setEmpresaIntegracionesBatch,
+        syncEmpresaIntegracionesDesdePlan } = require('../db_master');
 const { getEmpresaDB } = require('../db_sqlite');
 const { validate, superadminLoginSchema } = require('../middleware/validate');
 
@@ -360,7 +361,21 @@ router.get('/empresas/:codigo', superAuth, (req, res) => {
 
     // Integration Center info
     const habilitadas = getEmpresaIntegracionesHabilitadas(e.id);
-    const integraciones = { habilitadas, estados: {} };
+    const allProviders = getOAuthProviders();
+    const plan = e.plan_id ? getPlan(e.plan_id) : null;
+    const planIntegraciones = plan ? plan.integraciones || [] : [];
+    const integraciones = {
+      habilitadas,
+      estados: {},
+      todos_providers: allProviders.map(p => ({
+        provider: p.provider,
+        nombre: p.nombre,
+        icono: p.icono,
+        habilitado: habilitadas.includes(p.provider),
+        en_plan: planIntegraciones.includes(p.provider),
+      })),
+      plan_integraciones: planIntegraciones,
+    };
     for (const provider of habilitadas) {
       try {
         const row = db.raw.prepare("SELECT * FROM company_integrations WHERE provider = ?").get(provider);
@@ -491,6 +506,7 @@ router.post('/empresas', superAuth, async (req, res) => {
       'Tu empresa fue creada. Revisá tu email para activar la cuenta y configurar tu negocio.',
       new Date().toISOString(), '{}');
   } catch(e) { /* non-blocking */ }
+  try { syncEmpresaIntegracionesDesdePlan(id, plan?.id); } catch(_) {}
   res.json({id, ok:true});
 });
 
@@ -505,6 +521,10 @@ router.put('/empresas/:id', superAuth, (req, res) => {
         vencimiento||e.vencimiento, usuarios_max||e.usuarios_max, sucursales_max||e.sucursales_max,
         JSON.stringify(modulos_extra||[]), JSON.stringify(modulos_bloqueados||[]), e.id);
     saAudit(req.sadmin.id, 'editar_empresa', e.id, 'Edit: '+(nombre||e.nombre));
+    // Sync integraciones when plan changes
+    if (plan_id && plan_id !== e.plan_id) {
+      try { syncEmpresaIntegracionesDesdePlan(e.id, plan_id); } catch(_) {}
+    }
     res.json({ok:true});
   } catch(err) {
     console.error('[EditEmpresa] Error:', err.message);
