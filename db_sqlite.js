@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS sucursales (
   data TEXT DEFAULT '{}'
 );
 CREATE TABLE IF NOT EXISTS usuarios (
-  id TEXT PRIMARY KEY, nombre TEXT, usuario TEXT UNIQUE, email TEXT,
+  id TEXT PRIMARY KEY, nombre TEXT, usuario TEXT UNIQUE, email TEXT UNIQUE,
   password TEXT, rol TEXT, roles TEXT DEFAULT '[]',
   suc_id TEXT, suc_sesiones_permitidas TEXT DEFAULT '[]',
   activo INTEGER DEFAULT 1, creado TEXT,
@@ -585,6 +585,7 @@ try { sqlite.exec("ALTER TABLE usuarios ADD COLUMN email_verificado INTEGER DEFA
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS email_tokens (id TEXT PRIMARY KEY, usuario_id TEXT NOT NULL, email TEXT, token_hash TEXT NOT NULL, expires TEXT, usado INTEGER DEFAULT 0, creado TEXT)"); } catch(e) {}
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS consentimientos_empresa (id TEXT PRIMARY KEY, empresa_codigo TEXT NOT NULL, tipo TEXT NOT NULL, version TEXT NOT NULL, aceptado_por TEXT NOT NULL, ip TEXT, user_agent TEXT, creado TEXT NOT NULL)"); } catch(e) {}
 try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_consentimiento_empresa ON consentimientos_empresa(empresa_codigo, tipo)"); } catch(e) {}
+try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_email ON usuarios(email)"); } catch(e) {}
 }
 sqlite.prepare("INSERT OR REPLACE INTO schema_version(version) VALUES(?)").run(CURRENT_SCHEMA_VERSION);
 

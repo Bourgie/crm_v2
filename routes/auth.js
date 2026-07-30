@@ -559,6 +559,10 @@ router.post('/usuarios', authMiddleware, requireRol('admin'), validate(createUse
   if (!nombre || !usuario || !password) return res.status(400).json({ error: 'Nombre, usuario y contraseña requeridos' });
   const existe = db.where('usuarios', u => u.usuario === usuario)[0];
   if (existe) return res.status(400).json({ error: 'El usuario ya existe' });
+  if (email) {
+    const emailExiste = db.where('usuarios', u => u.email?.toLowerCase() === email.toLowerCase() && u.activo !== false && u.activo != 0)[0];
+    if (emailExiste) return res.status(400).json({ error: 'El email ya está en uso por otro usuario' });
+  }
   try {
     const { getEmpresa } = require('../db_master');
     const empresa = getEmpresa(req.user.empresa || 'default');
@@ -838,10 +842,19 @@ router.get('/signup/check-codigo/:codigo', (req, res) => {
 // PUT /api/auth/usuarios/:id
 router.put('/usuarios/:id', authMiddleware, requireRol('admin'), async (req, res) => {
   const db = _getDB(req);
-  const { nombre, email, rol, suc_id, password } = req.body;
+  const { nombre, email, rol, suc_id, password, usuario } = req.body;
   const roles = req.body.roles;
   const suc_sesiones_permitidas = req.body.suc_sesiones_permitidas;
+  if (usuario) {
+    const userExiste = db.where('usuarios', u => u.usuario === usuario && u.id !== req.params.id)[0];
+    if (userExiste) return res.status(400).json({ error: 'El nombre de usuario ya existe' });
+  }
+  if (email) {
+    const emailExiste = db.where('usuarios', u => u.email?.toLowerCase() === email.toLowerCase() && u.id !== req.params.id && u.activo !== false && u.activo != 0)[0];
+    if (emailExiste) return res.status(400).json({ error: 'El email ya está en uso por otro usuario' });
+  }
   const upd = { nombre, email, rol, suc_id: suc_id || null };
+  if (usuario) upd.usuario = usuario;
   if (Array.isArray(roles) && roles.length) upd.roles = roles;
   if (Array.isArray(suc_sesiones_permitidas)) upd.suc_sesiones_permitidas = suc_sesiones_permitidas;
   if (password && password.length >= 8) {

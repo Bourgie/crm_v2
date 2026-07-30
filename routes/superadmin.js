@@ -364,6 +364,10 @@ router.post('/empresas', superAuth, async (req, res) => {
   if(!codigo||!nombre) return res.status(400).json({error:'Código y nombre requeridos'});
   if(!/^[a-z0-9_]+$/.test(codigo)) return res.status(400).json({error:'Solo minúsculas, números y _'});
   if(getEmpresa(codigo)) return res.status(400).json({error:'Ese código ya existe'});
+  if (admin_email) {
+    const emailExiste = master.prepare("SELECT codigo FROM empresas WHERE LOWER(admin_email)=LOWER(?)").get(admin_email.trim().toLowerCase());
+    if (emailExiste) return res.status(400).json({ error: 'Ya existe una empresa con ese email.' });
+  }
   
   const plan = plan_id ? getPlan(plan_id) : getPlan('basic');
   const limites = plan ? plan.limites : {};
@@ -624,6 +628,11 @@ router.post('/empresas/from-backup', superAuth, (req, res) => {
   if (!codigo || !nombre || !backup_file) return res.status(400).json({ error: 'Codigo, nombre y archivo de backup requeridos' });
   if (!/^[a-z0-9_]+$/.test(codigo)) return res.status(400).json({ error: 'Solo minusculas, numeros y _' });
   if (getEmpresa(codigo)) return res.status(400).json({ error: 'Ese codigo ya existe' });
+  const admin_email = req.sadmin?.email;
+  if (admin_email) {
+    const emailExiste = master.prepare("SELECT codigo FROM empresas WHERE LOWER(admin_email)=LOWER(?)").get(admin_email.trim().toLowerCase());
+    if (emailExiste) return res.status(400).json({ error: 'Ya existe una empresa con ese email.' });
+  }
 
   const fs = require('fs');
   const path = require('path');
@@ -638,7 +647,7 @@ router.post('/empresas/from-backup', superAuth, (req, res) => {
     fs.copyFileSync(backupPath, destPath);
 
     // Create empresa in master DB
-    createEmpresa({ codigo, nombre, rubro: rubro || 'general', plan_id: plan_id || 'plan_basic', admin_email: req.sadmin?.email || '', vencimiento: null, usuarios_max: 5, sucursales_max: 1 });
+    createEmpresa({ codigo, nombre, rubro: rubro || 'general', plan_id: plan_id || 'plan_basic', admin_email: admin_email || '', vencimiento: null, usuarios_max: 5, sucursales_max: 1 });
 
     saAudit(req.sadmin.id, 'crear_desde_backup', codigo, `Empresa restaurada desde backup: ${backup_file}`);
     res.json({ ok: true, codigo, mensaje: 'Empresa creada desde backup' });

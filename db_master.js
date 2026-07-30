@@ -53,7 +53,7 @@ master.exec(`
     activo INTEGER DEFAULT 1,
     creado TEXT,
     vencimiento TEXT,
-    admin_email TEXT,
+    admin_email TEXT UNIQUE,
     usuarios_max INTEGER DEFAULT 5,
     sucursales_max INTEGER DEFAULT 2,
     modulos_extra TEXT DEFAULT '[]',
@@ -271,6 +271,8 @@ try { master.exec("ALTER TABLE superadmin ADD COLUMN data TEXT DEFAULT '{}'"); }
 try { master.exec("ALTER TABLE superadmin ADD COLUMN must_change_password INTEGER DEFAULT 0"); } catch(e) {}
 // Fix superadmin with null email
 try { master.prepare("UPDATE superadmin SET email='admin@flexcrm.local' WHERE email IS NULL").run(); } catch(e) {}
+// Migration: unique index on admin_email
+try { master.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_empresas_admin_email ON empresas(admin_email)"); } catch(e) {}
 
 // Seed superadmin if not exists
 const sa = master.prepare("SELECT id FROM superadmin LIMIT 1").get();
