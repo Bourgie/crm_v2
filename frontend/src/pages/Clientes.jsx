@@ -201,7 +201,7 @@ function ModalMerge({ open, onClose, clientes, onMerge }) {
       <p style={{ fontSize: 13, color: 'var(--mu)', marginBottom: 14 }}>
         Todos los datos del cliente <strong>origen</strong> (ventas, ctacte, pedidos, puntos) pasarán al <strong>destino</strong>. El origen se dará de baja.
       </p>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <ClienteSelect value={origen} onChange={setOrigen} search={searchO} setSearch={setSearchO} label="📤 Cliente origen" clientes={clientes} />
         <ClienteSelect value={destino} onChange={setDestino} search={searchD} setSearch={setSearchD} label="📥 Cliente destino" clientes={clientes} />
       </div>
@@ -546,7 +546,7 @@ export function Clientes() {
               {fichaLoading ? <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}><div className="spinner" /></div> : fichaData && (
                 <>
                   {/* Stats */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 8, marginBottom: 14 }}>
+                  <div className="grid-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(120px,1fr))', gap: 8, marginBottom: 14 }}>
                     {[
                       { label: 'Total comprado', value: fmt(fichaData.stats.total_compras || 0), color: 'var(--ac)' },
                       { label: 'N° compras', value: fichaData.stats.n_ventas || 0 },
@@ -653,7 +653,7 @@ export function Clientes() {
                     <div>
                       {fichaData.ctacte ? (
                         <>
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                          <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
                             <div style={{ background: 'var(--sf)', borderRadius: 8, padding: '8px 12px', textAlign: 'center' }}>
                               <div style={{ fontSize: 10, color: 'var(--mu)' }}>Saldo actual</div>
                               <div style={{ fontWeight: 800, fontSize: 18, color: fichaData.ctacte.saldo > 0 ? 'var(--bad)' : 'var(--ok)' }}>

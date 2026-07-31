@@ -266,7 +266,7 @@ export function Presupuestos() {
         <div style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 8 }}>Ítems</div>
           {formItems.map((line, i) => (
-            <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 80px 120px auto', gap: 8, marginBottom: 6, alignItems: 'end' }}>
+            <div key={i} className="grid-item-form" style={{ display: 'grid', gridTemplateColumns: '2fr 80px 120px auto', gap: 8, marginBottom: 6, alignItems: 'end' }}>
               <div style={{ position: 'relative' }}>
                 {i === 0 && <label style={{ display: 'block', fontSize: 11, color: 'var(--mu)', marginBottom: 4 }}>Descripción</label>}
                 <input value={line.nombre} onChange={(e) => { setLine(i, 'nombre', e.target.value); setProdSearch(e.target.value) }}

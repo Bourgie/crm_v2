@@ -215,6 +215,10 @@ tbody tr:last-child td { border-bottom: none; }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .grid-auto { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
+.grid-item-form { display: grid; gap: 8px; }
+@media (max-width: 768px) {
+  .grid-item-form { grid-template-columns: 1fr !important; }
+}
 
 /* Offline banner */
 .offline-banner {

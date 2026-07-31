@@ -449,7 +449,7 @@ function ModalCorteParcial({ open, onClose, estado }) {
     <Modal open={open} onClose={onClose} title="📋 Corte parcial de caja" size="md"
       footer={<><button type="button" className="btn btn-secondary" onClick={onClose}>Cerrar</button>
         <button type="button" className="btn btn-primary" onClick={imprimir}>🖨️ Imprimir corte</button></>}>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
+      <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 16 }}>
         <div style={{ background: 'var(--sf)', borderRadius: 8, padding: '10px 14px' }}>
           <div style={{ fontSize: 11, color: 'var(--mu)' }}>Fondo inicial</div>
           <div style={{ fontWeight: 800, fontSize: 18 }}>{fmt(estado?.fondo_inicial||0)}</div>
@@ -1000,7 +1000,7 @@ export function Caja() {
           </div>
           {reporteData && (
             <>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10, marginBottom: 16 }}>
+              <div className="grid-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10, marginBottom: 16 }}>
                 <div className="kpi-card" style={{ borderLeft: '3px solid var(--ok)' }}>
                   <div className="kpi-label">Ventas totales</div>
                   <div className="kpi-value" style={{ color: 'var(--ok)' }}>{fmt(reporteData.totalVentas)}</div>
@@ -1028,7 +1028,7 @@ export function Caja() {
                     </div>
                   ))}
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
                 <div style={{ background: 'var(--sf)', borderRadius: 8, padding: '12px 16px' }}>
                   <div style={{ fontSize: 11, color: 'var(--mu)' }}>Ingresos en caja</div>
                   <div style={{ fontWeight: 800, fontSize: 20, color: 'var(--ok)' }}>{fmt(reporteData.totalIngresos)}</div>

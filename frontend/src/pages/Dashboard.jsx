@@ -107,7 +107,7 @@ export function Dashboard() {
       </div>
 
       {/* KPI grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
+      <div className="grid-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginBottom: 16 }}>
         <KpiCard label="Ventas hoy" value={fmt(ventasHoyTotal)} sub={`${ventasHoyN} transacciones`} icon="💰" color="var(--ok)" />
         <KpiCard label="Ventas del mes" value={fmt(ventasMesTotal)} icon="📊" />
         <KpiCard label="Clientes nuevos" value={clientesMes} sub="este mes" icon="👥" color="var(--ac2)" />
@@ -254,7 +254,7 @@ export function Dashboard() {
           <div style={{ background: 'var(--bd)', borderRadius: 8, height: 14, overflow: 'hidden', marginBottom: 10 }}>
             <div style={{ height: '100%', width: `${Math.min(100, objetivo.porcentaje || 0)}%`, background: (objetivo.porcentaje || 0) >= 80 ? 'var(--ok)' : (objetivo.porcentaje || 0) >= 50 ? 'var(--warn)' : 'var(--bad)', borderRadius: 8 }} />
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 12, textAlign: 'center' }}>
+          <div className="grid-3" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8, fontSize: 12, textAlign: 'center' }}>
             <div><div style={{ color: 'var(--mu)' }}>Vendido</div><div style={{ fontWeight: 700, color: 'var(--ac)' }}>{fmt(objetivo.ventas_mes)}</div></div>
             <div><div style={{ color: 'var(--mu)' }}>Objetivo</div><div style={{ fontWeight: 700 }}>{fmt(objetivo.monto)}</div></div>
             <div><div style={{ color: 'var(--mu)' }}>Falta</div><div style={{ fontWeight: 700, color: (objetivo.falta || 0) > 0 ? 'var(--bad)' : 'var(--ok)' }}>{fmt(objetivo.falta || 0)}</div></div>

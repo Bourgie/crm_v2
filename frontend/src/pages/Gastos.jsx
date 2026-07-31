@@ -123,7 +123,7 @@ export function Gastos() {
     <div>
       {/* KPI row */}
       {resumen && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 16 }}>
+        <div className="grid-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 16 }}>
           <div className="kpi-card" style={{ borderLeft: '3px solid var(--bad)' }}>
             <div className="kpi-label">Total del mes</div>
             <div className="kpi-value" style={{ color: 'var(--bad)' }}>{fmt(resumen.total)}</div>

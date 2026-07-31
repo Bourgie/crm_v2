@@ -131,7 +131,7 @@ function VentaDetail({ venta, api, onRefresh, onClose, showAnularByDefault }) {
   return (
     <div>
       {/* Header info */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+<div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
         {[
           { label: 'Cliente', value: venta.cli_nombre || 'Consumidor final' },
           { label: 'Vendedor', value: venta.vendedor_nombre || '—' },
@@ -436,7 +436,7 @@ export function Ventas() {
   return (
     <div>
       {/* KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10, marginBottom: 16 }}>
+<div className="grid-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10, marginBottom: 16 }}>
         <div className="kpi-card" style={{ borderLeft: '3px solid var(--ok)' }}>
           <div className="kpi-label">Total ventas</div>
           <div className="kpi-value" style={{ color: 'var(--ok)' }}>{fmt(totales.total)}</div>

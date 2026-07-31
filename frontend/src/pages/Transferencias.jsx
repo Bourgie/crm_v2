@@ -218,7 +218,7 @@ export function Transferencias() {
             const stockOrig = prodSelected ? getStock(prodSelected) : 0
 
             return (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 80px auto', gap: 8, marginBottom: 6, alignItems: 'end' }}>
+              <div key={i} className="grid-item-form" style={{ display: 'grid', gridTemplateColumns: '2fr 80px auto', gap: 8, marginBottom: 6, alignItems: 'end' }}>
                 <div style={{ position: 'relative' }}>
                   {i === 0 && <label style={{ display: 'block', fontSize: 11, color: 'var(--mu)', marginBottom: 4 }}>Producto</label>}
                   <input
@@ -274,7 +274,7 @@ export function Transferencias() {
       <Modal open={!!detail} onClose={() => setDetail(null)} title={`Transferencia #${detail?.id?.substr(-8)}`} size="md">
         {detail && (
           <>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
               {[['Origen', detail.suc_origen_nombre], ['Destino', detail.suc_destino_nombre], ['Fecha', fmtDate(detail.fecha)], ['Estado', <span className={`badge ${ESTADOS[detail.estado]}`}>{EST_LABELS[detail.estado]}</span>]].map(([l, v]) => (
                 <div key={l} style={{ background: 'var(--sf)', borderRadius: 8, padding: '10px 14px' }}>
                   <div style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 4 }}>{l}</div>

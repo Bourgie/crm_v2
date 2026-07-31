@@ -115,7 +115,7 @@ export function ListaRegalos() {
         {loadingDetail ? <div style={{display:'flex',justifyContent:'center',padding:32}}><div className="spinner"/></div>
           : detail && (
             <div>
-              <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
+              <div className="grid-2" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:16}}>
                 {detail.papa&&<div style={{background:'var(--sf)',borderRadius:8,padding:'8px 14px'}}><div style={{fontSize: 12,color:'var(--mu)'}}>Pareja</div><div style={{fontWeight:600}}>{detail.papa}</div></div>}
                 {detail.fecha_evento&&<div style={{background:'var(--sf)',borderRadius:8,padding:'8px 14px'}}><div style={{fontSize: 12,color:'var(--mu)'}}>Fecha evento</div><div style={{fontWeight:600}}>{new Date(detail.fecha_evento).toLocaleDateString('es-AR')}</div></div>}
               </div>
@@ -280,7 +280,7 @@ export function Reportes() {
       </div>
 
       {/* KPI row */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:16}}>
+      <div className="grid-auto" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(150px,1fr))',gap:10,marginBottom:16}}>
         {[
           {label:'Ventas totales',value:fmtM(kpis.total||0),color:'var(--ok)',icon:'💰'},
           {label:'Transacciones',value:kpis.ventas||0,icon:'🧾'},
@@ -336,7 +336,7 @@ export function Reportes() {
         </div>
       )}
 
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+      <div className="grid-2" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
         {/* Top productos */}
         <div className="card">
           <div className="card-header"><h3>🏆 Top productos</h3></div>

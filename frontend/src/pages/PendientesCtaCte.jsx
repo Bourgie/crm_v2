@@ -201,7 +201,7 @@ async function buscarVentas() {
         </div>
       )}
 
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10, marginBottom: 16 }}>
+      <div className="grid-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(130px,1fr))', gap: 10, marginBottom: 16 }}>
         {Object.entries(EST_LABELS).map(([k, label]) => {
           const n = pedidos.filter((p) => p.estado === k).length
           return n > 0 ? (
@@ -320,7 +320,7 @@ async function buscarVentas() {
             <div style={{ marginTop: 4 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 8 }}>Productos *</div>
               {fItems.map((line, i) => (
-                <div key={i} style={{ display: 'grid', gridTemplateColumns: '2fr 60px 80px 90px auto', gap: 6, marginBottom: 6, alignItems: 'end' }}>
+                <div key={i} className="grid-item-form" style={{ display: 'grid', gridTemplateColumns: '2fr 60px 80px 90px auto', gap: 6, marginBottom: 6, alignItems: 'end' }}>
                   <div style={{ position: 'relative' }}>
                     {i === 0 && <label style={{ display: 'block', fontSize: 11, color: 'var(--mu)', marginBottom: 3 }}>Producto</label>}
                     <input value={line.nombre} onChange={(e) => setFItems((p) => p.map((l, idx) => idx === i ? { ...l, nombre: e.target.value } : l))} placeholder="Nombre del producto" list={`pend-prods-${i}`} />
@@ -367,7 +367,7 @@ async function buscarVentas() {
             <div style={{ marginTop:4 }}>
               <div style={{fontSize:12,fontWeight:700,color:'var(--mu)',textTransform:'uppercase',marginBottom:8}}>Productos</div>
               {fItems.map((line, i) => (
-                <div key={i} style={{display:'grid',gridTemplateColumns:'2fr 60px 80px 90px',gap:6,marginBottom:6,alignItems:'center',padding:'4px 8px',background:'var(--sf)',borderRadius:6}}>
+                <div key={i} className="grid-item-form" style={{display:'grid',gridTemplateColumns:'2fr 60px 80px 90px',gap:6,marginBottom:6,alignItems:'center',padding:'4px 8px',background:'var(--sf)',borderRadius:6}}>
                   <span style={{fontSize:13,fontWeight:500}}>{line.nombre}</span>
                   <span style={{fontSize:12,color:'var(--mu)',textAlign:'center'}}>{line.talle||'—'}</span>
                   <span style={{fontSize:12,textAlign:'right'}}>${(parseFloat(line.precio)||0).toLocaleString('es-AR')}</span>
@@ -587,7 +587,7 @@ export function CtaCte() {
 
   return (
     <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10, marginBottom: 16 }}>
+      <div className="grid-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(160px,1fr))', gap: 10, marginBottom: 16 }}>
         <div className="kpi-card" style={{ borderLeft: '3px solid var(--bad)' }}>
           <div className="kpi-label">Deuda total</div>
           <div className="kpi-value" style={{ color: 'var(--bad)' }}>{fmt(totales.total_deuda)}</div>

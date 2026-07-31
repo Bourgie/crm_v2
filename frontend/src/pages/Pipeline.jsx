@@ -197,7 +197,7 @@ function ReportsPanel({ oportunidades, etapas }) {
   return (
     <div style={{ background: 'var(--sf)', borderRadius: 12, border: '1px solid var(--bd)', padding: 16, marginBottom: 16 }}>
       <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 12 }}>📊 Reportes del pipeline</div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginBottom: 12 }}>
+      <div className="grid-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 8, marginBottom: 12 }}>
         {[
           ['Oportunidades', stats.activas + stats.ganadas + stats.perdidas, 'var(--tx)'],
           ['Valor total', fmt(stats.totalValor), 'var(--ok)'],
@@ -865,7 +865,7 @@ function ModalDetalleOportunidad({ open, onClose, oportunidad, etapas, allClis, 
           </div>
         ) : (
           <div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div style={{ background: 'var(--sf)', borderRadius: 8, padding: '10px 14px' }}>
                 <div style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 2 }}>Etapa</div>
                 <div style={{ fontWeight: 700 }}>{etapaActual?.nombre || '—'}</div>

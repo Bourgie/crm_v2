@@ -61,7 +61,7 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
   return (
     <div>
       {/* Balance card */}
-      <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:16}}>
+      <div className="grid-3" style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginBottom:16}}>
         <div className="kpi-card" style={{borderLeft:`3px solid ${saldo>0?'var(--bad)':'var(--ok)'}`}}>
           <div className="kpi-label">Saldo</div>
           <div className="kpi-value" style={{fontSize:20,color:saldo>0?'var(--bad)':'var(--ok)'}}>
@@ -197,7 +197,7 @@ function DeudasTab({ api, toast, onVerProveedor }) {
 
   return (
     <div>
-      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10,marginBottom:16}}>
+      <div className="grid-auto" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))',gap:10,marginBottom:16}}>
         <div className="kpi-card" style={{borderLeft:'3px solid var(--bad)'}}>
           <div className="kpi-label">Deuda total</div>
           <div className="kpi-value" style={{color:'var(--bad)',fontSize:22}}>{fmt(data.total_deuda)}</div>
