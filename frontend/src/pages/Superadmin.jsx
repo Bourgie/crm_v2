@@ -652,7 +652,7 @@ export default function Superadmin() {
   const leadsFiltrados = landingFiltro === 'noleidos' ? leads.filter(l => !l.leido) : landingFiltro === 'leidos' ? leads.filter(l => l.leido) : leads
 
   if (!logged) return (
-    <div style={{ maxWidth: 400, margin: '80px auto', textAlign: 'center' }}>
+    <div style={{ maxWidth: 'min(400px, 92vw)', margin: '80px auto', textAlign: 'center' }}>
       <div style={{ fontSize: 52, marginBottom: 12 }}>🔐</div>
       <h2 style={{ fontSize: 22, fontWeight: 900, marginBottom: 6 }}>Super Admin</h2>
       <p style={{ color: 'var(--mu)', fontSize: 13, marginBottom: 24 }}>FlexCRM — Panel de control</p>
@@ -711,7 +711,7 @@ export default function Superadmin() {
   )
 
   return (
-    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+    <div className="sa-layout" style={{ flexDirection: 'column' }}>
       {impersonating && (
         <div style={{ background: 'var(--warn)', color: '#0f172a', padding: '8px 24px', fontSize: 12, fontWeight: 700, textAlign: 'center', flexShrink: 0 }}>
           ⚠️ Estás viendo el sistema como empresa: <strong>{impersonating.empresa}</strong> — <a href="#" onClick={e => { e.preventDefault(); openCRM() }} style={{ color: '#0f172a', textDecoration: 'underline' }}>Abrir CRM →</a>
@@ -719,7 +719,7 @@ export default function Superadmin() {
       )}
 
       {/* Top bar */}
-      <div className="topbar">
+      <div className="topbar sa-topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <button type="button" onClick={() => setSidebarOpen(!sidebarOpen)} className="hamburger" style={{ background: 'none', border: 'none', color: 'var(--mu)', cursor: 'pointer', fontSize: 18, padding: 4, display: 'inline-flex' }}>☰</button>
           <div className="topbar-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>🏢 FlexCRM <span className="badge badge-orange" style={{ fontSize: 10 }}>Super Admin</span></div>
@@ -743,21 +743,16 @@ export default function Superadmin() {
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Sidebar */}
-        <div style={{ width: sidebarOpen ? 220 : 56, background: 'var(--sf)', borderRight: '1px solid var(--bd)', flexShrink: 0, transition: 'width .2s', overflow: 'hidden', display: 'flex', flexDirection: 'column', paddingTop: 8 }}>
+        {sidebarOpen && <div className="sa-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+        <div className={`sa-sidebar${sidebarOpen ? ' open' : ''}`}>
           {SIDEBAR.map(([k, l]) => (
             <button key={k} type="button" onClick={() => setTab(k)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 10, padding: sidebarOpen ? '10px 16px' : '10px 0', justifyContent: sidebarOpen ? 'flex-start' : 'center',
-                cursor: 'pointer', fontSize: 13, fontWeight: 600, background: tab === k ? 'var(--ac)' : 'transparent',
-                color: tab === k ? '#fff' : 'var(--mu)', border: 'none', borderLeft: tab === k ? '3px solid var(--ac)' : '3px solid transparent',
-                width: '100%', textAlign: 'left', whiteSpace: 'nowrap', transition: 'all .15s',
-                marginBottom: k === 'dashboard' ? 12 : 0,
-                marginTop: k === 'soporte' ? 'auto' : 0,
-              }}
+              className={`sa-nav-item${tab === k ? ' active' : ''}`}
+              style={{ marginBottom: k === 'dashboard' ? 12 : 0, marginTop: k === 'soporte' ? 'auto' : 0 }}
               title={!sidebarOpen ? l : undefined}
             >
-              <span style={{ fontSize: sidebarOpen ? 14 : 18, flexShrink: 0 }}>{l.split(' ')[0]}</span>
-              {sidebarOpen && <span>{l.split(' ').slice(1).join(' ')}</span>}
+              <span className="sa-nav-icon">{l.split(' ')[0]}</span>
+              <span className="sa-nav-label">{l.split(' ').slice(1).join(' ')}</span>
               {k === 'solicitudes' && dash?.solicitudes_pendientes > 0 && (
                 <span className="nav-badge pulse" style={{ background: 'var(--warn)', color: '#0f172a', marginLeft: 'auto' }}>
                   {dash.solicitudes_pendientes}
@@ -778,13 +773,14 @@ export default function Superadmin() {
         </div>
 
         {/* Main content */}
-        <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
+        <div className="sa-main" style={{ overflow: 'auto' }}>
+          <div className="sa-content">
           {/* ═══════ DASHBOARD ═══════ */}
           {tab === 'dashboard' && (
             <>
               <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 16 }}>📊 Dashboard</h3>
               {dash && <>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(170px, 1fr))', gap: 12, marginBottom: 20 }}>
+                <div className="sa-kpi-grid" style={{ marginBottom: 20 }}>
                   <div className="kpi-card"><K label="Empresas activas" value={dash.empresas_activas} sub={(dash.nuevas_mes || 0) + ' nuevas este mes'} /></div>
                   <div className="kpi-card"><K label="MRR" value={'$' + (dash.mrr || 0).toLocaleString('es-AR')} sub="ingresos mensuales" /></div>
                   <div className="kpi-card"><K label="Vencen en 7 días" value={dash.vencer_7} sub={(dash.vencer_30 || 0) + ' en 30 días'} /></div>
@@ -831,14 +827,14 @@ export default function Superadmin() {
                     {empresas.map(e => {
                       const plan = planes.find(p => p.id === e.plan_id)
                       return <tr key={e.codigo}>
-                        <td style={{ fontWeight: 600 }}>{e.nombre || e.codigo}</td>
-                        <td style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--mu)' }}>{e.codigo}</td>
-                        <td>{plan?.nombre || '—'}</td>
-                        <td style={{ color: e.vencimiento && e.vencimiento < new Date().toISOString().substr(0, 10) ? 'var(--bad)' : 'var(--tx)' }}>{e.vencimiento || '—'}</td>
-                        <td>{e.usuarios_max || '∞'}</td>
-                        <td>{e.sucursales_max || '∞'}</td>
-                        <td><span className={`badge ${e.activo ? 'badge-green' : 'badge-red'}`} style={{ fontSize: 11 }}>{e.activo ? 'Activo' : 'Suspendido'}</span></td>
-                        <td style={{ whiteSpace: 'nowrap' }}>
+                        <td style={{ fontWeight: 600 }} data-label="Empresa">{e.nombre || e.codigo}</td>
+                        <td style={{ fontFamily: 'monospace', fontSize: 12, color: 'var(--mu)' }} data-label="Código">{e.codigo}</td>
+                        <td data-label="Plan">{plan?.nombre || '—'}</td>
+                        <td style={{ color: e.vencimiento && e.vencimiento < new Date().toISOString().substr(0, 10) ? 'var(--bad)' : 'var(--tx)' }} data-label="Vencimiento">{e.vencimiento || '—'}</td>
+                        <td data-label="Usuarios">{e.usuarios_max || '∞'}</td>
+                        <td data-label="Suc.">{e.sucursales_max || '∞'}</td>
+                        <td data-label="Estado"><span className={`badge ${e.activo ? 'badge-green' : 'badge-red'}`} style={{ fontSize: 11 }}>{e.activo ? 'Activo' : 'Suspendido'}</span></td>
+                        <td style={{ whiteSpace: 'nowrap' }} data-label="Acciones">
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEmpresaDetail(e)} title="Ver detalle completo">👁️</button>
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEditEmpresa(e)} title="Editar empresa">✏️</button>
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => loginAs(e)} title="Ingresar como admin">🔑</button>
@@ -876,14 +872,14 @@ export default function Superadmin() {
                     {prospFiltrados.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}>Sin prospectos</td></tr>}
                     {prospFiltrados.map(p => (
                       <tr key={p.id}>
-                        <td style={{ fontWeight: 600 }}>{p.nombre}</td>
-                        <td style={{ fontSize: 12 }}>{p.telefono || '—'}</td>
-                        <td style={{ fontSize: 12, color: 'var(--ac)' }}>{p.email || '—'}</td>
-                        <td style={{ fontSize: 12 }}>{p.empresa_interes || '—'}</td>
-                        <td><span style={{ display:'inline-flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:99,fontSize:11,fontWeight:600,background:PROS_EST_COLORS[p.estado]+'22',color:PROS_EST_COLORS[p.estado]}}><span style={{ width: 6, height: 6, borderRadius: '50%', background: PROS_EST_COLORS[p.estado] || 'var(--mu)' }} />{PROS_EST_LABELS[p.estado] || p.estado}</span></td>
-                        <td style={{ fontSize: 11, color: 'var(--mu)' }}>{p.origen || 'manual'}</td>
-                        <td style={{ fontSize: 11, color: 'var(--mu)' }}>{p.fecha_ultimo_contacto ? new Date(p.fecha_ultimo_contacto).toLocaleDateString('es-AR') : '—'}</td>
-                        <td style={{ whiteSpace: 'nowrap' }}>
+                        <td style={{ fontWeight: 600 }} data-label="Nombre">{p.nombre}</td>
+                        <td style={{ fontSize: 12 }} data-label="Teléfono">{p.telefono || '—'}</td>
+                        <td style={{ fontSize: 12, color: 'var(--ac)' }} data-label="Email">{p.email || '—'}</td>
+                        <td style={{ fontSize: 12 }} data-label="Empresa">{p.empresa_interes || '—'}</td>
+                        <td data-label="Estado"><span style={{ display:'inline-flex',alignItems:'center',gap:4,padding:'2px 8px',borderRadius:99,fontSize:11,fontWeight:600,background:PROS_EST_COLORS[p.estado]+'22',color:PROS_EST_COLORS[p.estado]}}><span style={{ width: 6, height: 6, borderRadius: '50%', background: PROS_EST_COLORS[p.estado] || 'var(--mu)' }} />{PROS_EST_LABELS[p.estado] || p.estado}</span></td>
+                        <td style={{ fontSize: 11, color: 'var(--mu)' }} data-label="Origen">{p.origen || 'manual'}</td>
+                        <td style={{ fontSize: 11, color: 'var(--mu)' }} data-label="Último contacto">{p.fecha_ultimo_contacto ? new Date(p.fecha_ultimo_contacto).toLocaleDateString('es-AR') : '—'}</td>
+                        <td style={{ whiteSpace: 'nowrap' }} data-label="Acciones">
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => cargarDetalleProspecto(p.id)}>👁️</button>
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEditProspecto(p)}>✏️</button>
                         </td>
@@ -908,7 +904,7 @@ export default function Superadmin() {
                   <button type="button" className="btn btn-secondary btn-sm" onClick={() => setProspDetalle(null)}>← Volver</button>
                 </div>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 20, fontSize: 13 }}>
+              <div className="grid-2" style={{ gap: 12, marginBottom: 20, fontSize: 13 }}>
                 <div><span style={{ color: 'var(--mu)' }}>Teléfono:</span> {prospDetalle.telefono || '—'}</div>
                 <div><span style={{ color: 'var(--mu)' }}>Email:</span> {prospDetalle.email || '—'}</div>
                 <div><span style={{ color: 'var(--mu)' }}>Empresa interés:</span> {prospDetalle.empresa_interes || '—'}</div>
@@ -959,12 +955,12 @@ export default function Superadmin() {
                     <tbody>
                       {solicitudes.map(s => (
                         <tr key={s.id}>
-                          <td>{s.fecha ? new Date(s.fecha).toLocaleDateString('es-AR') : '—'}</td>
-                          <td>{s.empresa_id || '—'}</td>
-                          <td><span className={`badge ${s.tipo === 'upgrade' ? 'badge-green' : 'badge-yellow'}`}>{s.tipo === 'upgrade' ? '⬆ Upgrade' : '⬇ Downgrade'}</span></td>
-                          <td>{s.plan_id || '—'}</td>
-                          <td><span className={`badge ${s.estado === 'pendiente' ? 'badge-yellow' : s.estado === 'aprobada' ? 'badge-green' : 'badge-red'}`}>{s.estado}</span></td>
-                          <td>{s.estado === 'pendiente' && <><button type="button" className="btn btn-primary btn-sm" onClick={() => aprobarSol(s.id)} style={{background:'var(--ok)',marginRight:4}}>✅ Aprobar</button><button type="button" className="btn btn-danger btn-sm" onClick={() => rechazarSol(s.id)}>❌ Rechazar</button></>}</td>
+                          <td data-label="Fecha">{s.fecha ? new Date(s.fecha).toLocaleDateString('es-AR') : '—'}</td>
+                          <td data-label="Empresa">{s.empresa_id || '—'}</td>
+                          <td data-label="Tipo"><span className={`badge ${s.tipo === 'upgrade' ? 'badge-green' : 'badge-yellow'}`}>{s.tipo === 'upgrade' ? '⬆ Upgrade' : '⬇ Downgrade'}</span></td>
+                          <td data-label="Plan">{s.plan_id || '—'}</td>
+                          <td data-label="Estado"><span className={`badge ${s.estado === 'pendiente' ? 'badge-yellow' : s.estado === 'aprobada' ? 'badge-green' : 'badge-red'}`}>{s.estado}</span></td>
+                          <td data-label="Acciones">{s.estado === 'pendiente' && <><button type="button" className="btn btn-primary btn-sm" onClick={() => aprobarSol(s.id)} style={{background:'var(--ok)',marginRight:4}}>✅ Aprobar</button><button type="button" className="btn btn-danger btn-sm" onClick={() => rechazarSol(s.id)}>❌ Rechazar</button></>}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -988,12 +984,12 @@ export default function Superadmin() {
                     <tbody>
                       {solicitudesElim.map(s => (
                         <tr key={s.id}>
-                          <td>{s.fecha ? new Date(s.fecha).toLocaleDateString('es-AR') : '—'}</td>
-                          <td><strong>{s.empresa_nombre || s.empresa_codigo}</strong><br /><span style={{fontSize:11,color:'var(--mu)',fontFamily:'monospace'}}>{s.empresa_codigo}</span></td>
-                          <td>{s.email || '—'}</td>
-                          <td style={{fontSize:12,color:'var(--mu)'}}>{s.motivo || '—'}</td>
-                          <td><span className={`badge ${s.estado === 'pendiente' ? 'badge-yellow' : s.estado === 'aprobada' ? 'badge-red' : 'badge-gray'}`}>{s.estado}</span></td>
-                          <td>
+                          <td data-label="Fecha">{s.fecha ? new Date(s.fecha).toLocaleDateString('es-AR') : '—'}</td>
+                          <td data-label="Empresa"><strong>{s.empresa_nombre || s.empresa_codigo}</strong><br /><span style={{fontSize:11,color:'var(--mu)',fontFamily:'monospace'}}>{s.empresa_codigo}</span></td>
+                          <td data-label="Email">{s.email || '—'}</td>
+                          <td style={{fontSize:12,color:'var(--mu)'}} data-label="Motivo">{s.motivo || '—'}</td>
+                          <td data-label="Estado"><span className={`badge ${s.estado === 'pendiente' ? 'badge-yellow' : s.estado === 'aprobada' ? 'badge-red' : 'badge-gray'}`}>{s.estado}</span></td>
+                          <td data-label="Acciones">
                             {s.estado === 'pendiente' && (
                               <>
                                 <button type="button" className="btn btn-danger btn-sm" onClick={() => setDelSolModal(s)}
@@ -1018,7 +1014,7 @@ export default function Superadmin() {
                 <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase' }}>Planes de suscripción</h3>
                 <button type="button" className="btn btn-primary" onClick={openNuevoPlan}>+ Nuevo plan</button>
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+              <div className="grid-auto" style={{ gap: 16 }}>
                 {planes.map(p => {
                   let mods = p.modulos || []; if (typeof mods === 'string') try { mods = JSON.parse(mods) } catch { mods = [] }
                   let lims = p.limites || {}; if (typeof lims === 'string') try { lims = JSON.parse(lims) } catch { lims = {} }
@@ -1042,7 +1038,7 @@ export default function Superadmin() {
             <div className="card">
               <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 16 }}>🧩 Módulos del sistema</h3>
               <p style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 12 }}>Cada tarjeta muestra los roles que tienen acceso al módulo.</p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
+              <div className="grid-auto" style={{ gap: 8 }}>
                 {modulos.map(m => {
                   const roles = MOD_ROLES[m.codigo] || []
                   return (
@@ -1076,7 +1072,7 @@ export default function Superadmin() {
                 Cada rol define qué módulos puede ver y usar un usuario dentro de su empresa.
                 Los roles se asignan desde Configuración → Usuarios en el CRM de cada empresa.
               </p>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(400px, 1fr))', gap: 16 }}>
+              <div className="grid-auto" style={{ gap: 16 }}>
                 {Object.entries(ROLE_LABELS).map(([key, label]) => {
                   const mods = Object.entries(MOD_ROLES).filter(([, roles]) => roles.includes(key)).map(([mod]) => mod)
                   const allMods = Object.keys(MOD_ROLES)
@@ -1093,7 +1089,7 @@ export default function Superadmin() {
                           <div style={{ fontSize: 11, color: 'var(--mu)' }}>{cant} de {total} módulos habilitados</div>
                         </div>
                       </div>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 4 }}>
+                      <div className="grid-auto" style={{ gap: 4 }}>
                         {allMods.map(mod => {
                           const has = mods.includes(mod)
                           return (
@@ -1200,9 +1196,9 @@ export default function Superadmin() {
                       const pronto = dias !== null && dias >= 0 && dias <= 30
                       return (
                         <tr key={m.id} style={{ background: vencido ? 'rgba(239,68,68,.06)' : pronto ? 'rgba(245,158,11,.06)' : 'transparent' }}>
-                          <td style={{ fontWeight: 600 }}>{m.nombre}</td>
-                          <td><span className={`badge ${m.tipo === 'dominio' ? 'badge-blue' : m.tipo === 'servidor' ? 'badge-purple' : m.tipo === 'api' ? 'badge-green' : m.tipo === 'certificado' ? 'badge-orange' : 'badge-gray'}`}>{m.tipo}</span></td>
-                          <td style={{ fontSize: 12, whiteSpace: 'nowrap' }}>
+                          <td style={{ fontWeight: 600 }} data-label="Item">{m.nombre}</td>
+                          <td data-label="Tipo"><span className={`badge ${m.tipo === 'dominio' ? 'badge-blue' : m.tipo === 'servidor' ? 'badge-purple' : m.tipo === 'api' ? 'badge-green' : m.tipo === 'certificado' ? 'badge-orange' : 'badge-gray'}`}>{m.tipo}</span></td>
+                          <td style={{ fontSize: 12, whiteSpace: 'nowrap' }} data-label="Vence">
                             {m.fecha_vencimiento ? (
                               <span style={{ color: vencido ? 'var(--bad)' : pronto ? 'var(--warn)' : 'var(--mu)', fontWeight: vencido ? 700 : 400 }}>
                                 {new Date(m.fecha_vencimiento).toLocaleDateString('es-AR')}
@@ -1210,9 +1206,9 @@ export default function Superadmin() {
                               </span>
                             ) : <span style={{ color: 'var(--mu)' }}>—</span>}
                           </td>
-                          <td style={{ fontSize: 12, color: 'var(--mu)' }}>{m.proveedor || '—'}</td>
-                          <td style={{ fontSize: 12 }}>{m.url ? <a href={m.url} target="_blank" rel="noopener" style={{ color: 'var(--ac)' }}>{m.url.replace(/https?:\/\//,'').substring(0, 30)}</a> : '—'}</td>
-                          <td style={{ whiteSpace: 'nowrap' }}>
+                          <td style={{ fontSize: 12, color: 'var(--mu)' }} data-label="Proveedor">{m.proveedor || '—'}</td>
+                          <td style={{ fontSize: 12 }} data-label="URL">{m.url ? <a href={m.url} target="_blank" rel="noopener" style={{ color: 'var(--ac)' }}>{m.url.replace(/https?:\/\//,'').substring(0, 30)}</a> : '—'}</td>
+                          <td style={{ whiteSpace: 'nowrap' }} data-label="Acciones">
                             <button type="button" className="btn btn-icon btn-sm" onClick={() => openEditMt(m)}>✏️</button>
                             <button type="button" className="btn btn-icon btn-sm" onClick={() => deleteMt(m.id)}>🗑️</button>
                           </td>
@@ -1246,14 +1242,14 @@ export default function Superadmin() {
                     {leadsFiltrados.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}>Sin leads</td></tr>}
                     {leadsFiltrados.map(l => (
                       <tr key={l.id} style={{ background: l.leido ? 'transparent' : 'rgba(249,115,22,.04)' }}>
-                        <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{l.fecha ? new Date(l.fecha).toLocaleString('es-AR') : '—'}</td>
-                        <td style={{ fontWeight: l.leido ? 400 : 700 }}>{l.nombre || '—'}</td>
-                        <td style={{ fontSize: 12 }}>{l.telefono || '—'}</td>
-                        <td style={{ fontSize: 12, color: 'var(--ac)' }}>{l.email || '—'}</td>
-                        <td style={{ fontSize: 12 }}>{l.empresa_interes || '—'}</td>
-                        <td style={{ fontSize: 11, color: 'var(--mu)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.mensaje || '—'}</td>
-                        <td style={{ fontSize: 11, color: 'var(--mu)' }}>{l.pagina || '—'}</td>
-                        <td>{!l.leido && <button type="button" className="btn btn-primary btn-sm" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => marcarLeadLeido(l.id)}>✓ Leído</button>}</td>
+                        <td style={{ fontSize: 11, whiteSpace: 'nowrap' }} data-label="Fecha">{l.fecha ? new Date(l.fecha).toLocaleString('es-AR') : '—'}</td>
+                        <td style={{ fontWeight: l.leido ? 400 : 700 }} data-label="Nombre">{l.nombre || '—'}</td>
+                        <td style={{ fontSize: 12 }} data-label="Teléfono">{l.telefono || '—'}</td>
+                        <td style={{ fontSize: 12, color: 'var(--ac)' }} data-label="Email">{l.email || '—'}</td>
+                        <td style={{ fontSize: 12 }} data-label="Empresa">{l.empresa_interes || '—'}</td>
+                        <td style={{ fontSize: 11, color: 'var(--mu)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} data-label="Mensaje">{l.mensaje || '—'}</td>
+                        <td style={{ fontSize: 11, color: 'var(--mu)' }} data-label="Página">{l.pagina || '—'}</td>
+                        <td data-label="Acciones">{!l.leido && <button type="button" className="btn btn-primary btn-sm" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => marcarLeadLeido(l.id)}>✓ Leído</button>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1283,12 +1279,12 @@ export default function Superadmin() {
                     {tickets.filter(t => ticketFiltro === 'todos' || t.estado === ticketFiltro).length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}>Sin solicitudes</td></tr>}
                     {tickets.filter(t => ticketFiltro === 'todos' || t.estado === ticketFiltro).map(t => (
                       <tr key={t.id} style={{ background: t.estado === 'pendiente' ? 'rgba(245,158,11,.04)' : 'transparent' }}>
-                        <td style={{ fontSize: 11, whiteSpace: 'nowrap' }}>{t.fecha ? new Date(t.fecha).toLocaleString('es-AR') : '—'}</td>
-                        <td><span style={{ fontWeight: 600, fontSize: 12 }}>{t.empresa_nombre || t.empresa_id || '—'}</span></td>
-                        <td style={{ fontWeight: 600, fontSize: 13 }}>{t.asunto || '—'}</td>
-                        <td style={{ fontSize: 12, color: 'var(--mu)' }}>{t.creado_por || '—'}</td>
-                        <td><span className={`badge ${t.estado==='pendiente'?'badge-yellow':'badge-green'}`}>{t.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Respondida'}</span></td>
-                        <td style={{ whiteSpace: 'nowrap' }}>
+                        <td style={{ fontSize: 11, whiteSpace: 'nowrap' }} data-label="Fecha">{t.fecha ? new Date(t.fecha).toLocaleString('es-AR') : '—'}</td>
+                        <td data-label="Empresa"><span style={{ fontWeight: 600, fontSize: 12 }}>{t.empresa_nombre || t.empresa_id || '—'}</span></td>
+                        <td style={{ fontWeight: 600, fontSize: 13 }} data-label="Asunto">{t.asunto || '—'}</td>
+                        <td style={{ fontSize: 12, color: 'var(--mu)' }} data-label="Por">{t.creado_por || '—'}</td>
+                        <td data-label="Estado"><span className={`badge ${t.estado==='pendiente'?'badge-yellow':'badge-green'}`}>{t.estado === 'pendiente' ? '⏳ Pendiente' : '✅ Respondida'}</span></td>
+                        <td style={{ whiteSpace: 'nowrap' }} data-label="Acciones">
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setTicketRespondiendo(t.id === ticketRespondiendo ? null : t.id); setTicketRespuesta('') }}>💬</button>
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => eliminarTicket(t.id)}>🗑️</button>
                         </td>
@@ -1340,11 +1336,11 @@ export default function Superadmin() {
                   <tbody>
                     {audit.map(a => (
                       <tr key={a.id} style={{ fontSize: 12 }}>
-                        <td style={{ whiteSpace: 'nowrap' }}>{a.fecha ? new Date(a.fecha).toLocaleString('es-AR') : '—'}</td>
-                        <td>{a.admin_id || '—'}</td>
-                        <td>{a.accion || '—'}</td>
-                        <td>{a.empresa_id || '—'}</td>
-                        <td style={{ color: 'var(--mu)' }}>{a.detalle || '—'}</td>
+                        <td style={{ whiteSpace: 'nowrap' }} data-label="Fecha">{a.fecha ? new Date(a.fecha).toLocaleString('es-AR') : '—'}</td>
+                        <td data-label="Admin">{a.admin_id || '—'}</td>
+                        <td data-label="Acción">{a.accion || '—'}</td>
+                        <td data-label="Empresa">{a.empresa_id || '—'}</td>
+                        <td style={{ color: 'var(--mu)' }} data-label="Detalle">{a.detalle || '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -1358,7 +1354,7 @@ export default function Superadmin() {
             <div>
               {/* Stats */}
               {appsStats && (
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12, marginBottom: 20 }}>
+                <div className="grid-3" style={{ gap: 12, marginBottom: 20 }}>
                   <div style={{ background:'var(--bg)', border:'1px solid var(--bd)', borderRadius:10, padding:14 }}>
                     <div style={{ fontSize:11,color:'var(--mu)',textTransform:'uppercase',marginBottom:4 }}>Apps en catálogo</div>
                     <div style={{ fontSize:24,fontWeight:800 }}>{appsStats.totalApps}</div>
@@ -1379,7 +1375,7 @@ export default function Superadmin() {
               )}
 
               {/* Catálogo + Instalaciones (2 cols) */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <div className="grid-2" style={{ gap: 16 }}>
                 {/* Catálogo */}
                 <div className="card" style={{ padding: 16 }}>
                   <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12 }}>
@@ -1493,11 +1489,11 @@ export default function Superadmin() {
                         const pOk = e.estado?.privacidad?.aceptado;
                         const ok = tOk && pOk;
                         return <tr key={i} style={{ borderBottom:'1px solid var(--bd)', background:i%2===0?'var(--sf)':'transparent' }}>
-                          <td style={{ padding:'8px 6px', fontWeight:600 }}>{e.nombre} <span style={{ color:'var(--mu)', fontSize:10 }}>({e.codigo})</span></td>
-                          <td style={{ padding:'8px 6px', color:'var(--mu)', fontSize:10 }}>{e.admin_email}</td>
-                          <td style={{ padding:'8px 6px', textAlign:'center' }}>{tOk ? <span style={{ color:'var(--ok)', fontSize:11 }}>✅ v{e.estado.terminos.vigente||'—'}<br/><span style={{ fontSize:9, color:'var(--mu)' }}>{new Date(e.estado.terminos.aceptado_fecha).toLocaleDateString('es-AR')}</span></span> : <span style={{ color:'var(--bad)', fontSize:11 }}>❌ v{e.estado.terminos.vigente||'—'}</span>}</td>
-                          <td style={{ padding:'8px 6px', textAlign:'center' }}>{pOk ? <span style={{ color:'var(--ok)', fontSize:11 }}>✅ v{e.estado.privacidad.vigente||'—'}<br/><span style={{ fontSize:9, color:'var(--mu)' }}>{new Date(e.estado.privacidad.aceptado_fecha).toLocaleDateString('es-AR')}</span></span> : <span style={{ color:'var(--bad)', fontSize:11 }}>❌ v{e.estado.privacidad.vigente||'—'}</span>}</td>
-                          <td style={{ padding:'8px 6px', textAlign:'center' }}><span style={{ padding:'2px 8px', borderRadius:10, fontSize:10, fontWeight:600, background:ok?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)', color:ok?'var(--ok)':'var(--bad)' }}>{ok?'Al día':'Pendiente'}</span></td>
+                          <td style={{ padding:'8px 6px', fontWeight:600 }} data-label="Empresa">{e.nombre} <span style={{ color:'var(--mu)', fontSize:10 }}>({e.codigo})</span></td>
+                          <td style={{ padding:'8px 6px', color:'var(--mu)', fontSize:10 }} data-label="Admin">{e.admin_email}</td>
+                          <td style={{ padding:'8px 6px', textAlign:'center' }} data-label="Términos">{tOk ? <span style={{ color:'var(--ok)', fontSize:11 }}>✅ v{e.estado.terminos.vigente||'—'}<br/><span style={{ fontSize:9, color:'var(--mu)' }}>{new Date(e.estado.terminos.aceptado_fecha).toLocaleDateString('es-AR')}</span></span> : <span style={{ color:'var(--bad)', fontSize:11 }}>❌ v{e.estado.terminos.vigente||'—'}</span>}</td>
+                          <td style={{ padding:'8px 6px', textAlign:'center' }} data-label="Privacidad">{pOk ? <span style={{ color:'var(--ok)', fontSize:11 }}>✅ v{e.estado.privacidad.vigente||'—'}<br/><span style={{ fontSize:9, color:'var(--mu)' }}>{new Date(e.estado.privacidad.aceptado_fecha).toLocaleDateString('es-AR')}</span></span> : <span style={{ color:'var(--bad)', fontSize:11 }}>❌ v{e.estado.privacidad.vigente||'—'}</span>}</td>
+                          <td style={{ padding:'8px 6px', textAlign:'center' }} data-label="Estado"><span style={{ padding:'2px 8px', borderRadius:10, fontSize:10, fontWeight:600, background:ok?'rgba(34,197,94,.15)':'rgba(239,68,68,.15)', color:ok?'var(--ok)':'var(--bad)' }}>{ok?'Al día':'Pendiente'}</span></td>
                         </tr>;
                       })}
                       {(!legalEmpresas || legalEmpresas.length === 0) && <tr><td colSpan={5} style={{ padding:16, textAlign:'center', color:'var(--mu)', fontSize:12 }}>Cargando...</td></tr>}
@@ -1514,7 +1510,7 @@ export default function Superadmin() {
                 <div style={{ maxHeight:400, overflowY:'auto' }}>
                   <table style={{ width:'100%', borderCollapse:'collapse', fontSize:11 }}>
                     <thead><tr style={{ borderBottom:'1px solid var(--bd)', position:'sticky', top:0, background:'var(--bg)' }}><th style={{ textAlign:'left', padding:'6px', color:'var(--mu)', fontSize:10 }}>Fecha</th><th style={{ textAlign:'left', padding:'6px', color:'var(--mu)', fontSize:10 }}>Acción</th><th style={{ textAlign:'left', padding:'6px', color:'var(--mu)', fontSize:10 }}>Empresa</th><th style={{ textAlign:'left', padding:'6px', color:'var(--mu)', fontSize:10 }}>Detalle</th></tr></thead>
-                    <tbody>{(legalAuditData.auditoria||[]).map((a,i) => <tr key={i} style={{ borderBottom:'1px solid var(--bd)' }}><td style={{ padding:'6px', whiteSpace:'nowrap', fontSize:10 }}>{a.fecha?new Date(a.fecha).toLocaleString('es-AR'):'—'}</td><td style={{ padding:'6px', fontSize:10 }}><code style={{ fontSize:10 }}>{a.accion}</code></td><td style={{ padding:'6px', fontSize:10 }}>{a.empresa_id||'—'}</td><td style={{ padding:'6px', fontSize:10, maxWidth:300, overflow:'hidden', textOverflow:'ellipsis' }}>{typeof a.detalle==='string'&&a.detalle.startsWith('{')?(d=>{try{const o=JSON.parse(d);return o.msg||d}catch{return d}})(a.detalle):a.detalle}</td></tr>)}</tbody>
+                    <tbody>{(legalAuditData.auditoria||[]).map((a,i) => <tr key={i} style={{ borderBottom:'1px solid var(--bd)' }}><td style={{ padding:'6px', whiteSpace:'nowrap', fontSize:10 }} data-label="Fecha">{a.fecha?new Date(a.fecha).toLocaleString('es-AR'):'—'}</td><td style={{ padding:'6px', fontSize:10 }} data-label="Acción"><code style={{ fontSize:10 }}>{a.accion}</code></td><td style={{ padding:'6px', fontSize:10 }} data-label="Empresa">{a.empresa_id||'—'}</td><td style={{ padding:'6px', fontSize:10, maxWidth:300, overflow:'hidden', textOverflow:'ellipsis' }} data-label="Detalle">{typeof a.detalle==='string'&&a.detalle.startsWith('{')?(d=>{try{const o=JSON.parse(d);return o.msg||d}catch{return d}})(a.detalle):a.detalle}</td></tr>)}</tbody>
                   </table>
                 </div>
               </div>}
@@ -1566,11 +1562,11 @@ export default function Superadmin() {
                       <tbody>
                         {(notifHistorial||[]).map((n,i) => (
                           <tr key={i} style={{ borderBottom:'1px solid var(--bd)', background:i%2===0?'var(--sf)':'transparent' }}>
-                            <td style={{ padding:'6px', fontSize:10, whiteSpace:'nowrap' }}>{new Date(n.creado).toLocaleString('es-AR')}</td>
-                            <td style={{ padding:'6px', fontSize:10 }}>{n.empresa_codigo}</td>
-                            <td style={{ padding:'6px', fontSize:10 }}><span style={{ padding:'1px 6px', borderRadius:8, fontSize:9, background:'var(--sf)', color:'var(--mu)' }}>{n.tipo}</span></td>
-                            <td style={{ padding:'6px', fontSize:11, fontWeight:600 }}>{n.titulo}</td>
-                            <td style={{ padding:'6px', textAlign:'center', fontSize:10 }}>{n.leida?'✅':'📩'}</td>
+                            <td style={{ padding:'6px', fontSize:10, whiteSpace:'nowrap' }} data-label="Fecha">{new Date(n.creado).toLocaleString('es-AR')}</td>
+                            <td style={{ padding:'6px', fontSize:10 }} data-label="Empresa">{n.empresa_codigo}</td>
+                            <td style={{ padding:'6px', fontSize:10 }} data-label="Tipo"><span style={{ padding:'1px 6px', borderRadius:8, fontSize:9, background:'var(--sf)', color:'var(--mu)' }}>{n.tipo}</span></td>
+                            <td style={{ padding:'6px', fontSize:11, fontWeight:600 }} data-label="Título">{n.titulo}</td>
+                            <td style={{ padding:'6px', textAlign:'center', fontSize:10 }} data-label="Leída">{n.leida?'✅':'📩'}</td>
                           </tr>
                         ))}
                         {(!notifHistorial || notifHistorial.length === 0) && <tr><td colSpan={5} style={{ padding:16, textAlign:'center', color:'var(--mu)', fontSize:12 }}>Sin notificaciones</td></tr>}
@@ -1582,6 +1578,7 @@ export default function Superadmin() {
             </div>
           )}
 
+          </div>
         </div>
       </div>
 
@@ -1640,7 +1637,7 @@ export default function Superadmin() {
               {empModal !== 'new' && (
                 <div style={{ borderTop: '1px solid var(--bd)', paddingTop: 12, marginTop: 12 }}>
                   <label className="" style={{ marginBottom: 8, display: 'block' }}>🧩 Override de módulos (anula el plan)</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                  <div className="grid-2" style={{ gap: 12 }}>
                     <div>
                       <div style={{ fontSize: 11, color: 'var(--ok)', marginBottom: 6 }}>✅ EXTRA habilitados</div>
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 8, background: 'var(--sf)', borderRadius: 6, minHeight: 32 }}>
@@ -1832,9 +1829,9 @@ export default function Superadmin() {
                             <tbody>
                               {detailAudit.filter(a => !detailAuditSearch || (a.accion||'').toLowerCase().includes(detailAuditSearch.toLowerCase()) || (a.detalle||'').toLowerCase().includes(detailAuditSearch.toLowerCase())).map(a => (
                                 <tr key={a.id} style={{fontSize:12}}>
-                                  <td style={{whiteSpace:'nowrap'}}>{a.fecha ? new Date(a.fecha).toLocaleString('es-AR') : '—'}</td>
-                                  <td><span className="badge" style={{fontSize:10,background:'var(--sf)',color:'var(--tx)'}}>{a.accion||'—'}</span></td>
-                                  <td style={{color:'var(--mu)',maxWidth:300,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={a.detalle}>{(()=>{try{const d=JSON.parse(a.detalle);return d.msg||d}catch{return a.detalle||'—'}})()}</td>
+                                  <td style={{whiteSpace:'nowrap'}} data-label="Fecha">{a.fecha ? new Date(a.fecha).toLocaleString('es-AR') : '—'}</td>
+                                  <td data-label="Acción"><span className="badge" style={{fontSize:10,background:'var(--sf)',color:'var(--tx)'}}>{a.accion||'—'}</span></td>
+                                  <td style={{color:'var(--mu)',maxWidth:300,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}} title={a.detalle} data-label="Detalle">{(()=>{try{const d=JSON.parse(a.detalle);return d.msg||d}catch{return a.detalle||'—'}})()}</td>
                                 </tr>
                               ))}
                             </tbody>
@@ -1910,8 +1907,10 @@ export default function Superadmin() {
                                   <div style={{fontSize:10,color:'var(--mu)'}}>
                                     {estado.external_account_id ? estado.external_account_id+' · ' : ''}
                                     {estado.last_sync ? 'Sync: '+new Date(estado.last_sync).toLocaleDateString('es-AR') : ''}
-                                  </div>
-                                </div>
+          </div>
+
+        </div>
+      </div>
                                 <label style={{cursor:'pointer'}}>
                                   <input type="checkbox" checked={p.habilitado}
                                     onChange={async () => {
