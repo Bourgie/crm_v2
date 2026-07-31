@@ -84,11 +84,11 @@ export function ListaRegalos() {
                 ? <EmptyRow cols={6} icon="🎁" text="Sin listas aún"/>
                 : filtered.slice((page-1)*PER_PAGE,page*PER_PAGE).map((l) => (
                   <tr key={l.id} style={{cursor:'pointer'}} onClick={()=>{setDetailId(l.id);loadDetail(l.id)}}>
-                    <td><div style={{fontWeight:600}}>{l.mama}</div>{l.papa&&<div style={{fontSize: 12,color:'var(--mu)'}}>{l.papa}</div>}</td>
-                    <td style={{fontSize:12}}>{l.evento||'—'}</td>
-                    <td style={{fontSize:12}}>{l.fecha_evento?new Date(l.fecha_evento).toLocaleDateString('es-AR'):'—'}</td>
-                    <td style={{fontSize:12}}>{l.tel||'—'}</td>
-                    <td style={{fontSize:12,color:'var(--mu)'}}>{l.n_items||0} ítem(s)</td>
+                    <td data-label="Titular"><div style={{fontWeight:600}}>{l.mama}</div>{l.papa&&<div style={{fontSize: 12,color:'var(--mu)'}}>{l.papa}</div>}</td>
+                    <td data-label="Evento" style={{fontSize:12}}>{l.evento||'—'}</td>
+                    <td data-label="Fecha" style={{fontSize:12}}>{l.fecha_evento?new Date(l.fecha_evento).toLocaleDateString('es-AR'):'—'}</td>
+                    <td data-label="Teléfono" style={{fontSize:12}}>{l.tel||'—'}</td>
+                    <td data-label="Ítems" style={{fontSize:12,color:'var(--mu)'}}>{l.n_items||0} ítem(s)</td>
                     <td onClick={(e)=>e.stopPropagation()}>
                       <div style={{display:'flex',gap:4}}>
                         <button type="button" className="btn btn-icon btn-sm" onClick={()=>{setForm({mama:l.mama,papa:l.papa||'',evento:l.evento||'',fecha_evento:(l.fecha_evento||'').substr(0,10),tel:l.tel||'',email:l.email||'',notas:l.notas||''});setModal(l)}}>✏️</button>
@@ -124,8 +124,8 @@ export function ListaRegalos() {
                 <tbody>
                   {(detail.items||[]).length===0?<tr><td colSpan={4} style={{textAlign:'center',padding:24,color:'var(--mu)'}}>Sin ítems</td></tr>
                     :(detail.items||[]).map((it,i)=>(
-                      <tr key={it.id||it.nombre||'item-'+i}><td>{it.nombre||it.prod_nombre||'—'}</td><td style={{textAlign:'center'}}>{it.cantidad}</td><td style={{fontSize:12}}>{it.comprador||'—'}</td>
-                      <td><span className={`badge ${it.comprado?'badge-green':'badge-gray'}`}>{it.comprado?'Comprado':'Pendiente'}</span></td></tr>
+                      <tr key={it.id||it.nombre||'item-'+i}><td data-label="Producto">{it.nombre||it.prod_nombre||'—'}</td><td data-label="Cant." style={{textAlign:'center'}}>{it.cantidad}</td><td data-label="Comprado por" style={{fontSize:12}}>{it.comprador||'—'}</td>
+                      <td data-label="Estado"><span className={`badge ${it.comprado?'badge-green':'badge-gray'}`}>{it.comprado?'Comprado':'Pendiente'}</span></td></tr>
                     ))}
                 </tbody></table>
               </div>
@@ -192,11 +192,11 @@ export function Auditoria() {
                 ? <EmptyRow cols={5} icon="🔍" text="Sin registros para los filtros seleccionados"/>
                 : rows.slice((page-1)*PER,page*PER).map((r) => (
                   <tr key={r.id}>
-                    <td style={{fontSize: 12,whiteSpace:'nowrap'}}>{fmtDate(r.fecha)}</td>
-                    <td style={{fontSize:12,fontWeight:600}}>{r.usuario_nombre||'—'}</td>
-                    <td><span className="badge badge-blue" style={{fontSize: 12}}>{r.modulo}</span></td>
-                    <td><span className="badge badge-gray" style={{fontSize: 12}}>{r.accion}</span></td>
-                    <td style={{fontSize:12,maxWidth:300,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.descripcion||'—'}</td>
+                    <td data-label="Fecha" style={{fontSize: 12,whiteSpace:'nowrap'}}>{fmtDate(r.fecha)}</td>
+                    <td data-label="Usuario" style={{fontSize:12,fontWeight:600}}>{r.usuario_nombre||'—'}</td>
+                    <td data-label="Módulo"><span className="badge badge-blue" style={{fontSize: 12}}>{r.modulo}</span></td>
+                    <td data-label="Acción"><span className="badge badge-gray" style={{fontSize: 12}}>{r.accion}</span></td>
+                    <td data-label="Descripción" style={{fontSize:12,maxWidth:300,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.descripcion||'—'}</td>
                   </tr>
                 ))}
             </tbody>
@@ -324,10 +324,10 @@ export function Reportes() {
               <tbody>
                 {data.by_vendedor.map((v,i)=>(
                   <tr key={v.id||v.nombre||'v-'+i}>
-                    <td style={{fontWeight:600}}>{v.nombre}</td>
-                    <td style={{textAlign:'right'}}>{v.n}</td>
-                    <td style={{textAlign:'right',fontWeight:700,color:'var(--ok)'}}>{fmtM(v.tot)}</td>
-                    <td style={{textAlign:'right',fontWeight:700,color:'var(--ac)'}}>{fmtM(v.comision)}</td>
+                    <td data-label="Vendedor" style={{fontWeight:600}}>{v.nombre}</td>
+                    <td data-label="Ventas" style={{textAlign:'right'}}>{v.n}</td>
+                    <td data-label="Total vendido" style={{textAlign:'right',fontWeight:700,color:'var(--ok)'}}>{fmtM(v.tot)}</td>
+                    <td data-label="Comisión" style={{textAlign:'right',fontWeight:700,color:'var(--ac)'}}>{fmtM(v.comision)}</td>
                   </tr>
                 ))}
               </tbody>

@@ -243,16 +243,16 @@ async function buscarVentas() {
                     const late = p.fecha_entrega && p.fecha_entrega.substr(0,10) <= hoyStr && !['entregado','cancelado'].includes(p.estado)
                     return (
                       <tr key={p.id} style={{ cursor: 'pointer', background: late ? 'rgba(239,68,68,.04)' : '' }} onClick={() => openEdit(p)}>
-                        <td>
+                        <td data-label="Cliente">
                           <div style={{ fontWeight: 600 }}>{p.cli_nombre || 'Sin nombre'}</div>
                           {p.tel && <div style={{ fontSize: 11, color: 'var(--mu)' }}>{p.tel}</div>}
                         </td>
-                        <td>{p.concepto}</td>
-                        <td style={{ fontSize: 12, color: late ? 'var(--bad)' : 'var(--mu)', fontWeight: late ? 700 : 400 }}>{fmtDate(p.fecha_entrega)}{late ? ' ⚠️' : ''}{p.suc_entrega && allSucs.find(s=>s.id===p.suc_entrega) ? <span style={{display:'block',fontSize:10}}>🏪 {allSucs.find(s=>s.id===p.suc_entrega).nombre}</span> : null}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{p.monto_total ? fmt(p.monto_total) : '—'}</td>
-                        <td style={{ textAlign: 'right', fontSize: 12 }}>{p.sena ? fmt(p.sena) : '—'}</td>
-                        <td><span className={`badge ${EST_PEND[p.estado] || 'badge-gray'}`}>{EST_LABELS[p.estado] || p.estado}</span></td>
-                        <td onClick={(e) => e.stopPropagation()}>
+                        <td data-label="Concepto">{p.concepto}</td>
+                        <td data-label="Entrega" style={{ fontSize: 12, color: late ? 'var(--bad)' : 'var(--mu)', fontWeight: late ? 700 : 400 }}>{fmtDate(p.fecha_entrega)}{late ? ' ⚠️' : ''}{p.suc_entrega && allSucs.find(s=>s.id===p.suc_entrega) ? <span style={{display:'block',fontSize:10}}>🏪 {allSucs.find(s=>s.id===p.suc_entrega).nombre}</span> : null}</td>
+                        <td data-label="Total" style={{ textAlign: 'right', fontWeight: 600 }}>{p.monto_total ? fmt(p.monto_total) : '—'}</td>
+                        <td data-label="Seña" style={{ textAlign: 'right', fontSize: 12 }}>{p.sena ? fmt(p.sena) : '—'}</td>
+                        <td data-label="Estado"><span className={`badge ${EST_PEND[p.estado] || 'badge-gray'}`}>{EST_LABELS[p.estado] || p.estado}</span></td>
+                        <td data-label="" onClick={(e) => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: 4 }}>
                             {p.estado !== 'entregado' && p.estado !== 'cancelado' && (
                               <button type="button" className="btn btn-sm" style={{ background: '#dcfce7', color: '#15803d', border: 'none' }} onClick={() => cambiarEstado(p.id, 'entregado')}>✅</button>
@@ -406,12 +406,12 @@ async function buscarVentas() {
                         <tbody>
                           {ventasResultados.map((v)=>(
                             <tr key={v.id}>
-                              <td style={{fontWeight:700}}>#{v.numero}</td>
-                              <td style={{fontSize:11}}>{new Date(v.fecha).toLocaleString('es-AR')}</td>
-                              <td>{v.cli_nombre||'Consumidor'}</td>
-                              <td style={{fontSize:11}}>{v.vend_nombre||''}</td>
-                              <td style={{fontWeight:700,color:'var(--ac)'}}>{fmt(v.total)}</td>
-                              <td><button type="button" className="btn btn-primary btn-sm" onClick={()=>abrirDesdeVenta(v)}>Elegir</button></td>
+                              <td data-label="#" style={{fontWeight:700}}>#{v.numero}</td>
+                              <td data-label="Fecha" style={{fontSize:11}}>{new Date(v.fecha).toLocaleString('es-AR')}</td>
+                              <td data-label="Cliente">{v.cli_nombre||'Consumidor'}</td>
+                              <td data-label="Vendedor" style={{fontSize:11}}>{v.vend_nombre||''}</td>
+                              <td data-label="Total" style={{fontWeight:700,color:'var(--ac)'}}>{fmt(v.total)}</td>
+                              <td data-label=""><button type="button" className="btn btn-primary btn-sm" onClick={()=>abrirDesdeVenta(v)}>Elegir</button></td>
                             </tr>
                           ))}
                         </tbody>
@@ -617,14 +617,14 @@ export function CtaCte() {
                 ? <EmptyRow cols={6} icon="📒" text="Sin cuentas corrientes" />
                 : filtered.slice((page-1)*PER_PAGE, page*PER_PAGE).map((c) => (
                   <tr key={c.id}>
-                    <td><div style={{ fontWeight: 600 }}>{c.nombre} {c.apellido || ''}</div></td>
-                    <td style={{ fontSize: 12 }}>{c.tel || '—'}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 800, color: c.saldo > 0 ? 'var(--bad)' : c.saldo < 0 ? 'var(--ok)' : 'var(--mu)' }}>
+                    <td data-label="Cliente"><div style={{ fontWeight: 600 }}>{c.nombre} {c.apellido || ''}</div></td>
+                    <td data-label="Teléfono" style={{ fontSize: 12 }}>{c.tel || '—'}</td>
+                    <td data-label="Saldo" style={{ textAlign: 'right', fontWeight: 800, color: c.saldo > 0 ? 'var(--bad)' : c.saldo < 0 ? 'var(--ok)' : 'var(--mu)' }}>
                       {c.saldo > 0 ? `Debe ${fmt(c.saldo)}` : c.saldo < 0 ? `A favor ${fmt(-c.saldo)}` : 'Al día'}
                     </td>
-                    <td style={{ textAlign: 'right', fontSize: 12 }}>{c.limite_ctacte ? fmt(c.limite_ctacte) : 'Sin límite'}</td>
-                    <td style={{ fontSize: 12, color: 'var(--mu)' }}>{fmtDate(c.ultima_compra)}</td>
-                    <td>
+                    <td data-label="Límite" style={{ textAlign: 'right', fontSize: 12 }}>{c.limite_ctacte ? fmt(c.limite_ctacte) : 'Sin límite'}</td>
+                    <td data-label="Última compra" style={{ fontSize: 12, color: 'var(--mu)' }}>{fmtDate(c.ultima_compra)}</td>
+                    <td data-label="">
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         <button type="button" className="btn btn-icon btn-sm" title="Historial" onClick={() => { setModalHist(c); loadHistorial(c.id) }}>📋</button>
                         {(c.saldo || 0) > 0 && (
@@ -683,11 +683,11 @@ export function CtaCte() {
                   ? <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--mu)' }}>Sin movimientos</td></tr>
                   : historial.map((h, i) => (
                     <tr key={i}>
-                      <td style={{ fontSize: 12 }}>{fmtDate(h.fecha)}</td>
-                      <td style={{ fontSize: 13 }}>{h.concepto}</td>
-                      <td style={{ textAlign: 'right', color: 'var(--bad)', fontWeight: h.debe > 0 ? 600 : 400 }}>{h.debe > 0 ? fmt(h.debe) : '—'}</td>
-                      <td style={{ textAlign: 'right', color: 'var(--ok)', fontWeight: h.haber > 0 ? 600 : 400 }}>{h.haber > 0 ? fmt(h.haber) : '—'}</td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: h.saldo > 0 ? 'var(--bad)' : 'var(--ok)' }}>{fmt(h.saldo)}</td>
+                      <td data-label="Fecha" style={{ fontSize: 12 }}>{fmtDate(h.fecha)}</td>
+                      <td data-label="Concepto" style={{ fontSize: 13 }}>{h.concepto}</td>
+                      <td data-label="Debe" style={{ textAlign: 'right', color: 'var(--bad)', fontWeight: h.debe > 0 ? 600 : 400 }}>{h.debe > 0 ? fmt(h.debe) : '—'}</td>
+                      <td data-label="Haber" style={{ textAlign: 'right', color: 'var(--ok)', fontWeight: h.haber > 0 ? 600 : 400 }}>{h.haber > 0 ? fmt(h.haber) : '—'}</td>
+                      <td data-label="Saldo" style={{ textAlign: 'right', fontWeight: 700, color: h.saldo > 0 ? 'var(--bad)' : 'var(--ok)' }}>{fmt(h.saldo)}</td>
                     </tr>
                   ))}
               </tbody>

@@ -165,10 +165,10 @@ export function Transferencias() {
                 ? <EmptyRow cols={5} icon="🔄" text="Sin transferencias" />
                 : filtered.slice((page-1)*PER_PAGE, page*PER_PAGE).map(t => (
                   <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => setDetail(t)}>
-                    <td style={{ fontSize: 12 }}>{fmtDate(t.fecha)}</td>
-                    <td><span style={{ fontWeight: 600 }}>{t.suc_origen_nombre}</span><span style={{ color: 'var(--mu)' }}> → </span><span style={{ fontWeight: 600 }}>{t.suc_destino_nombre}</span></td>
-                    <td style={{ fontSize: 12, color: 'var(--mu)' }}>{t.items?.length || 0} ítem(s)</td>
-                    <td><span className={`badge ${ESTADOS[t.estado] || 'badge-gray'}`}>{EST_LABELS[t.estado] || t.estado}</span></td>
+                    <td data-label="Fecha" style={{ fontSize: 12 }}>{fmtDate(t.fecha)}</td>
+                    <td data-label="Origen → Destino"><span style={{ fontWeight: 600 }}>{t.suc_origen_nombre}</span><span style={{ color: 'var(--mu)' }}> → </span><span style={{ fontWeight: 600 }}>{t.suc_destino_nombre}</span></td>
+                    <td data-label="Ítems" style={{ fontSize: 12, color: 'var(--mu)' }}>{t.items?.length || 0} ítem(s)</td>
+                    <td data-label="Estado"><span className={`badge ${ESTADOS[t.estado] || 'badge-gray'}`}>{EST_LABELS[t.estado] || t.estado}</span></td>
                     <td onClick={e => e.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 4 }}>
                         {t.estado === 'borrador' && <button type="button" className="btn btn-sm" style={{ background: '#dbeafe', color: '#1d4ed8', border: 'none', fontSize: 12 }} onClick={() => accion(t.id, 'enviar')}>📤 Enviar</button>}
@@ -285,7 +285,7 @@ export function Transferencias() {
             {detail.notas && <p style={{ fontSize: 13, color: 'var(--mu)', marginBottom: 12 }}>{detail.notas}</p>}
             <div className="table-wrap">
               <table><thead><tr><th>Producto</th><th style={{ textAlign: 'center' }}>Cantidad</th></tr></thead>
-                <tbody>{(detail.items || []).map((it, i) => <tr key={i}><td>{it.nombre}{it.talle ? ` T:${it.talle}` : ''}</td><td style={{ textAlign: 'center', fontWeight: 700 }}>{it.cantidad}</td></tr>)}</tbody>
+                <tbody>{(detail.items || []).map((it, i) => <tr key={i}><td data-label="Producto">{it.nombre}{it.talle ? ` T:${it.talle}` : ''}</td><td data-label="Cantidad" style={{ textAlign: 'center', fontWeight: 700 }}>{it.cantidad}</td></tr>)}</tbody>
               </table>
             </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--bd)' }}>

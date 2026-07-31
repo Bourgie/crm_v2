@@ -313,12 +313,12 @@ export function Dashboard() {
               <tbody>
                 {ultimasVentas.slice(0, 8).map((v, i) => (
                   <tr key={v.id||'uv-'+i}>
-                    <td style={{ fontSize: 12, color: 'var(--mu)' }}>#{v.numero}</td>
-                    <td style={{ fontSize: 12 }}>{new Date(v.fecha).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
-                    <td style={{ fontSize: 13 }}>{v.cli_nombre || <span style={{ color: 'var(--mu)' }}>Consumidor</span>}</td>
-                    <td style={{ fontSize: 12, color: 'var(--mu)' }}>{v.vend_nombre || '—'}</td>
-                    <td style={{ fontSize: 12 }}>{v.pago || '—'}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--ok)' }}>{fmt(v.total)}</td>
+                    <td data-label="#" style={{ fontSize: 12, color: 'var(--mu)' }}>#{v.numero}</td>
+                    <td data-label="Fecha" style={{ fontSize: 12 }}>{new Date(v.fecha).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+                    <td data-label="Cliente" style={{ fontSize: 13 }}>{v.cli_nombre || <span style={{ color: 'var(--mu)' }}>Consumidor</span>}</td>
+                    <td data-label="Vendedor" style={{ fontSize: 12, color: 'var(--mu)' }}>{v.vend_nombre || '—'}</td>
+                    <td data-label="Método" style={{ fontSize: 12 }}>{v.pago || '—'}</td>
+                    <td data-label="Total" style={{ textAlign: 'right', fontWeight: 700, color: 'var(--ok)' }}>{fmt(v.total)}</td>
                   </tr>
                 ))}
               </tbody>

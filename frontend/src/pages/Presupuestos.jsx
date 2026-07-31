@@ -216,12 +216,12 @@ export function Presupuestos() {
                     const vencido = vto && vto < new Date() && p.estado === 'enviado'
                     return (
                       <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => openEdit(p)}>
-                        <td style={{ fontSize: 12 }}>{(p.creado || '').substr(0, 10)}</td>
-                        <td style={{ fontWeight: 600 }}>{p.cli_nombre || 'Consumidor final'}</td>
-                        <td style={{ fontSize: 12, color: 'var(--mu)' }}>{p.items?.length || 0} ítem(s)</td>
-                        <td style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(p.total)}</td>
-                        <td><span className={`badge ${ESTADOS[p.estado] || 'badge-gray'}`}>{p.estado}</span></td>
-                        <td style={{ fontSize: 12, color: vencido ? 'var(--bad)' : 'var(--mu)' }}>{vto ? vto.toLocaleDateString('es-AR') : '—'}</td>
+                        <td data-label="Fecha" style={{ fontSize: 12 }}>{(p.creado || '').substr(0, 10)}</td>
+                        <td data-label="Cliente" style={{ fontWeight: 600 }}>{p.cli_nombre || 'Consumidor final'}</td>
+                        <td data-label="Ítems" style={{ fontSize: 12, color: 'var(--mu)' }}>{p.items?.length || 0} ítem(s)</td>
+                        <td data-label="Total" style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(p.total)}</td>
+                        <td data-label="Estado"><span className={`badge ${ESTADOS[p.estado] || 'badge-gray'}`}>{p.estado}</span></td>
+                        <td data-label="Vence" style={{ fontSize: 12, color: vencido ? 'var(--bad)' : 'var(--mu)' }}>{vto ? vto.toLocaleDateString('es-AR') : '—'}</td>
                         <td onClick={(e) => e.stopPropagation()}>
                           <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
                             <button type="button" className="btn btn-icon btn-sm" title="Editar" onClick={() => openEdit(p)}>✏️</button>

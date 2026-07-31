@@ -456,14 +456,14 @@ export function Clientes() {
                 ? <EmptyRow cols={6} icon="👥" text={search ? 'Sin resultados para tu búsqueda' : 'Sin clientes aún. Creá el primero con "+ Nuevo cliente"'} />
                 : paginated.map((c) => (
                   <tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => openEdit(c)}>
-                    <td>
+                    <td data-label="Nombre">
                       <div style={{ fontWeight: 600 }}>{c.nombre} {c.apellido}</div>
                       {c.email && <div style={{ fontSize: 11, color: 'var(--mu)' }}>{c.email}</div>}
                     </td>
-                    <td>{c.tel || '—'}</td>
-                    <td style={{ fontSize: 12 }}>{c.dni || '—'}</td>
-                    <td>{c.puntos || 0} pts</td>
-                    <td>
+                    <td data-label="Teléfono">{c.tel || '—'}</td>
+                    <td data-label="DNI / CUIT" style={{ fontSize: 12 }}>{c.dni || '—'}</td>
+                    <td data-label="Puntos">{c.puntos || 0} pts</td>
+                    <td data-label="Cta. Cte.">
                       {c.es_ctacte
                         ? <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                             <span className={`badge ${c.saldo_ctacte > 0 ? 'badge-red' : 'badge-green'}`}>
@@ -472,7 +472,7 @@ export function Clientes() {
                           </span>
                         : <span className="badge badge-gray">No</span>}
                     </td>
-                    <td onClick={(e) => e.stopPropagation()}>
+                    <td data-label="" onClick={(e) => e.stopPropagation()}>
                       <div style={{ display: 'flex', gap: 4 }}>
                         <button type="button" className="btn btn-icon btn-sm" title="Ver ficha" onClick={() => openFicha(c)}>👁</button>
                         <button type="button" className="btn btn-icon btn-sm" title="Historial ventas" onClick={() => navigate('/app/ventas?cli_id=' + c.id)}>📋</button>
@@ -600,11 +600,11 @@ export function Clientes() {
                           <tbody>
                             {fichaData.hist.map((v, i) => (
                               <tr key={i}>
-                                <td style={{ fontSize: 11 }}>{new Date(v.fecha).toLocaleDateString('es-AR')}</td>
-                                <td style={{ fontSize: 11 }}>{v.suc_nombre || '—'}</td>
-                                <td style={{ fontSize: 11, color: 'var(--mu)' }}>{(v.items || []).slice(0, 2).map(it => it.nombre + ' x' + it.cantidad).join(', ')}{(v.items || []).length > 2 ? '...' : ''}</td>
-                                <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--ac)' }}>{fmt(v.total)}</td>
-                                <td><span className={`badge ${v.anulada ? 'badge-red' : 'badge-green'}`}>{v.anulada ? 'Anulada' : 'OK'}</span></td>
+                                <td data-label="Fecha" style={{ fontSize: 11 }}>{new Date(v.fecha).toLocaleDateString('es-AR')}</td>
+                                <td data-label="Sucursal" style={{ fontSize: 11 }}>{v.suc_nombre || '—'}</td>
+                                <td data-label="Productos" style={{ fontSize: 11, color: 'var(--mu)' }}>{(v.items || []).slice(0, 2).map(it => it.nombre + ' x' + it.cantidad).join(', ')}{(v.items || []).length > 2 ? '...' : ''}</td>
+                                <td data-label="Total" style={{ textAlign: 'right', fontWeight: 700, color: 'var(--ac)' }}>{fmt(v.total)}</td>
+                                <td data-label="Estado"><span className={`badge ${v.anulada ? 'badge-red' : 'badge-green'}`}>{v.anulada ? 'Anulada' : 'OK'}</span></td>
                               </tr>
                             ))}
                           </tbody>

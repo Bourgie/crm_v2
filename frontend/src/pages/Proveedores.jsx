@@ -101,12 +101,12 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
               {ordenes.length===0 ? <EmptyRow cols={6} icon="📦" text="Sin compras registradas"/>
                 : ordenes.map((o)=>(
                   <tr key={o.id}>
-                    <td style={{fontSize:12}}>{fmtDate(o.fecha)}</td>
-                    <td style={{fontWeight:500}}>{o.concepto||'Compra'}</td>
-                    <td style={{fontSize:12,color:'var(--mu)'}}>{o.nro_factura||'—'}</td>
-                    <td style={{textAlign:'right',fontWeight:600}}>{fmt(o.monto)}</td>
-                    <td style={{textAlign:'right',fontSize:12}}>{o.pagado_al_recibir>0?fmt(o.pagado_al_recibir):'—'}</td>
-                    <td><span className={`badge ${o.cancelada?'badge-green':'badge-red'}`}>{o.cancelada?'Pagada':'Pendiente'}</span></td>
+                    <td data-label="Fecha" style={{fontSize:12}}>{fmtDate(o.fecha)}</td>
+                    <td data-label="Concepto" style={{fontWeight:500}}>{o.concepto||'Compra'}</td>
+                    <td data-label="N° Factura" style={{fontSize:12,color:'var(--mu)'}}>{o.nro_factura||'—'}</td>
+                    <td data-label="Monto" style={{textAlign:'right',fontWeight:600}}>{fmt(o.monto)}</td>
+                    <td data-label="Pagado" style={{textAlign:'right',fontSize:12}}>{o.pagado_al_recibir>0?fmt(o.pagado_al_recibir):'—'}</td>
+                    <td data-label="Estado"><span className={`badge ${o.cancelada?'badge-green':'badge-red'}`}>{o.cancelada?'Pagada':'Pendiente'}</span></td>
                   </tr>
                 ))}
             </tbody>
@@ -122,11 +122,11 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
               {pagos.length===0 ? <EmptyRow cols={5} icon="💵" text="Sin pagos registrados"/>
                 : pagos.map((p)=>(
                   <tr key={p.id}>
-                    <td style={{fontSize:12}}>{fmtDate(p.fecha)}</td>
-                    <td>{p.concepto||'Pago'}</td>
-                    <td style={{fontSize:12}}>{p.metodo||'—'}</td>
-                    <td style={{fontSize:12,color:'var(--mu)'}}>{p.nro_comprobante||'—'}</td>
-                    <td style={{textAlign:'right',fontWeight:700,color:'var(--ok)'}}>{fmt(p.monto)}</td>
+                    <td data-label="Fecha" style={{fontSize:12}}>{fmtDate(p.fecha)}</td>
+                    <td data-label="Concepto">{p.concepto||'Pago'}</td>
+                    <td data-label="Método" style={{fontSize:12}}>{p.metodo||'—'}</td>
+                    <td data-label="N° Comp." style={{fontSize:12,color:'var(--mu)'}}>{p.nro_comprobante||'—'}</td>
+                    <td data-label="Monto" style={{textAlign:'right',fontWeight:700,color:'var(--ok)'}}>{fmt(p.monto)}</td>
                   </tr>
                 ))}
             </tbody>
@@ -228,11 +228,11 @@ function DeudasTab({ api, toast, onVerProveedor }) {
                 ? <EmptyRow cols={6} icon="💰" text="Sin resultados"/>
                 : filtrados.map((p)=>(
                     <tr key={p.id}>
-                      <td><div style={{fontWeight:600}}>{p.nombre}</div><div style={{fontSize: 12,color:'var(--mu)'}}>{p.cant_ordenes} órdenes · {p.cant_pagos} pagos</div></td>
-                      <td style={{fontSize:12,fontFamily:'monospace'}}>{p.cuit||'—'}</td>
-                      <td style={{textAlign:'right',fontSize:13}}>{fmt(p.total_ordenes)}</td>
-                      <td style={{textAlign:'right',fontSize:13,color:'var(--ok)'}}>{fmt(p.total_pagos)}</td>
-                      <td style={{textAlign:'right',fontWeight:700,color:p.tiene_deuda?'var(--bad)':'var(--ok)'}}>
+                      <td data-label="Proveedor"><div style={{fontWeight:600}}>{p.nombre}</div><div style={{fontSize: 12,color:'var(--mu)'}}>{p.cant_ordenes} órdenes · {p.cant_pagos} pagos</div></td>
+                      <td data-label="CUIT" style={{fontSize:12,fontFamily:'monospace'}}>{p.cuit||'—'}</td>
+                      <td data-label="Compras" style={{textAlign:'right',fontSize:13}}>{fmt(p.total_ordenes)}</td>
+                      <td data-label="Pagado" style={{textAlign:'right',fontSize:13,color:'var(--ok)'}}>{fmt(p.total_pagos)}</td>
+                      <td data-label="Saldo" style={{textAlign:'right',fontWeight:700,color:p.tiene_deuda?'var(--bad)':'var(--ok)'}}>
                         {p.tiene_deuda ? fmt(p.saldo) : 'Al día'}
                       </td>
                       <td>
@@ -332,10 +332,10 @@ export function Proveedores() {
                     ? <EmptyRow cols={5} icon="📦" text="Sin proveedores. Creá el primero."/>
                     : filtered.slice((page-1)*PER,page*PER).map((p)=>(
                       <tr key={p.id}>
-                        <td><div style={{fontWeight:600}}>{p.nombre}</div>{p.notas&&<div style={{fontSize: 12,color:'var(--mu)'}}>{p.notas.substr(0,50)}</div>}</td>
-                        <td style={{fontSize:12,fontFamily:'monospace'}}>{p.cuit||'—'}</td>
-                        <td style={{fontSize:12}}>{p.contacto||p.email||'—'}</td>
-                        <td style={{fontSize:12}}>{p.tel||'—'}</td>
+                        <td data-label="Nombre"><div style={{fontWeight:600}}>{p.nombre}</div>{p.notas&&<div style={{fontSize: 12,color:'var(--mu)'}}>{p.notas.substr(0,50)}</div>}</td>
+                        <td data-label="CUIT" style={{fontSize:12,fontFamily:'monospace'}}>{p.cuit||'—'}</td>
+                        <td data-label="Contacto" style={{fontSize:12}}>{p.contacto||p.email||'—'}</td>
+                        <td data-label="Teléfono" style={{fontSize:12}}>{p.tel||'—'}</td>
                         <td>
                           <div style={{display:'flex',gap:4}}>
                             <button type="button" className="btn btn-sm" style={{background:'#dbeafe',color:'#1d4ed8',border:'none'}} onClick={()=>setDetail(p)}>📋 Ver</button>

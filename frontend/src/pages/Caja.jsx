@@ -347,7 +347,7 @@ function ModalCierre({ open, onClose, estado, onCerrar }) {
     </table>
     <table>
       <tr><th>Método</th><th class="r">Monto</th><th class="r">Cant.</th></tr>
-      ${Object.entries(porPago).map(([k,v])=>`<tr><td>${sanitizeHtml(k)}</td><td class="r">${fmt(v.monto)}</td><td class="r">${v.cantidad}</td></tr>`).join('')}
+      ${Object.entries(porPago).map(([k,v])=>`<tr><td data-label="Método">${sanitizeHtml(k)}</td><td data-label="Monto" class="r">${fmt(v.monto)}</td><td data-label="Cant." class="r">${v.cantidad}</td></tr>`).join('')}
     </table>
     <p style="text-align:center;color:#666;font-size:10px;margin-top:20px">— Cierre de caja —</p>
     </body></html>`
@@ -437,7 +437,7 @@ function ModalCorteParcial({ open, onClose, estado }) {
       <span>Egresos:</span><span class="b">${fmt(e?.egresos||0)}</span>
     </div>
     <table><tr><th>Método</th><th class="r">Monto</th></tr>
-    ${Object.entries(e?.por_pago||{}).map(([k,v])=>`<tr><td>${sanitizeHtml(k)}</td><td class="r">${fmt(v)}</td></tr>`).join('')}
+    ${Object.entries(e?.por_pago||{}).map(([k,v])=>`<tr><td data-label="Método">${sanitizeHtml(k)}</td><td data-label="Monto" class="r">${fmt(v)}</td></tr>`).join('')}
     </table>
     <p style="text-align:center;color:#666;font-size:10px;margin-top:20px">— Corte parcial —</p>
     </body></html>`
@@ -960,20 +960,20 @@ export function Caja() {
                   ? <EmptyRow cols={6} icon="💰" text={abierta ? 'Sin movimientos aún' : 'Abrí la caja para registrar movimientos'} />
                   : movs.map((m) => (
                     <tr key={m.id} style={{ opacity: m.anulado ? .4 : 1 }}>
-                      <td style={{ fontSize: 12, color: 'var(--mu)' }}>{fmtTime(m.fecha)}</td>
-                      <td>
+                      <td data-label="Hora" style={{ fontSize: 12, color: 'var(--mu)' }}>{fmtTime(m.fecha)}</td>
+                      <td data-label="Concepto">
                         <div style={{ fontWeight: 500 }}>{m.concepto}</div>
                         {m.usuario && <div style={{ fontSize: 11, color: 'var(--mu)' }}>{m.usuario}</div>}
                         {m.anulado && <span className="badge badge-red" style={{ fontSize: 10 }}>Anulado</span>}
                       </td>
-                      <td style={{ fontSize: 12 }}>{m.pago_metodo || '—'}</td>
-                      <td style={{ textAlign: 'center' }}>
+                      <td data-label="Método" style={{ fontSize: 12 }}>{m.pago_metodo || '—'}</td>
+                      <td data-label="Tipo" style={{ textAlign: 'center' }}>
                         <span className={`badge ${m.tipo === 'ingreso' ? 'badge-green' : 'badge-red'}`}>{m.tipo === 'ingreso' ? '↑' : '↓'} {m.tipo}</span>
                       </td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: m.tipo === 'ingreso' ? 'var(--ok)' : 'var(--bad)' }}>
+                      <td data-label="Monto" style={{ textAlign: 'right', fontWeight: 700, color: m.tipo === 'ingreso' ? 'var(--ok)' : 'var(--bad)' }}>
                         {m.tipo === 'egreso' ? '−' : ''}{fmt(m.monto)}
                       </td>
-                      <td>{!m.anulado && !m.auto && <button type="button" className="btn btn-icon btn-sm" onClick={() => anularMovimiento(m.id)}>✕</button>}</td>
+                      <td data-label="">{!m.anulado && !m.auto && <button type="button" className="btn btn-icon btn-sm" onClick={() => anularMovimiento(m.id)}>✕</button>}</td>
                     </tr>
                   ))}
               </tbody>
@@ -1064,16 +1064,16 @@ export function Caja() {
                     const diff = (h.saldo_real || 0) - (h.saldo_esperado || 0)
                     return (
                       <tr key={h.id}>
-                        <td style={{ fontSize: 12 }}>{fmtDate(h.fecha)}</td>
-                        <td style={{ fontSize: 12 }}>{fmtTime(h.apertura)}</td>
-                        <td style={{ fontSize: 12 }}>{h.cierre ? fmtTime(h.cierre) : '—'}</td>
-                        <td style={{ textAlign: 'right' }}>{fmt(h.ingresos)}</td>
-                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(h.saldo_esperado_efectivo ?? h.saldo_esperado)}</td>
-                        <td style={{ textAlign: 'right', color: Math.abs(diff) < 1 ? 'var(--ok)' : diff < 0 ? 'var(--bad)' : 'var(--warn)', fontWeight: 600 }}>
+                        <td data-label="Fecha" style={{ fontSize: 12 }}>{fmtDate(h.fecha)}</td>
+                        <td data-label="Apertura" style={{ fontSize: 12 }}>{fmtTime(h.apertura)}</td>
+                        <td data-label="Cierre" style={{ fontSize: 12 }}>{h.cierre ? fmtTime(h.cierre) : '—'}</td>
+                        <td data-label="Ingresos" style={{ textAlign: 'right' }}>{fmt(h.ingresos)}</td>
+                        <td data-label="Ef. esperado" style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(h.saldo_esperado_efectivo ?? h.saldo_esperado)}</td>
+                        <td data-label="Diferencia" style={{ textAlign: 'right', color: Math.abs(diff) < 1 ? 'var(--ok)' : diff < 0 ? 'var(--bad)' : 'var(--warn)', fontWeight: 600 }}>
                           {h.estado === 'cerrada' ? (diff >= 0 ? '+' : '') + fmt(diff) : '—'}
                         </td>
-                        <td style={{ textAlign: 'center' }}><span className={`badge ${h.estado === 'abierta' ? 'badge-green' : 'badge-gray'}`}>{h.estado}</span></td>
-                        <td style={{ textAlign: 'center' }}>
+                        <td data-label="Estado" style={{ textAlign: 'center' }}><span className={`badge ${h.estado === 'abierta' ? 'badge-green' : 'badge-gray'}`}>{h.estado}</span></td>
+                        <td data-label="Acción" style={{ textAlign: 'center' }}>
                           {h.estado === 'abierta' && (
                             <button type="button" className="btn btn-sm btn-danger" onClick={() => cerrarForzado(h.id, h.fecha)}>
                               🔒 Cerrar

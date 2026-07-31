@@ -176,17 +176,17 @@ export function Gastos() {
                 ? <EmptyRow cols={7} icon="💸" text={search ? 'Sin resultados' : 'Sin gastos este mes. Registrá el primero.'} />
                 : paginated.map((g) => (
                   <tr key={g.id} style={{ cursor: 'pointer' }} onClick={() => openEdit(g)}>
-                    <td style={{ fontSize: 12, color: 'var(--mu)' }}>{(g.fecha || '').substr(0, 10)}</td>
-                    <td>
+                    <td data-label="Fecha" style={{ fontSize: 12, color: 'var(--mu)' }}>{(g.fecha || '').substr(0, 10)}</td>
+                    <td data-label="Concepto">
                       <div style={{ fontWeight: 600 }}>{g.nombre}</div>
                       {g.notas && <div style={{ fontSize: 12, color: 'var(--mu)' }}>{g.notas}</div>}
                       {g.pagado_por && <div style={{ fontSize: 12, color: 'var(--mu)' }}>Pagó: {g.pagado_por}</div>}
                     </td>
-                    <td style={{ fontSize: 12 }}>{g.categoria_nombre || '—'}</td>
-                    <td style={{ fontSize: 12 }}>{METODO_LABELS[g.metodo_pago] || g.metodo_pago || '—'}</td>
-                    <td><EstadoBadge estado={g.estado} /></td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--bad)' }}>{fmt(g.monto)}</td>
-                    <td onClick={(e) => e.stopPropagation()}>
+                    <td data-label="Categoría" style={{ fontSize: 12 }}>{g.categoria_nombre || '—'}</td>
+                    <td data-label="Método" style={{ fontSize: 12 }}>{METODO_LABELS[g.metodo_pago] || g.metodo_pago || '—'}</td>
+                    <td data-label="Estado"><EstadoBadge estado={g.estado} /></td>
+                    <td data-label="Monto" style={{ textAlign: 'right', fontWeight: 700, color: 'var(--bad)' }}>{fmt(g.monto)}</td>
+                    <td data-label="" onClick={(e) => e.stopPropagation()}>
                       <button type="button" className="btn btn-icon btn-sm" onClick={() => setConfirm(g.id)}>🗑</button>
                     </td>
                   </tr>

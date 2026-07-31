@@ -155,14 +155,14 @@ function VentaDetail({ venta, api, onRefresh, onClose, showAnularByDefault }) {
               ? <tr><td colSpan={4} style={{ textAlign: 'center', padding: 16, color: 'var(--mu)' }}>Sin items</td></tr>
               : items.map((it, i) => (
                 <tr key={it.id||it.nombre||'vi-'+i}>
-                  <td>
+                  <td data-label="Producto">
                     <div>{it.nombre}</div>
                     {it.talle && <div style={{ fontSize: 12, color: 'var(--mu)' }}>{it.talle}</div>}
                     {(it.cantidad_devuelta || 0) > 0 && <span className="badge badge-red" style={{ fontSize: 12 }}>{it.cantidad_devuelta} dev.</span>}
                   </td>
-                  <td style={{ textAlign: 'center' }}>{it.cantidad}</td>
-                  <td style={{ textAlign: 'right' }}>{fmt(it.precio)}</td>
-                  <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(it.subtotal)}</td>
+                  <td data-label="Cant." style={{ textAlign: 'center' }}>{it.cantidad}</td>
+                  <td data-label="Precio" style={{ textAlign: 'right' }}>{fmt(it.precio)}</td>
+                  <td data-label="Subtotal" style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(it.subtotal)}</td>
                 </tr>
               ))}
           </tbody>
@@ -487,14 +487,14 @@ export function Ventas() {
                 ? <EmptyRow cols={6} icon="📋" text="Sin ventas para este período" />
                 : paginated.map((v) => (
                   <tr key={v.id} style={{ cursor: 'pointer', opacity: v.anulada ? .5 : 1 }} onClick={() => setDetail(v)}>
-                    <td style={{ fontSize: 12 }}>{new Date(v.fecha).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
-                    <td>
+                    <td data-label="Fecha" style={{ fontSize: 12 }}>{new Date(v.fecha).toLocaleString('es-AR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}</td>
+                    <td data-label="Cliente">
                       {v.anulada && <span className="badge badge-red" style={{ marginRight: 6 }}>ANULADA</span>}
                       {v.cli_nombre || 'Consumidor final'}
                     </td>
-                    <td style={{ fontSize: 12, color: 'var(--mu)' }}>{v.vendedor_nombre || '—'}</td>
-                    <td style={{ fontSize: 12 }}>{PAGO_LABELS[v.pago_principal || v.pago] || v.pago}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 700, color: v.anulada ? 'var(--mu)' : 'var(--ok)' }}>{fmt(v.total)}</td>
+                    <td data-label="Vendedor" style={{ fontSize: 12, color: 'var(--mu)' }}>{v.vendedor_nombre || '—'}</td>
+                    <td data-label="Método" style={{ fontSize: 12 }}>{PAGO_LABELS[v.pago_principal || v.pago] || v.pago}</td>
+                    <td data-label="Total" style={{ textAlign: 'right', fontWeight: 700, color: v.anulada ? 'var(--mu)' : 'var(--ok)' }}>{fmt(v.total)}</td>
                     <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
                       {v.cobrada && !v.anulada && (
                         <>

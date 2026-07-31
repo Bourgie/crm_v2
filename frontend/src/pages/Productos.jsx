@@ -45,14 +45,14 @@ function MovimientosStock({ prodId, api, allSucs, sucSesion }) {
         <tbody>
           {movs.slice(0, 50).map((m, i) => (
             <tr key={i}>
-              <td style={{ fontSize: 11 }}>{m.fecha ? new Date(m.fecha).toLocaleDateString('es-AR') : '—'}</td>
-              <td><span className={`badge ${m.tipo === 'entrada' ? 'badge-green' : m.tipo === 'salida' ? 'badge-red' : 'badge-blue'}`}>{m.tipo}</span></td>
-              <td style={{ fontSize: 12 }}>{m.motivo || m.concepto || '—'}</td>
-              <td style={{ fontSize: 12 }}>{(allSucs.find(s => s.id === m.suc_id) || {}).nombre || m.suc_id || '—'}</td>
-              <td style={{ textAlign: 'center', fontWeight: 700, color: m.tipo === 'entrada' ? 'var(--ok)' : 'var(--bad)' }}>
+              <td data-label="Fecha" style={{ fontSize: 11 }}>{m.fecha ? new Date(m.fecha).toLocaleDateString('es-AR') : '—'}</td>
+              <td data-label="Tipo"><span className={`badge ${m.tipo === 'entrada' ? 'badge-green' : m.tipo === 'salida' ? 'badge-red' : 'badge-blue'}`}>{m.tipo}</span></td>
+              <td data-label="Motivo" style={{ fontSize: 12 }}>{m.motivo || m.concepto || '—'}</td>
+              <td data-label="Sucursal" style={{ fontSize: 12 }}>{(allSucs.find(s => s.id === m.suc_id) || {}).nombre || m.suc_id || '—'}</td>
+              <td data-label="Cant." style={{ textAlign: 'center', fontWeight: 700, color: m.tipo === 'entrada' ? 'var(--ok)' : 'var(--bad)' }}>
                 {m.tipo === 'entrada' ? '+' : m.tipo === 'salida' ? '-' : ''}{m.cantidad}
               </td>
-              <td style={{ fontSize: 11, color: 'var(--mu)' }}>{m.usuario_nombre || m.usuario || '—'}</td>
+              <td data-label="Usuario" style={{ fontSize: 11, color: 'var(--mu)' }}>{m.usuario_nombre || m.usuario || '—'}</td>
             </tr>
           ))}
         </tbody>
@@ -432,7 +432,7 @@ export function Productos() {
                 ? <EmptyRow cols={7} icon="👕" text="Sin productos. Creá el primero con '+ Nuevo'" />
                 : paginated.map((p) => (
                   <tr key={p.id} style={{ cursor: 'pointer', opacity: p.activo === false ? .5 : 1 }} onClick={() => openEdit(p)}>
-                    <td>
+                    <td data-label="Producto">
                       <div style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6 }}>
                         {p.favorito && <span title="Favorito">⭐</span>}
                         {p.nombre}
@@ -444,11 +444,11 @@ export function Productos() {
                       </div>
                       {p.color && <div style={{ fontSize: 11, color: 'var(--mu)' }}>{p.color}</div>}
                     </td>
-                    <td style={{ fontSize: 12, fontFamily: 'monospace' }}>{p.sku || '—'}</td>
-                    <td style={{ fontSize: 12 }}>{p.talle || '—'}</td>
-                    <td style={{ fontSize: 12 }}>{p.categoria || '—'}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(p.precio_l1)}</td>
-                    <td style={{ textAlign: 'center' }}>
+                    <td data-label="SKU" style={{ fontSize: 12, fontFamily: 'monospace' }}>{p.sku || '—'}</td>
+                    <td data-label="Talle" style={{ fontSize: 12 }}>{p.talle || '—'}</td>
+                    <td data-label="Categoría" style={{ fontSize: 12 }}>{p.categoria || '—'}</td>
+                    <td data-label="Precio L1" style={{ textAlign: 'right', fontWeight: 600 }}>{fmt(p.precio_l1)}</td>
+                    <td data-label="Stock" style={{ textAlign: 'center' }}>
                       <button
                         type="button" className="btn btn-sm"
                         style={{ fontWeight: 700, color: stockColor(p), background: 'transparent', border: `1.5px solid ${stockColor(p)}`, minWidth: 50 }}

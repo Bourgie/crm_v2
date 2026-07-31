@@ -122,20 +122,20 @@ export function Usuarios() {
               {users.length===0 ? <EmptyRow cols={7} icon="👤" text="Sin usuarios"/>
                 : users.map((u) => (
                   <tr key={u.id} style={{opacity:u.activo===false?.5:1}}>
-                    <td style={{fontFamily:'monospace',fontWeight:600}}>{u.usuario}</td>
-                    <td>{u.nombre}</td>
-                    <td style={{fontSize:12,color:'var(--mu)'}}>{u.email||'—'}</td>
-                    <td style={{display:'flex',gap:3,flexWrap:'wrap'}}>
+                    <td data-label="Usuario" style={{fontFamily:'monospace',fontWeight:600}}>{u.usuario}</td>
+                    <td data-label="Nombre">{u.nombre}</td>
+                    <td data-label="Email" style={{fontSize:12,color:'var(--mu)'}}>{u.email||'—'}</td>
+                    <td data-label="Rol" style={{display:'flex',gap:3,flexWrap:'wrap'}}>
                       {(Array.isArray(u.roles) ? u.roles : [u.rol||'vendedor']).map((r)=>(
                         <span key={r} className={`badge ${ROLE_COLORS[r]||'badge-gray'}`}>{r}</span>
                       ))}
                     </td>
-                    <td style={{fontSize:12,color:'var(--mu)'}}>
+                    <td data-label="Sucursales" style={{fontSize:12,color:'var(--mu)'}}>
                       {Array.isArray(u.suc_sesiones_permitidas)&&u.suc_sesiones_permitidas.length
                         ? u.suc_sesiones_permitidas.map((id)=>allSucs.find((s)=>s.id===id)?.nombre||id).join(', ')
                         : 'Todas'}
                     </td>
-                    <td><span className={`badge ${u.activo!==false?'badge-green':'badge-gray'}`}>{u.activo!==false?'Activo':'Inactivo'}</span></td>
+                    <td data-label="Estado"><span className={`badge ${u.activo!==false?'badge-green':'badge-gray'}`}>{u.activo!==false?'Activo':'Inactivo'}</span></td>
                     <td>
                       <div style={{display:'flex',gap:4}}>
                         <button type="button" className="btn btn-icon btn-sm" onClick={()=>openEdit(u)}>✏️</button>
@@ -1316,9 +1316,9 @@ function BackupsTab({ api, toast }) {
                 ? <EmptyRow cols={4} icon="💾" text="Sin backups. Creá el primero."/>
                 : backups.map((b,i)=>(
                     <tr key={i}>
-                      <td style={{fontFamily:'monospace',fontSize:12}}>{b.nombre}</td>
-                      <td style={{fontSize:12}}>{fmtDate(b.fecha)}</td>
-                      <td style={{fontSize:12}}>{b.tamaño}</td>
+                      <td data-label="Archivo" style={{fontFamily:'monospace',fontSize:12}}>{b.nombre}</td>
+                      <td data-label="Fecha" style={{fontSize:12}}>{fmtDate(b.fecha)}</td>
+                      <td data-label="Tamaño" style={{fontSize:12}}>{b.tamaño}</td>
                       <td>
                         <button type="button" className="btn btn-icon btn-sm" style={{color:'var(--bad)'}}
                           onClick={()=>restaurar(b.nombre)} disabled={restoring===b.nombre}
