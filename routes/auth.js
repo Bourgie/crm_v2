@@ -1095,6 +1095,29 @@ router.post('/solicitar-eliminacion', authMiddleware, async (req, res) => {
   }
 });
 
+// ── POST /api/auth/firmar-terminos — admin firma desde sesión activa ──
+router.post('/firmar-terminos', authMiddleware, async (req, res) => {
+  try {
+    if (req.user.rol !== 'admin') return res.status(403).json({ error: 'Solo el administrador puede firmar.' });
+    const empresa = req.user.empresa || 'default';
+    const userDB = require('../db_sqlite').getEmpresaDB(empresa);
+    const { registrarConsentimiento, getVersionesVigentes } = require('../lib/legal-versions');
+    const versiones = getVersionesVigentes();
+    if (versiones.terminos) registrarConsentimiento(userDB, empresa, 'terminos', versiones.terminos, req.user.id, req);
+    if (versiones.privacidad) registrarConsentimiento(userDB, empresa, 'privacidad', versiones.privacidad, req.user.id, req);
+    const { saAuditExtended } = require('../db_master');
+    saAuditExtended('system', 'consentimiento_firmado_desde_cuenta', empresa,
+      'Admin ' + (req.user.email || req.user.usuario) + ' firmó términos desde Mi Cuenta',
+      { ip: req.ip || '', email: req.user.email || '' });
+    userDB.audit(req.user, req.user.suc_id, 'legal', 'firmar_terminos',
+      'Documentos firmados desde Mi Cuenta por ' + (req.user.nombre || req.user.usuario), null);
+    res.json({ ok: true, mensaje: 'Documentos firmados correctamente.' });
+  } catch(e) {
+    console.error('[FirmarTerminos] Error:', e.message);
+    res.status(500).json({ error: 'Error al firmar documentos.' });
+  }
+});
+
 module.exports = router;
 module.exports.buildLoginResponse = buildLoginResponse;
 module.exports.generateTokens = generateTokens;

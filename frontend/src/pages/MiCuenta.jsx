@@ -16,6 +16,7 @@ export function MiCuenta() {
   const [deleteSent, setDeleteSent] = useState(false)
   const [consentData, setConsentData] = useState(null)
   const [exportando, setExportando] = useState(false)
+  const [firmando, setFirmando] = useState(false)
 
   useEffect(() => {
     api('GET', '/user-data/mis-consentimientos').then(data => setConsentData(data)).catch(() => {})
@@ -35,6 +36,16 @@ export function MiCuenta() {
       toast('Datos exportados', 'ok')
     } catch (e) { toast(e.message, 'err') }
     finally { setExportando(false) }
+  }
+
+  async function handleFirmar() {
+    setFirmando(true)
+    try {
+      const r = await api('POST', '/auth/firmar-terminos')
+      toast(r.mensaje || 'Documentos firmados correctamente.', 'ok')
+      api('GET', '/user-data/mis-consentimientos').then(data => setConsentData(data)).catch(() => {})
+    } catch (e) { toast(e.message, 'err') }
+    finally { setFirmando(false) }
   }
 
   async function cambiarPass() {
@@ -130,9 +141,9 @@ export function MiCuenta() {
                 ⚠️ Tu empresa aún no firmó los documentos legales.
               </p>
               <p style={{ color: 'var(--mu)', marginBottom: 8 }}>
-                La próxima vez que inicies sesión, se te pedirá que los aceptes. También podés revisarlos ahora:
+                Revisalos y firmá para cumplir con los requisitos legales:
               </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 4 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
                 <a href="/terminos-y-condiciones" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontSize: 12 }}>
                   📄 Términos y Condiciones
                 </a>
@@ -143,6 +154,10 @@ export function MiCuenta() {
                   📄 Política de Cookies
                 </a>
               </div>
+              <button type="button" className="btn btn-primary btn-sm" onClick={handleFirmar} disabled={firmando}
+                style={{ padding: '8px 20px', fontSize: 13, fontWeight: 700 }}>
+                {firmando ? '⌛ Firmando...' : '✍️ Firmar documentos ahora'}
+              </button>
             </div>
           ) : (
             <div style={{ fontSize: 12, color: 'var(--mu)', padding: '8px 0' }}>
