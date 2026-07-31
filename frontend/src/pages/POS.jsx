@@ -175,24 +175,6 @@ export function POS() {
 
   return (
     <>
-    <style>{`
-      @media (max-width: 768px) {
-        .pos-grid { grid-template-columns: 1fr !important; height: auto !important; min-height: 100vh; }
-        .pos-products { order: 2; }
-        .pos-cart { order: 1; position: sticky; top: 0; z-index: 20; max-height: 50vh; border-radius: 0 !important; margin: -12px -24px 12px -24px; border-left: none !important; border-right: none !important; }
-        .pos-cart-header { display: none; }
-        .pos-cart-items { max-height: 25vh !important; }
-        .pos-search { font-size: 16px !important; padding: 14px 14px 14px 40px !important; }
-        .pos-tile { padding: 12px 10px !important; min-height: 70px; }
-        .pos-tile-name { font-size: 14px !important; }
-        .pos-tile-price { font-size: 16px !important; }
-        .pos-btn-qty { width: 32px !important; height: 32px !important; font-size: 18px !important; }
-        .pos-product-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 6px !important; }
-      }
-      @media (max-width: 400px) {
-        .pos-product-grid { grid-template-columns: 1fr 1fr !important; }
-      }
-    `}</style>
     <div className="pos-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 12, height: 'calc(100vh - 92px)' }}>
       {/* ── Izquierda: búsqueda + grilla ── */}
       <div className="pos-products" style={{ display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden' }}>
