@@ -361,7 +361,7 @@ const styles = {
   },
   card: {
     background: 'var(--bg)', borderRadius: 16, padding: '36px 32px',
-    width: '100%', maxWidth: 400, boxShadow: 'var(--shadow-lg)',
+    width: '100%', maxWidth: 'min(400px, 92vw)', boxShadow: 'var(--shadow-lg)',
     border: '1px solid var(--bd)',
   },
   logo: { fontSize: 24, fontWeight: 800, marginBottom: 20, textAlign: 'center' },

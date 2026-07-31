@@ -183,7 +183,7 @@ export function ActivarCuenta() {
 
 const styles = {
   centered: {
-    maxWidth: 420,
+    maxWidth: 'min(420px, 94vw)',
     margin: '60px auto',
     padding: '0 16px',
     textAlign: 'center',

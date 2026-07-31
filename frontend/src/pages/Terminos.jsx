@@ -252,7 +252,7 @@ const s = {
     lineHeight: 1.65,
   },
   card: {
-    maxWidth: 800,
+    maxWidth: 'min(800px, 96vw)',
     margin: '40px auto 24px',
     background: 'var(--bg)',
     borderRadius: 16,

@@ -10,7 +10,7 @@ const styles = {
     lineHeight: 1.7,
   },
   card: {
-    maxWidth: 800,
+    maxWidth: 'min(800px, 96vw)',
     margin: '0 auto',
     background: 'var(--bg)',
     borderRadius: 16,

@@ -240,7 +240,7 @@ const styles = {
     padding: 24,
   },
   card: {
-    maxWidth: 800,
+    maxWidth: 'min(800px, 96vw)',
     margin: '40px auto',
     background: 'var(--bg)',
     borderRadius: 16,

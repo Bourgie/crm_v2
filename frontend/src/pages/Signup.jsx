@@ -39,7 +39,7 @@ export function Signup() {
 
   if (success) {
     return (
-      <div style={{ maxWidth: 420, margin: '80px auto', textAlign: 'center' }}>
+      <div style={{ maxWidth: 'min(420px, 94vw)', margin: '80px auto', textAlign: 'center', padding: '0 12px' }}>
         <div style={{ fontSize: 52, marginBottom: 12 }}>🚀</div>
         <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>¡Cuenta creada!</h2>
         <p style={{ color: 'var(--ok)', fontSize: 14, marginBottom: 20 }}>{success}</p>
@@ -49,7 +49,7 @@ export function Signup() {
   }
 
   return (
-    <div style={{ maxWidth: 420, margin: '60px auto', textAlign: 'center' }}>
+    <div style={{ maxWidth: 'min(420px, 94vw)', margin: '60px auto', textAlign: 'center', padding: '0 12px' }}>
       <div style={{ fontSize: 48, marginBottom: 8 }}>🚀</div>
       <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Creá tu cuenta gratis</h2>
       <p style={{ color: 'var(--mu)', fontSize: 13, marginBottom: 24 }}>14 días de prueba. Sin tarjeta.</p>
