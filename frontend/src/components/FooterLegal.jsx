@@ -6,6 +6,7 @@ export function FooterLegal() {
 
   return (
     <footer
+      className="footer-legal"
       style={{
         background: 'var(--sf, transparent)',
         borderTop: '1px solid var(--bd)',

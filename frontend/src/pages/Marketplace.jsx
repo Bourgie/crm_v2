@@ -256,7 +256,7 @@ export default function Marketplace() {
   ]
 
   return (
-    <div style={{ padding: 24, maxWidth: 1000 }}>
+    <div style={{ padding: 24, maxWidth: 'min(1000px, 98vw)' }}>
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>🛍️ Tienda de Apps</h1>
         <p style={{ fontSize: 14, color: 'var(--mu, #6b7280)' }}>

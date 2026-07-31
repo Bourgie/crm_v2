@@ -197,25 +197,9 @@ export function Chat() {
   const canPostHere = activeId !== 'all' || !isGeneralLocked || esAdmin
 
   return (
-    <div style={{
-      display: 'grid',
-      gridTemplateColumns: showSidebar ? '320px 1fr' : '0 1fr',
-      height: 'calc(100vh - 80px)',
-      background: '#f0f2f5',
-      borderRadius: 12,
-      overflow: 'hidden',
-      border: '1px solid var(--bd)',
-    }}>
+    <div className="chat-layout">
       {/* ────── SIDEBAR ────── */}
-      <div style={{
-        background: '#fff',
-        borderRight: '1px solid var(--bd)',
-        display: 'flex',
-        flexDirection: 'column',
-        overflow: 'hidden',
-        transition: 'transform .25s ease',
-        transform: showSidebar ? 'translateX(0)' : 'translateX(-100%)',
-      }}>
+      <div className={`chat-sidebar${!showSidebar ? ' chat-sidebar-hidden' : ''}`}>
         {/* Sidebar header */}
         <div style={{ padding: '14px 16px', background: '#f0f2f5', borderBottom: '1px solid var(--bd)' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
@@ -275,7 +259,7 @@ export function Chat() {
       </div>
 
       {/* ────── CHAT VIEW ────── */}
-      <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#efeae2' }}>
+      <div className="chat-main">
         {!activeId ? (
           // Empty state
           <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', flexDirection: 'column', color: '#667781', padding: 40 }}>
@@ -292,7 +276,7 @@ export function Chat() {
           <>
             {/* Chat header */}
             <div style={{ padding: '10px 16px', background: '#f0f2f5', borderBottom: '1px solid var(--bd)', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <button type="button" onClick={() => setShowSidebar(s => !s)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', display: 'none' }} className="chat-back-btn">←</button>
+              <button type="button" onClick={() => setShowSidebar(true)} className="chat-back-btn">←</button>
               <div style={{ width: 40, height: 40, borderRadius: '50%', background: activeId === 'all' ? '#25d366' : 'var(--ac)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 16, flexShrink: 0 }}>
                 {activeId === 'all' ? '📢' : (activeContact?.nombre || '?').charAt(0).toUpperCase()}
               </div>

@@ -77,7 +77,7 @@ export default function AppDetail() {
       : 'Gratis'
 
   return (
-    <div style={{ padding: 24, maxWidth: 800 }}>
+    <div style={{ padding: 24, maxWidth: 'min(800px, 96vw)' }}>
       <button
         onClick={() => navigate('/app/marketplace')}
         style={{ background: 'none', border: 'none', color: 'var(--ac, #4f46e5)', cursor: 'pointer', fontSize: 14, marginBottom: 16, padding: 0 }}

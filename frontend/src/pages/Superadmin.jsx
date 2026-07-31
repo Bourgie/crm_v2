@@ -1910,7 +1910,6 @@ export default function Superadmin() {
           </div>
 
         </div>
-      </div>
                                 <label style={{cursor:'pointer'}}>
                                   <input type="checkbox" checked={p.habilitado}
                                     onChange={async () => {
