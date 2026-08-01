@@ -624,14 +624,16 @@ try { sqlite.exec("CREATE TABLE IF NOT EXISTS user_sessions (id TEXT PRIMARY KEY
 // Email verification
 try { sqlite.exec("ALTER TABLE usuarios ADD COLUMN email_verificado INTEGER DEFAULT 1"); } catch(e) {}
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS email_tokens (id TEXT PRIMARY KEY, usuario_id TEXT NOT NULL, email TEXT, token_hash TEXT NOT NULL, expires TEXT, usado INTEGER DEFAULT 0, creado TEXT)"); } catch(e) {}
-try { sqlite.exec("CREATE TABLE IF NOT EXISTS consentimientos_empresa (id TEXT PRIMARY KEY, empresa_codigo TEXT NOT NULL, tipo TEXT NOT NULL, version TEXT NOT NULL, aceptado_por TEXT NOT NULL, ip TEXT, user_agent TEXT, creado TEXT NOT NULL)"); } catch(e) {}
-try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_consentimiento_empresa ON consentimientos_empresa(empresa_codigo, tipo)"); } catch(e) {}
 try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_email ON usuarios(email)"); } catch(e) {}
 try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_clientes_dni ON clientes(dni)"); } catch(e) {}
 try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_clientes_email ON clientes(email)"); } catch(e) {}
 try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_clientes_tel ON clientes(tel)"); } catch(e) {}
 }
 sqlite.prepare("INSERT OR REPLACE INTO schema_version(version) VALUES(?)").run(CURRENT_SCHEMA_VERSION);
+
+// Legal consent table — creada siempre (no version-gated) para DBs existentes
+try { sqlite.exec("CREATE TABLE IF NOT EXISTS consentimientos_empresa (id TEXT PRIMARY KEY, empresa_codigo TEXT NOT NULL, tipo TEXT NOT NULL, version TEXT NOT NULL, aceptado_por TEXT NOT NULL, ip TEXT, user_agent TEXT, creado TEXT NOT NULL)"); } catch(e) {}
+try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_consentimiento_empresa ON consentimientos_empresa(empresa_codigo, tipo)"); } catch(e) {}
 
 // ─── SEED ────────────────────────────────────────────────────
 function buildSeed() {

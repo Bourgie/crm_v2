@@ -19,8 +19,17 @@ export function MiCuenta() {
   const [firmando, setFirmando] = useState(false)
 
   useEffect(() => {
-    api('GET', '/user-data/mis-consentimientos').then(data => setConsentData(data)).catch(() => {})
+    reloadConsent()
   }, [])
+
+  async function reloadConsent() {
+    try {
+      const data = await api('GET', '/user-data/mis-consentimientos')
+      setConsentData(data)
+    } catch (e) {
+      toast('No se pudieron cargar los consentimientos: ' + e.message, 'err')
+    }
+  }
 
   async function exportarDatos() {
     setExportando(true)
@@ -43,7 +52,7 @@ export function MiCuenta() {
     try {
       const r = await api('POST', '/auth/firmar-terminos')
       toast(r.mensaje || 'Documentos firmados correctamente.', 'ok')
-      api('GET', '/user-data/mis-consentimientos').then(data => setConsentData(data)).catch(() => {})
+      await reloadConsent()
     } catch (e) { toast(e.message, 'err') }
     finally { setFirmando(false) }
   }
