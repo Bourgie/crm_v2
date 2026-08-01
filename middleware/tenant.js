@@ -7,6 +7,7 @@ const { getEmpresa } = require('../db_master');
 function validateTenant(req, res, next) {
   // Skip for superadmin routes and auth
   if(!req.user || !req.user.empresa || req.user.empresa === 'default') return next();
+  if(req.path.startsWith('/superadmin')) return next();
 
   try {
     const empresa = getEmpresa(req.user.empresa);

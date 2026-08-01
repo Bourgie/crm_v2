@@ -260,8 +260,10 @@ app.post('/api/csp-report', express.json({ type: 'application/csp-report', limit
 // ── Empresa tenant middleware — runs on all /api/* routes ──
 app.use('/api', (req, res, next) => {
   let token = (req.headers.authorization || '').replace('Bearer ', '');
-  // Fallback to access-token cookie (httpOnly, set on login)
-  if ((!token || token === 'null' || token === 'undefined') && req.cookies && req.cookies['access-token']) {
+  const isSuperadminPath = req.path.startsWith('/superadmin');
+  // Fallback to access-token cookie (httpOnly, set on login) — never for superadmin routes,
+  // which authenticate via sa_token cookie in superAuth (evita mezclar tenant del CRM)
+  if (!isSuperadminPath && (!token || token === 'null' || token === 'undefined') && req.cookies && req.cookies['access-token']) {
     token = req.cookies['access-token'];
   }
   if (token && token !== 'null' && token !== 'undefined') {
