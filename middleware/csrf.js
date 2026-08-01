@@ -13,6 +13,8 @@ const SKIP_PATHS = [
   '/api/auth/signup',
   '/api/auth/refresh',
   '/api/auth/2fa/verify-login',
+  '/api/auth/aceptar-terminos',
+  '/api/auth/activar-cuenta',
   '/api/superadmin',
   '/api/config/public',
   '/api/health',
