@@ -282,6 +282,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
         require_consent: true,
         grace_period: gracePeriodActive,
         grace_days: gracePeriodActive ? minGraceDays : 0,
+        skip_allowed: gracePeriodActive,
         temp_token: tempToken,
         versiones: { terminos: versionesVigentes.terminos, privacidad: versionesVigentes.privacidad },
         empresa_nombre: empresaNombre,
@@ -362,6 +363,52 @@ router.post('/aceptar-terminos', async (req, res) => {
     if (e.name === 'JsonWebTokenError') return res.status(400).json({ error: 'Token inválido.' });
     console.error('[AceptarTerminos] Error:', e.message);
     res.status(500).json({ error: 'Error al registrar aceptación' });
+  }
+});
+
+// ── POST /api/auth/posponer-terminos — admin posterga firma, sigue en grace period ──
+router.post('/posponer-terminos', async (req, res) => {
+  const { temp_token } = req.body;
+  if (!temp_token) return res.status(400).json({ error: 'Token requerido' });
+  try {
+    const payload = jwt.verify(temp_token, getSecret());
+    if (payload.purpose !== 'consent') return res.status(400).json({ error: 'Token inválido' });
+    if (payload.rol !== 'admin') return res.status(403).json({ error: 'Solo el administrador puede posponer' });
+    const empresa = payload.empresa;
+    const { getEmpresaDB } = require('../db_sqlite');
+    const userDB = getEmpresaDB(empresa);
+    const user = userDB.findOne('usuarios', payload.id);
+    if (!user || !user.activo) return res.status(401).json({ error: 'Usuario no válido' });
+
+    const { getVersionesVigentes, registrarConsentimiento } = require('../lib/legal-versions');
+    const versiones = getVersionesVigentes();
+    for (const tipo of ['terminos', 'privacidad']) {
+      if (versiones[tipo]) {
+        registrarConsentimiento(userDB, empresa, 'pospuesto-' + tipo, versiones[tipo], payload.id, req);
+      }
+    }
+    const { saAuditExtended } = require('../db_master');
+    saAuditExtended('system', 'consentimiento_pospuesto', empresa,
+      'Admin ' + (user.email || user.usuario) + ' pospuso aceptación de términos', { ip: req.ip || '' });
+    userDB.audit(user, user.suc_id, 'legal', 'posponer_terminos',
+      'Admin pospuso firma de documentos legales', null);
+
+    const { accessToken, refreshToken } = generateTokens(user, empresa);
+    enforceSessionLimit(userDB, user.id);
+    const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    userDB.insert('password_reset_tokens', {
+      id: 'rt_' + uid(), usuario_id: user.id, email: user.email || '',
+      token: refreshHash, expires: new Date(Date.now() + REFRESH_TOKEN_EXPIRY).toISOString(),
+      usado: 0, creado: new Date().toISOString(),
+    });
+    setRefreshCookie(res, refreshToken);
+    setAccessCookie(res, accessToken);
+    res.json(buildLoginResponse(user, accessToken, refreshToken, userDB));
+  } catch(e) {
+    if (e.name === 'TokenExpiredError') return res.status(401).json({ error: 'Token expirado. Volvé a iniciar sesión.' });
+    if (e.name === 'JsonWebTokenError') return res.status(400).json({ error: 'Token inválido.' });
+    console.error('[PosponerTerminos] Error:', e.message);
+    res.status(500).json({ error: 'Error al posponer' });
   }
 });
 

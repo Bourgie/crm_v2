@@ -92,8 +92,9 @@ const termsSummary = `FlexCRM es un SaaS de gestión comercial y atención al cl
 
 const privacySummary = `Recopilamos datos de registro, datos de uso de la plataforma y datos técnicos del dispositivo. No compartimos información personal con terceros. Los titulares de datos pueden ejercer sus derechos ARCO (Acceso, Rectificación, Cancelación y Oposición) escribiendo a nuestro equipo de privacidad.`
 
-export function ConsentModal({ onAccept, onReject, versiones, tempToken, empresaNombre }) {
+export function ConsentModal({ onAccept, onReject, onSkip, skipAllowed, daysLeft, versiones, tempToken, empresaNombre }) {
   const [loading, setLoading] = useState(false)
+  const [skipLoading, setSkipLoading] = useState(false)
   const [checked, setChecked] = useState(false)
   const [error, setError] = useState(null)
   const [expandedTerminos, setExpandedTerminos] = useState(false)
@@ -110,6 +111,17 @@ export function ConsentModal({ onAccept, onReject, versiones, tempToken, empresa
     } catch (err) {
       setError(err?.message || 'Error al aceptar los términos. Intentá de nuevo.')
       setLoading(false)
+    }
+  }
+
+  const handleSkip = async () => {
+    setError(null)
+    setSkipLoading(true)
+    try {
+      await onSkip({ tempToken })
+    } catch (err) {
+      setError(err?.message || 'Error al posponer. Intentá de nuevo.')
+      setSkipLoading(false)
     }
   }
 
@@ -208,15 +220,26 @@ export function ConsentModal({ onAccept, onReject, versiones, tempToken, empresa
             type="button"
             className="btn btn-secondary"
             onClick={onReject}
-            disabled={loading}
+            disabled={loading || skipLoading}
           >
             Cancelar
           </button>
+          {skipAllowed && daysLeft > 0 && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={handleSkip}
+              disabled={loading || skipLoading}
+              style={{ background: 'rgba(245,158,11,.08)', color: 'var(--warn)', borderColor: 'var(--warn)' }}
+            >
+              {skipLoading ? '⏳ ...' : `⏰ Recordarme en ${daysLeft} día(s)`}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-primary"
             onClick={handleAccept}
-            disabled={!checked || loading}
+            disabled={!checked || loading || skipLoading}
             style={{ background: 'var(--ac)', color: '#fff' }}
           >
             {loading ? 'Procesando...' : 'Aceptar y continuar'}

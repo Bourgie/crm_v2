@@ -132,47 +132,91 @@ export function MiCuenta() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>📝 Consentimientos</div>
+        {consentData && consentData.isAdmin && consentData.grace_days > 0 && (
+          <div style={{ fontSize: 12, padding: '8px 12px', background: 'rgba(245,158,11,.08)', borderRadius: 8, marginBottom: 12, color: 'var(--warn)' }}>
+            ⏰ Tenés <strong>{consentData.grace_days} día(s)</strong> para aceptar los documentos legales. Después se bloqueará el acceso.
+          </div>
+        )}
         {consentData && consentData.consentimientos && consentData.consentimientos.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {consentData.consentimientos.map((c, i) => (
-              <div key={i} style={{ fontSize: 12, color: 'var(--mu)', padding: '6px 0', borderBottom: '1px solid var(--bd)' }}>
-                ✓ {c.tipo === 'terminos' ? 'Términos y Condiciones' : c.tipo === 'privacidad' ? 'Política de Privacidad' : c.tipo} v{c.version} — {new Date(c.creado).toLocaleDateString('es-AR')} — IP: {c.ip || '—'}
-              </div>
-            ))}
-            <p style={{ fontSize: 11, color: 'var(--mu)', marginTop: 4 }}>
-              {me?.rol === 'admin' ? 'Como administrador, aceptaste estos documentos en nombre de tu empresa.' : 'Tu administrador aceptó estos documentos en nombre de la empresa.'}
-            </p>
+            {consentData.consentimientos
+              .filter(c => !c.tipo.startsWith('pospuesto-'))
+              .map((c, i) => (
+                <div key={i} style={{ fontSize: 12, color: 'var(--mu)', padding: '6px 0', borderBottom: '1px solid var(--bd)' }}>
+                  ✓ {c.tipo === 'terminos' ? 'Términos y Condiciones' : c.tipo === 'privacidad' ? 'Política de Privacidad' : c.tipo} v{c.version} — {new Date(c.creado).toLocaleDateString('es-AR')} — IP: {c.ip || '—'}
+                </div>
+              ))}
+            {me?.rol !== 'admin' && (
+              <p style={{ fontSize: 11, color: 'var(--mu)', marginTop: 4 }}>
+                Tu administrador aceptó estos documentos en nombre de la empresa.
+              </p>
+            )}
           </div>
         ) : (
-          consentData && consentData.isAdmin ? (
-            <div style={{ fontSize: 12, padding: '8px 0' }}>
-              <p style={{ color: 'var(--warn)', marginBottom: 8 }}>
-                ⚠️ Tu empresa aún no firmó los documentos legales.
-              </p>
-              <p style={{ color: 'var(--mu)', marginBottom: 8 }}>
-                Revisalos y firmá para cumplir con los requisitos legales:
-              </p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
-                <a href="/terminos-y-condiciones" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontSize: 12 }}>
-                  📄 Términos y Condiciones
-                </a>
-                <a href="/politica-de-privacidad" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontSize: 12 }}>
-                  📄 Política de Privacidad
-                </a>
-                <a href="/politica-de-cookies" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontSize: 12 }}>
-                  📄 Política de Cookies
-                </a>
-              </div>
-              <button type="button" className="btn btn-primary btn-sm" onClick={handleFirmar} disabled={firmando}
-                style={{ padding: '8px 20px', fontSize: 13, fontWeight: 700 }}>
-                {firmando ? '⌛ Firmando...' : '✍️ Firmar documentos ahora'}
-              </button>
-            </div>
-          ) : (
+          !consentData?.isAdmin && (
             <div style={{ fontSize: 12, color: 'var(--mu)', padding: '8px 0' }}>
               Tu empresa aún no aceptó los documentos legales.
             </div>
           )
+        )}
+        {consentData && consentData.isAdmin && consentData.pendientes && consentData.pendientes.length > 0 && (
+          <div style={{ marginTop: (consentData.consentimientos?.length > 0) ? 8 : 0 }}>
+            <p style={{ fontSize: 12, color: 'var(--warn)', fontWeight: 600, marginBottom: 8 }}>
+              ⚠️ Documentos pendientes de firma:
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+              {consentData.pendientes.map((p, i) => (
+                <div key={i} style={{ fontSize: 12, color: 'var(--warn)', padding: '4px 0' }}>
+                  ⚠️ {p.tipo === 'terminos' ? 'Términos y Condiciones' : p.tipo === 'privacidad' ? 'Política de Privacidad' : p.tipo} v{p.version} — pendiente
+                </div>
+              ))}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+              <a href="/terminos-y-condiciones" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontSize: 12 }}>
+                📄 Términos y Condiciones
+              </a>
+              <a href="/politica-de-privacidad" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontSize: 12 }}>
+                📄 Política de Privacidad
+              </a>
+              <a href="/politica-de-cookies" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontSize: 12 }}>
+                📄 Política de Cookies
+              </a>
+            </div>
+            <button type="button" className="btn btn-primary btn-sm" onClick={handleFirmar} disabled={firmando}
+              style={{ padding: '8px 20px', fontSize: 13, fontWeight: 700 }}>
+              {firmando ? '⌛ Firmando...' : '✍️ Firmar documentos ahora'}
+            </button>
+          </div>
+        )}
+        {consentData && consentData.isAdmin && (!consentData.consentimientos || consentData.consentimientos.length === 0) && (!consentData.pendientes || consentData.pendientes.length === 0) && (
+          <div style={{ fontSize: 12, padding: '8px 0' }}>
+            <p style={{ color: 'var(--warn)', marginBottom: 8 }}>
+              ⚠️ Tu empresa aún no firmó los documentos legales.
+            </p>
+            <p style={{ color: 'var(--mu)', marginBottom: 8 }}>
+              Revisalos y firmá para cumplir con los requisitos legales:
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, marginBottom: 12 }}>
+              <a href="/terminos-y-condiciones" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontSize: 12 }}>
+                📄 Términos y Condiciones
+              </a>
+              <a href="/politica-de-privacidad" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontSize: 12 }}>
+                📄 Política de Privacidad
+              </a>
+              <a href="/politica-de-cookies" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--ac)', fontSize: 12 }}>
+                📄 Política de Cookies
+              </a>
+            </div>
+            <button type="button" className="btn btn-primary btn-sm" onClick={handleFirmar} disabled={firmando}
+              style={{ padding: '8px 20px', fontSize: 13, fontWeight: 700 }}>
+              {firmando ? '⌛ Firmando...' : '✍️ Firmar documentos ahora'}
+            </button>
+          </div>
+        )}
+        {me?.rol === 'admin' && consentData?.consentimientos?.length > 0 && (!consentData.pendientes || consentData.pendientes.length === 0) && (
+          <p style={{ fontSize: 11, color: 'var(--mu)', marginTop: 4 }}>
+            Como administrador, aceptaste estos documentos en nombre de tu empresa.
+          </p>
         )}
       </div>
 

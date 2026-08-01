@@ -1766,6 +1766,25 @@ router.post('/legal/subir', superAuth, (req, res) => {
         `Hay una nueva versión de los ${tipoLabel.toLowerCase()}. El administrador debe aceptarlos para seguir usando FlexCRM.`,
         ahora, JSON.stringify({ accion: '/micuenta' }));
     }
+    // Send email to each company admin
+    const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
+    const { sendEmail, getNotificationSMTP, buildNotificationHtml } = require('../lib/send-email');
+    const smtp = getNotificationSMTP();
+    if (smtp.host && smtp.user && smtp.pass) {
+      const subject = `📄 Nuevos ${tipoLabel} v${version} — FlexCRM`;
+      const html = buildNotificationHtml(
+        `${tipoLabel} v${version}`,
+        `Se publicó una nueva versión de los ${tipoLabel.toLowerCase()} que tu empresa debe aceptar. Ingresá como administrador a FlexCRM para revisarlos y firmarlos.`,
+        `Empresa: Todas las activas\nVersión: ${version}\nFecha: ${new Date().toLocaleDateString('es-AR')}`,
+        appUrl + '/app/login'
+      );
+      for (const e of empresas) {
+        if (!e.admin_email) continue;
+        sendEmail(smtp.host, smtp.port, smtp.user, smtp.pass, smtp.from, e.admin_email, subject, html)
+          .then(() => console.log('[LegalEmail] Enviado a:', e.admin_email))
+          .catch(err => console.error('[LegalEmail] Error enviando a', e.admin_email, err.message));
+      }
+    }
   } catch(e) { /* non-blocking */ }
   res.json({ id, ok: true, mensaje: `Versión ${version} de ${tipo} publicada como vigente.` });
 });

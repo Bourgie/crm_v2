@@ -1,15 +1,38 @@
 const express = require('express');
 const router = express.Router();
 const { authMiddleware } = require('../middleware/auth');
-const { getConsentimientosEmpresa } = require('../lib/legal-versions');
+const { getConsentimientosEmpresa, getVersionesVigentes, isInGracePeriod, getGraceDaysLeft } = require('../lib/legal-versions');
 
 router.get('/mis-consentimientos', authMiddleware, (req, res) => {
   try {
     const empresa = req.user.empresa || 'default';
     const isAdmin = req.user.rol === 'admin';
     const consentimientos = getConsentimientosEmpresa(req.db, empresa);
-    res.json({ isAdmin, empresa, consentimientos });
+    const versiones = getVersionesVigentes();
+    const pendientes = [];
+    const tipos = ['terminos', 'privacidad'];
+    let graceDays = 0;
+    for (const tipo of tipos) {
+      const vigente = versiones[tipo];
+      if (!vigente) continue;
+      const firmado = consentimientos.find(c => c.tipo === tipo && c.version === vigente);
+      if (!firmado) {
+        pendientes.push({ tipo, version: vigente });
+      }
+    }
+    if (pendientes.length > 0 && isAdmin) {
+      const { getVersionVigente } = require('../db_master');
+      for (const p of pendientes) {
+        const v = getVersionVigente(p.tipo);
+        if (v && isInGracePeriod(v.vigente_desde)) {
+          const d = getGraceDaysLeft(v.vigente_desde);
+          if (d > graceDays) graceDays = d;
+        }
+      }
+    }
+    res.json({ isAdmin, empresa, consentimientos, pendientes, grace_days: graceDays });
   } catch(e) {
+    console.error('[MisConsentimientos] Error:', e.message);
     res.status(500).json({ error: 'Error al obtener consentimientos' });
   }
 });

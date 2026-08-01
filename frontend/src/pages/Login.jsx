@@ -92,7 +92,9 @@ export function Login() {
           temp_token: data.temp_token,
           versiones: data.versiones,
           empresa_nombre: data.empresa_nombre || (form.empresa.trim() || 'default'),
-          user: data.user
+          user: data.user,
+          skipAllowed: data.skip_allowed,
+          daysLeft: data.grace_days,
         })
         return
       }
@@ -156,6 +158,25 @@ export function Login() {
   function handleConsentReject() {
     setConsentStep(null)
     setError('Si no aceptás los términos no podrás usar FlexCRM.')
+  }
+
+  async function handleConsentSkip() {
+    setError(''); setLoading(true)
+    try {
+      const r = await fetch('/api/auth/posponer-terminos', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ temp_token: consentStep.temp_token }),
+      })
+      const data = await r.json()
+      if (!r.ok) { setError(data.error || 'Error'); return }
+      await proceedWithLogin(data, consentStep.user?.empresa || form.empresa.trim() || 'default')
+    } catch (err) {
+      setError(err.message || 'Error de conexión')
+    } finally {
+      setLoading(false); setConsentStep(null)
+    }
   }
 
   async function proceedWithLogin(data, empresa) {
@@ -274,6 +295,9 @@ export function Login() {
       <ConsentModal
         onAccept={handleConsentAccept}
         onReject={handleConsentReject}
+        onSkip={handleConsentSkip}
+        skipAllowed={consentStep.skipAllowed}
+        daysLeft={consentStep.daysLeft}
         versiones={consentStep.versiones}
         tempToken={consentStep.temp_token}
         empresaNombre={consentStep.empresa_nombre}
