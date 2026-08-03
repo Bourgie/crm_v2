@@ -140,6 +140,9 @@ export default function Superadmin() {
   const [ticketSaving, setTicketSaving] = useState(false)
 
   const [landingFiltro, setLandingFiltro] = useState('todos')
+  const [landingStats, setLandingStats] = useState(null)
+  const [statsDias, setStatsDias] = useState(30)
+  const [statsPagina, setStatsPagina] = useState('')
 
   const [emailConfig, setEmailConfig] = useState({ smtp_host:'', smtp_port:'465', smtp_user:'', smtp_pass:'', smtp_from:'', smtp_from_name:'FlexCRM' })
   const [emailSaving, setEmailSaving] = useState(false)
@@ -243,7 +246,7 @@ export default function Superadmin() {
   }, [])
 
   function loadAll() {
-    loadDash(); loadEmpresas(); loadPlanes(); loadModulos(); loadSolicitudes(); loadSolicitudesEliminacion(); loadAudit(); loadProspectos(); loadLanding(); loadTickets(); loadEmailConfig(); loadAtributos(); loadMantenimiento();
+    loadDash(); loadEmpresas(); loadPlanes(); loadModulos(); loadSolicitudes(); loadSolicitudesEliminacion(); loadAudit(); loadProspectos(); loadLanding(); loadLandingStats(); loadTickets(); loadEmailConfig(); loadAtributos(); loadMantenimiento();
     try { const imp = JSON.parse(sessionStorage.getItem('SA_IMP') || 'null'); if (imp) setImpersonating(imp) } catch {}
   }
 
@@ -256,6 +259,7 @@ export default function Superadmin() {
   async function loadAudit() { try { const r = await saApi('GET', '/audit'); setAudit(r) } catch {} }
   async function loadProspectos() { try { const r = await saApi('GET', '/prospectos'); setProspectos(r) } catch {} }
   async function loadLanding() { try { const r = await saApi('GET', '/landing-leads'); setLeads(r) } catch {} }
+  async function loadLandingStats() { try { const r = await saApi('GET', '/landing-stats?dias=' + statsDias + (statsPagina ? '&pagina=' + encodeURIComponent(statsPagina) : '')); setLandingStats(r) } catch {} }
   async function loadTickets() { try { const r = await saApi('GET', '/solicitudes-soporte'); setTickets(r) } catch {} }
   async function loadEmailConfig() { try { const r = await saApi('GET', '/email-config'); setEmailConfig(r) } catch {} }
   async function loadAtributos() { try { const r = await saApi('GET', '/rubros-atributos'); setAtributos(r) } catch {} }
@@ -650,6 +654,20 @@ export default function Superadmin() {
 
   const prospFiltrados = prospFiltro ? prospectos.filter(p => p.estado === prospFiltro) : prospectos
   const leadsFiltrados = landingFiltro === 'noleidos' ? leads.filter(l => !l.leido) : landingFiltro === 'leidos' ? leads.filter(l => l.leido) : leads
+
+  function exportLeadsCSV() {
+    const headers = ['Fecha','Nombre','Teléfono','Email','Empresa','Mensaje','Página','Fuente'];
+    const rows = leads.map(l => {
+      const fuente = l.utm_source || l.ref || l.pagina || '';
+      return [l.fecha||'', l.nombre||'', l.telefono||'', l.email||'', l.empresa_interes||'', (l.mensaje||'').replace(/"/g,'""'), l.pagina||'', fuente].map(v => `"${v}"`).join(',');
+    });
+    const BOM = '\uFEFF';
+    const csv = BOM + headers.join(',') + '\n' + rows.join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'leads-landing.csv'; a.click();
+    URL.revokeObjectURL(url);
+  }
 
   if (!logged) return (
     <div style={{ maxWidth: 'min(400px, 92vw)', margin: '80px auto', textAlign: 'center' }}>
@@ -1225,33 +1243,97 @@ export default function Superadmin() {
           {tab === 'landing' && (
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
-                <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase' }}>🌐 Leads de Landing Page</h3>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase' }}>🌐 Landing Page</h3>
+                  <select value={statsDias} onChange={e => { const v = Number(e.target.value); setStatsDias(v); setTimeout(() => loadLandingStats(), 0) }} style={{ ...S.select, width: 'auto', fontSize: 11, padding: '4px 8px' }}>
+                    <option value="7">7 días</option>
+                    <option value="30">30 días</option>
+                    <option value="90">90 días</option>
+                  </select>
+                  <input type="text" placeholder="Filtrar página..." value={statsPagina} onChange={e => setStatsPagina(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') e.target.blur() }} onBlur={e => { if (e.target.value !== statsPagina) { setStatsPagina(e.target.value); setTimeout(loadLandingStats, 0) } }} style={{ border: '1px solid var(--bo, #ccc)', borderRadius: 6, fontSize: 11, padding: '4px 8px', width: 120 }} />
+                </div>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => { loadLanding(); loadLandingStats() }}>↻</button>
+              </div>
+              {/* KPIs */}
+              {landingStats && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10, marginBottom: 16 }}>
+                  <div className="kpi-card"><K label="Visitas" value={landingStats.visitas} sub={landingStats.periodo_dias + ' días'} /></div>
+                  <div className="kpi-card"><K label="Únicas" value={landingStats.visitas_unicas || '—'} sub="por IP aprox" /></div>
+                  <div className="kpi-card" style={{ borderLeft: '3px solid var(--ac)' }}><K label="Leads" value={landingStats.leads} sub={landingStats.conversion + '% conversión'} /></div>
+                  <div className="kpi-card" style={{ borderLeft: '3px solid var(--warn)' }}><K label="Sin leer" value={leads.filter(l => !l.leido).length} /></div>
+                  {landingStats.bots_filtrados > 0 && <div className="kpi-card" style={{ borderLeft: '3px solid var(--mu)' }}><K label="Bots" value={landingStats.bots_filtrados} sub="filtrados" /></div>}
+                </div>
+              )}
+              {/* Gráfico por día */}
+              {landingStats && landingStats.por_dia && landingStats.por_dia.length > 0 && (
+                <div style={{ marginBottom: 20, padding: '12px 16px', background: 'var(--bg-alt, #f8f8f8)', borderRadius: 10 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 10, color: 'var(--mu)' }}>Visitas diarias</div>
+                  <div style={{ display: 'flex', alignItems: 'flex-end', gap: 3, height: 130, paddingBottom: 2 }}>
+                    {landingStats.por_dia.slice(-30).map(d => {
+                      const max = Math.max(...landingStats.por_dia.map(x => x.visitas), 1)
+                      const h = Math.max(4, (d.visitas / max) * 126)
+                      return (
+                        <div key={d.dia} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }} title={`${d.dia}: ${d.visitas} visitas, ${d.leads || 0} leads`}>
+                          <span style={{ fontSize: 8, color: 'var(--ac)', whiteSpace: 'nowrap', fontWeight: 600, minHeight: 10 }}>{d.leads > 0 ? d.leads : ''}</span>
+                          <div style={{ width: '100%', height: h, background: 'var(--ac2)', borderRadius: '3px 3px 0 0', minWidth: 8, position: 'relative' }} />
+                          <span style={{ fontSize: 7, color: 'var(--mu)', whiteSpace: 'nowrap', marginTop: 2 }}>{d.dia.slice(5)}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div style={{ display: 'flex', gap: 14, fontSize: 10, color: 'var(--mu)', marginTop: 8 }}>
+                    <span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--ac2)', borderRadius: 2 }} /> Visitas
+                    <span style={{ color: 'var(--ac)', fontWeight: 700 }}>Leads (números arriba)</span>
+                  </div>
+                </div>
+              )}
+              {/* Tabla por fuente */}
+              {landingStats && landingStats.por_fuente && landingStats.por_fuente.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600, marginBottom: 8, color: 'var(--mu)' }}>Origen del tráfico</div>
+                  <table>
+                    <thead><tr><th>Fuente</th><th>Visitas</th><th>%</th></tr></thead>
+                    <tbody>
+                      {landingStats.por_fuente.map(f => (
+                        <tr key={f.fuente}><td style={{ fontWeight: 600 }}>{f.fuente}</td><td>{f.visitas}</td><td>{landingStats.visitas > 0 ? ((f.visitas / landingStats.visitas) * 100).toFixed(0) : 0}%</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {/* Tabla de leads */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+                <h4 style={{ fontSize: 13, fontWeight: 600, color: 'var(--mu)' }}>Leads ({leads.length})</h4>
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <select value={landingFiltro} onChange={e => setLandingFiltro(e.target.value)} style={{ ...S.select, width: 'auto', fontSize: 12, padding: '6px 10px' }}>
+                  <select value={landingFiltro} onChange={e => setLandingFiltro(e.target.value)} style={{ ...S.select, width: 'auto', fontSize: 12, padding: '4px 8px' }}>
                     <option value="todos">Todos ({leads.length})</option>
                     <option value="noleidos">No leídos ({leads.filter(l => !l.leido).length})</option>
                     <option value="leidos">Leídos ({leads.filter(l => l.leido).length})</option>
                   </select>
-                  <button type="button" className="btn btn-secondary btn-sm" onClick={loadLanding}>↻</button>
+                  <button type="button" className="btn btn-secondary btn-sm" onClick={exportLeadsCSV} style={{ fontSize: 11, padding: '4px 10px' }}>📥 CSV</button>
                 </div>
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table>
-                  <thead><tr><th>Fecha</th><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Empresa</th><th>Mensaje</th><th>Página</th><th></th></tr></thead>
+                  <thead><tr><th>Fecha</th><th>Nombre</th><th>Teléfono</th><th>Email</th><th>Empresa</th><th>Mensaje</th><th>Página</th><th>Fuente</th><th></th></tr></thead>
                   <tbody>
-                    {leadsFiltrados.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}>Sin leads</td></tr>}
-                    {leadsFiltrados.map(l => (
-                      <tr key={l.id} style={{ background: l.leido ? 'transparent' : 'rgba(249,115,22,.04)' }}>
-                        <td style={{ fontSize: 11, whiteSpace: 'nowrap' }} data-label="Fecha">{l.fecha ? new Date(l.fecha).toLocaleString('es-AR') : '—'}</td>
-                        <td style={{ fontWeight: l.leido ? 400 : 700 }} data-label="Nombre">{l.nombre || '—'}</td>
-                        <td style={{ fontSize: 12 }} data-label="Teléfono">{l.telefono || '—'}</td>
-                        <td style={{ fontSize: 12, color: 'var(--ac)' }} data-label="Email">{l.email || '—'}</td>
-                        <td style={{ fontSize: 12 }} data-label="Empresa">{l.empresa_interes || '—'}</td>
-                        <td style={{ fontSize: 11, color: 'var(--mu)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} data-label="Mensaje">{l.mensaje || '—'}</td>
-                        <td style={{ fontSize: 11, color: 'var(--mu)' }} data-label="Página">{l.pagina || '—'}</td>
-                        <td data-label="Acciones">{!l.leido && <button type="button" className="btn btn-primary btn-sm" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => marcarLeadLeido(l.id)}>✓ Leído</button>}</td>
-                      </tr>
-                    ))}
+                    {leadsFiltrados.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}>Sin leads</td></tr>}
+                    {leadsFiltrados.map(l => {
+                      const fuente = l.utm_source || (l.ref && l.ref.length < 60 ? l.ref : '') || l.pagina || '—'
+                      return (
+                        <tr key={l.id} style={{ background: l.leido ? 'transparent' : 'rgba(249,115,22,.04)' }}>
+                          <td style={{ fontSize: 11, whiteSpace: 'nowrap' }} data-label="Fecha">{l.fecha ? new Date(l.fecha).toLocaleString('es-AR') : '—'}</td>
+                          <td style={{ fontWeight: l.leido ? 400 : 700 }} data-label="Nombre">{l.nombre || '—'}</td>
+                          <td style={{ fontSize: 12 }} data-label="Teléfono">{l.telefono || '—'}</td>
+                          <td style={{ fontSize: 12, color: 'var(--ac)' }} data-label="Email">{l.email || '—'}</td>
+                          <td style={{ fontSize: 12 }} data-label="Empresa">{l.empresa_interes || '—'}</td>
+                          <td style={{ fontSize: 11, color: 'var(--mu)', maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} data-label="Mensaje">{l.mensaje || '—'}</td>
+                          <td style={{ fontSize: 11, color: 'var(--mu)' }} data-label="Página">{l.pagina || '—'}</td>
+                          <td style={{ fontSize: 11, color: 'var(--ac)' }} data-label="Fuente">{fuente}</td>
+                          <td data-label="Acciones">{!l.leido && <button type="button" className="btn btn-primary btn-sm" style={{ padding: '3px 8px', fontSize: 11 }} onClick={() => marcarLeadLeido(l.id)}>✓ Leído</button>}</td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>

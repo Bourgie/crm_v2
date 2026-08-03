@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const { master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa,
         getPlanes, getPlan, getModulos, saAudit,
-        getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats,
+        getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getLandingStats, getDbStats,
         getGlobalConfig, setGlobalConfig, getAllGlobalConfig,
         getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo,
         getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos,
@@ -1332,6 +1332,15 @@ router.get('/landing-leads', superAuth, (req, res) => {
 router.put('/landing-leads/:id/leer', superAuth, (req, res) => {
   try { master.prepare("UPDATE landing_leads SET leido=1 WHERE id=?").run(req.params.id); res.json({ ok: true }) }
   catch(e) { res.status(500).json({ error: e.message }) }
+});
+
+router.get('/landing-stats', superAuth, (req, res) => {
+  try {
+    const dias = parseInt(req.query.dias) || 30;
+    const pagina = req.query.pagina || '';
+    const stats = getLandingStats(dias, pagina);
+    res.json(stats);
+  } catch(e) { res.status(500).json({ error: e.message }) }
 });
 
 // ══════════════════════════════════════

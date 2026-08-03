@@ -289,6 +289,23 @@ master.exec(`
   );
 `);
 
+// ── Migración idempotente: columnas de analítica (Jul 2026) ──
+const landingCols = master.prepare("PRAGMA table_info(landing_leads)").all().map(c => c.name);
+const landingAddCol = (col, def) => {
+  if (!landingCols.includes(col)) master.prepare(`ALTER TABLE landing_leads ADD COLUMN ${col} ${def}`).run();
+};
+landingAddCol('ref', 'TEXT DEFAULT NULL');
+landingAddCol('utm_source', 'TEXT DEFAULT NULL');
+landingAddCol('utm_medium', 'TEXT DEFAULT NULL');
+landingAddCol('utm_campaign', 'TEXT DEFAULT NULL');
+landingAddCol('ua', 'TEXT DEFAULT NULL');
+landingAddCol('ip', 'TEXT DEFAULT NULL');
+landingAddCol('tipo', 'TEXT DEFAULT NULL');
+landingAddCol('seccion', 'TEXT DEFAULT NULL');
+// Backfill: marcar filas pre-migración
+master.prepare("UPDATE landing_leads SET tipo='pv' WHERE nombre='Analytics' AND (tipo IS NULL OR tipo='')").run();
+master.prepare("UPDATE landing_leads SET tipo='lead' WHERE nombre NOT IN ('Analytics','Evento') AND (tipo IS NULL OR tipo='') AND leido != 2").run();
+
 // Migration: add email and data columns to existing superadmin
 try { master.exec("ALTER TABLE superadmin ADD COLUMN email TEXT"); } catch(e) {}
 try { master.exec("ALTER TABLE superadmin ADD COLUMN data TEXT DEFAULT '{}'"); } catch(e) {}
@@ -556,8 +573,75 @@ function getProspectoSeguimiento(prospecto_id) {
   return master.prepare("SELECT * FROM prospecto_seguimiento WHERE prospecto_id=? ORDER BY fecha DESC").all(prospecto_id);
 }
 function getLandingLeads(noLeidos) {
-  if (noLeidos) return master.prepare("SELECT * FROM landing_leads WHERE leido=0 ORDER BY fecha DESC").all();
+  // Excluir filas de analítica (visitas y eventos) — solo leads reales
+  const where = "WHERE (tipo IS NULL OR tipo='lead') AND leido != 2";
+  if (noLeidos) return master.prepare(`SELECT * FROM landing_leads ${where} AND leido=0 ORDER BY fecha DESC`).all();
+  return master.prepare(`SELECT * FROM landing_leads ${where} ORDER BY fecha DESC`).all();
+}
+function getLandingLeadsFull() {
   return master.prepare("SELECT * FROM landing_leads ORDER BY fecha DESC").all();
+}
+function getLandingStats(dias, pagina) {
+  const desde = new Date(Date.now() - (dias || 30) * 86400000).toISOString();
+  const wherePagina = pagina ? " AND pagina LIKE '%'||?||'%'" : "";
+  const params = [desde];
+  if (pagina) params.push(pagina);
+
+  const run = (sql, extraParams = []) => {
+    const stmt = master.prepare(sql);
+    return stmt.all(...params, ...extraParams);
+  };
+
+  // Visitas (page views): tipo='pv' más filas pre-migración
+  const cVisitas = run(`SELECT COUNT(*) as n FROM landing_leads WHERE fecha >= ? AND (tipo='pv' OR (nombre='Analytics' AND tipo IS NULL))${wherePagina}`).n || 0;
+
+  // Visitas únicas aproximadas por IP
+  const cUnicas = run(`SELECT COUNT(DISTINCT ip) as n FROM landing_leads WHERE fecha >= ? AND (tipo='pv' OR (nombre='Analytics' AND tipo IS NULL))${wherePagina} AND ip IS NOT NULL AND ip != ''`).n || 0;
+
+  // Leads reales
+  const cLeads = run(`SELECT COUNT(*) as n FROM landing_leads WHERE fecha >= ? AND (tipo IS NULL OR tipo='lead') AND leido != 2${wherePagina}`).n || 0;
+
+  // Por día
+  const porDia = run(`SELECT substr(fecha,1,10) as dia, SUM(CASE WHEN tipo='pv' OR (nombre='Analytics' AND tipo IS NULL) THEN 1 ELSE 0 END) as visitas, SUM(CASE WHEN (tipo IS NULL OR tipo='lead') AND leido != 2 THEN 1 ELSE 0 END) as leads FROM landing_leads WHERE fecha >= ?${wherePagina} GROUP BY dia ORDER BY dia`);
+
+  // Por fuente (normalizada)
+  const rawSources = run(`SELECT ref, utm_source, utm_medium, COUNT(*) as cnt FROM landing_leads WHERE fecha >= ? AND (tipo='pv' OR (nombre='Analytics' AND tipo IS NULL))${wherePagina} AND (ref IS NOT NULL OR utm_source IS NOT NULL) GROUP BY ref, utm_source, utm_medium ORDER BY cnt DESC`);
+
+  // Por sección (clicks en CTAs)
+  const porSeccion = run(`SELECT seccion, COUNT(*) as clics FROM landing_leads WHERE fecha >= ? AND tipo='clic'${wherePagina} AND seccion IS NOT NULL AND seccion != '' GROUP BY seccion ORDER BY clics DESC`);
+
+  // Normalizar fuentes
+  const fuenteMap = {};
+  rawSources.forEach(r => {
+    const ref = (r.ref || '').toLowerCase();
+    const src = (r.utm_source || '').toLowerCase();
+    let fuente = 'Directo';
+    if (src) { fuente = src; }
+    else if (ref.includes('google')) fuente = 'Google';
+    else if (ref.includes('instagram') || ref.includes('ig')) fuente = 'Instagram';
+    else if (ref.includes('facebook') || ref.includes('fb')) fuente = 'Facebook';
+    else if (ref.includes('wa.me') || ref.includes('whatsapp')) fuente = 'WhatsApp';
+    else if (ref.includes('linkedin')) fuente = 'LinkedIn';
+    else if (ref && ref !== 'directo' && !ref.includes('unfulano') && !ref.includes('flexcrm')) fuente = 'Referido';
+    fuenteMap[fuente] = (fuenteMap[fuente] || 0) + r.cnt;
+  });
+
+  // Filtrar bots por UA
+  const botPatterns = ['bot','crawler','spider','scraper','lighthouse','google-lighthouse','pagespeed','ahrefs','semrush','moz','archive','preview','slurp','duckduckbot'];
+  const botFilter = botPatterns.map(() => 'ua NOT LIKE \'%\'||?||\'%\'').join(' AND ');
+  const cBots = dias > 0 ? run(`SELECT COUNT(*) as n FROM landing_leads WHERE fecha >= ? AND NOT (${botFilter}) AND (tipo='pv' OR (nombre='Analytics' AND tipo IS NULL))${wherePagina}`, botPatterns).n || 0 : 0;
+
+  return {
+    visitas: cVisitas - cBots,
+    visitas_unicas: cUnicas,
+    leads: cLeads,
+    conversion: cVisitas > 0 ? ((cLeads / (cVisitas - cBots)) * 100).toFixed(1) : 0,
+    por_dia: porDia,
+    por_fuente: Object.entries(fuenteMap).map(([f, c]) => ({ fuente: f, visitas: c })).sort((a, b) => b.visitas - a.visitas),
+    por_seccion: porSeccion,
+    bots_filtrados: cBots,
+    periodo_dias: dias || 30
+  };
 }
 function getDbStats() {
   try {
@@ -915,4 +999,4 @@ try {
 } catch(_) {}
 
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
-module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado, getOAuthProviders, getOAuthProvider, upsertOAuthProvider, getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas, setEmpresaIntegracion, setEmpresaIntegracionesBatch, syncEmpresaIntegracionesDesdePlan };
+module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getLandingLeadsFull, getLandingStats, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado, getOAuthProviders, getOAuthProvider, upsertOAuthProvider, getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas, setEmpresaIntegracion, setEmpresaIntegracionesBatch, syncEmpresaIntegracionesDesdePlan };

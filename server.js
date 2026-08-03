@@ -172,6 +172,14 @@ const webhookReceptorLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const landingLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000,
+  max: 60,
+  message: { error: 'Demasiadas solicitudes.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 const meliCallbackLimiter = rateLimit({
   windowMs: 1 * 60 * 1000,
   max: 10,
@@ -373,7 +381,7 @@ app.use('/api/rrhh',          require('./routes/rrhh'));
 app.use('/api/tareas',        require('./routes/tareas'));
 app.use('/api/arca',          arcaRouter);
 app.use('/api/superadmin',    superadminRouter);
-app.use('/api/landing',       require('./routes/landing'));
+app.use('/api/landing',       landingLimiter, require('./routes/landing'));
 app.use('/api/user-data',     require('./routes/user-data'));
 app.use('/api/notificaciones', require('./routes/notificaciones'));
 

@@ -25,7 +25,7 @@ function notifyNewLead(nombre, telefono, email, empresa, mensaje) {
 
 // Public landing page webhook — no auth, accepts JSON and form-urlencoded
 router.post('/lead', (req, res) => {
-  const { nombre, telefono, email, mensaje, empresa_interes, pagina } = req.body;
+  const { nombre, telefono, email, mensaje, empresa_interes, pagina, ref, utm_source, utm_medium, utm_campaign } = req.body;
   const redirect = req.headers['content-type']?.includes('json') ? false : true;
   if (!nombre || !(mensaje || telefono)) {
     if (redirect) return res.redirect('/gracias.html?error=1');
@@ -35,12 +35,17 @@ router.post('/lead', (req, res) => {
     const { master } = require('../db_master');
     const id = 'lead_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
     const fecha = new Date().toISOString();
+    const refVal = ref || req.headers['referer'] || '';
+    const ua = (req.headers['user-agent'] || '').substring(0, 250);
+    const ip = (req.ip || req.headers['x-forwarded-for'] || '').substring(0, 45);
 
-    master.prepare(`INSERT INTO landing_leads (id,nombre,telefono,email,mensaje,empresa_interes,pagina,leido,fecha)
-      VALUES (?,?,?,?,?,?,?,0,?)`).run(
+    master.prepare(`INSERT INTO landing_leads (id,nombre,telefono,email,mensaje,empresa_interes,pagina,ref,utm_source,utm_medium,utm_campaign,ua,ip,tipo,seccion,leido,fecha)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0,?)`).run(
       id, nombre.trim(), (telefono || '').trim(), (email || '').trim(),
       (mensaje || '').trim(), (empresa_interes || '').trim(),
-      pagina || req.headers['referer'] || req.headers['origin'] || '', fecha
+      pagina || req.headers['referer'] || req.headers['origin'] || '',
+      refVal, (utm_source || '').substring(0, 100), (utm_medium || '').substring(0, 100), (utm_campaign || '').substring(0, 100),
+      ua, ip, 'lead', '', fecha
     );
 
     // Also create a prospecto automatically
@@ -106,10 +111,10 @@ router.post('/zoho-form', (req, res) => {
     const id = 'lead_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
     const fecha = new Date().toISOString();
 
-    master.prepare(`INSERT INTO landing_leads (id,nombre,telefono,email,mensaje,empresa_interes,pagina,leido,fecha)
-      VALUES (?,?,?,?,?,?,?,0,?)`).run(
+    master.prepare(`INSERT INTO landing_leads (id,nombre,telefono,email,mensaje,empresa_interes,pagina,tipo,leido,fecha)
+      VALUES (?,?,?,?,?,?,?,?,0,?)`).run(
       id, nombreFinal.trim(), telefonoFinal.trim(), emailFinal.trim(),
-      mensajeFinal.trim(), empresa.trim(), pagina, fecha
+      mensajeFinal.trim(), empresa.trim(), pagina, 'lead', fecha
     );
 
     const pid = 'pros_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
@@ -128,16 +133,28 @@ router.post('/zoho-form', (req, res) => {
   }
 });
 
-// ── Analytics tracking pixel (records page views) ──
+// ── Analytics tracking pixel + click events ──
+// Query params: p=page, ref=referrer, utm_source/medium/campaign, tipo=pv|clic, seccion=hero|planes|etc
 router.get('/pixel', (req, res) => {
   try {
     const { master } = require('../db_master');
     const id = 'pv_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
     const pagina = req.query.p || req.headers['referer'] || '';
-    const dominio = pagina.includes('unfulanodev') ? 'unfulanodev' : 'flexcrm';
-    master.prepare(`INSERT INTO landing_leads (id,nombre,telefono,email,mensaje,empresa_interes,pagina,leido,fecha)
-      VALUES (?,?,?,?,?,?,?,2,?)`).run(
-      id, 'Analytics', '', '', '', '', pagina, new Date().toISOString()
+    const ref = req.query.ref || '';
+    const utm_source = (req.query.utm_source || '').substring(0, 100);
+    const utm_medium = (req.query.utm_medium || '').substring(0, 100);
+    const utm_campaign = (req.query.utm_campaign || '').substring(0, 100);
+    const ua = (req.headers['user-agent'] || '').substring(0, 250);
+    const ip = (req.ip || req.headers['x-forwarded-for'] || '').substring(0, 45);
+    const tipo = req.query.tipo === 'clic' ? 'clic' : 'pv';
+    const seccion = (req.query.seccion || '').substring(0, 50);
+    const nombreMarker = tipo === 'clic' ? 'Evento' : 'Analytics';
+
+    master.prepare(`INSERT INTO landing_leads (id,nombre,telefono,email,mensaje,empresa_interes,pagina,ref,utm_source,utm_medium,utm_campaign,ua,ip,tipo,seccion,leido,fecha)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,2,?)`).run(
+      id, nombreMarker, '', '', '', '', pagina,
+      ref, utm_source, utm_medium, utm_campaign, ua, ip, tipo, seccion,
+      new Date().toISOString()
     );
   } catch(e) { /* silent */ }
   // Return a 1x1 transparent pixel

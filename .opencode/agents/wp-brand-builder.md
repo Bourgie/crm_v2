@@ -1,5 +1,5 @@
 ---
-description: Genera plantillas WordPress/WooCommerce nativas desde un manual de marca. Define personalidad, sistema de diseño CSS puro, templates PHP nativos, y recomienda plugins optimizados para vender. Usar cuando el usuario dice "creame la tienda para X", "haceme una landing para esta marca", "necesito un theme WP para...", "quiero vender online".
+description: Genera plantillas WordPress/WooCommerce nativas desde un manual de marca. Define personalidad, sistema de diseño CSS puro, templates PHP nativos, y recomienda plugins optimizados para vender. Usar cuando el usuario dice "creame la tienda para X", "necesito un theme WP para...", "quiero vender online", "armame la web con WordPress". NO usar para landings genéricas (React/HTML) — esas van al agente landing-architect.
 mode: subagent
 permission:
   edit: allow

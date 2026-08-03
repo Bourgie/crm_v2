@@ -9,13 +9,13 @@
 <meta property="og:description" content="Sitios web, tiendas online y sistemas a medida para tu negocio. Sin agencia, sin vueltas.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://unfulanodev.com.ar">
-<meta property="og:image" content="https://unfulanodev.com.ar/og.jpg">
+<meta property="og:image" content="https://unfulanodev.com.ar/og.svg">
 <meta property="og:locale" content="es_AR">
 <meta property="og:site_name" content="Un Fulano Dev">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="Un Fulano Dev — Sitios web a medida para tu negocio">
 <meta name="twitter:description" content="Sitios web, tiendas online y sistemas a medida. Sin agencia, sin vueltas.">
-<meta name="twitter:image" content="https://unfulanodev.com.ar/og.jpg">
+<meta name="twitter:image" content="https://unfulanodev.com.ar/og.svg">
 <meta name="robots" content="index, follow">
 <meta name="keywords" content="desarrollo web, tiendas online, CRM, sistemas a medida, páginas web, Catamarca, Argentina">
 <meta name="author" content="Un Fulano Dev">
@@ -30,6 +30,19 @@
   "description": "Sitios web, tiendas online y sistemas a medida para tu negocio. Sin agencia, sin vueltas.",
   "address": { "@type": "PostalAddress", "addressLocality": "Catamarca", "addressCountry": "AR" },
   "sameAs": ["https://wa.me/5493517424391"]
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "¿Cuánto cuesta?", "acceptedAnswer": { "@type": "Answer", "text": "La landing básica es gratis. Un sitio completo desde $450.000, una tienda o sistema a medida desde $900.000. Cada proyecto es distinto: te doy un número exacto antes de arrancar." } },
+    { "@type": "Question", "name": "¿Necesito saber de tecnología?", "acceptedAnswer": { "@type": "Answer", "text": "Para nada. Vos te ocupás del negocio, yo de la web. Te explico todo en criollo, sin palabras raras." } },
+    { "@type": "Question", "name": "¿Y si quiero cambios después?", "acceptedAnswer": { "@type": "Answer", "text": "Si tenés el Plan Tini, los cambios chicos entran en la cuota mensual. Si no, te cotizo el cambio suelto. Siempre te aviso antes de cualquier cosa que implique costo." } },
+    { "@type": "Question", "name": "¿Cómo empezamos?", "acceptedAnswer": { "@type": "Answer", "text": "Me escribís por WhatsApp, charlamos cinco minutos, y si veo que puedo ayudarte te paso un presupuesto. La mitad al inicio, la mitad al entregar." } },
+    { "@type": "Question", "name": "¿Qué necesitás de mí?", "acceptedAnswer": { "@type": "Answer", "text": "Tu WhatsApp, fotos de tu negocio y una charla de cinco minutos. Sin formularios eternos ni documentos." } }
+  ]
 }
 </script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 20'><ellipse cx='12' cy='14' rx='7' ry='5.5' fill='%23E85B4F'/><circle cx='4' cy='6' r='3' fill='%23E85B4F'/><circle cx='11' cy='3' r='3' fill='%23E85B4F'/><circle cx='18' cy='6' r='3' fill='%23E85B4F'/></svg>">
@@ -214,9 +227,27 @@
     *,*::before,*::after{animation-duration:.01ms!important; transition-duration:.01ms!important;}
     .js .reveal{opacity:1; transform:none;}
   }
+
+  /* Cookie banner */
+  #cookie-banner{position:fixed; bottom:0; left:0; right:0; z-index:999; background:var(--ink); color:#fff; padding:0;}
+  .cb-inner{display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 24px; max-width:var(--max-wrap); margin:0 auto; flex-wrap:wrap;}
+  .cb-inner span{font-size:.83rem; line-height:1.45; flex:1; min-width:240px; opacity:.9;}
+  .cb-btns{display:flex; gap:8px; flex-shrink:0;}
+  .cb-accept{font-family:var(--font-display); font-weight:700; font-size:.88rem; padding:8px 22px; border-radius:var(--radius-btn); border:none; cursor:pointer; background:var(--coral); color:#fff; transition:background .2s;}
+  .cb-accept:hover{background:var(--coral-dark);}
+  .cb-reject{font-family:var(--font-display); font-weight:600; font-size:.83rem; padding:8px 18px; border-radius:var(--radius-btn); border:1.5px solid rgba(255,255,255,.25); cursor:pointer; background:transparent; color:rgba(255,255,255,.7); transition:border .2s, color .2s;}
+  .cb-reject:hover{border-color:rgba(255,255,255,.5); color:#fff;}
+  @media (max-width:560px){.cb-inner{flex-direction:column;align-items:flex-start;padding:14px 18px;}.cb-btns{width:100%;}.cb-accept,.cb-reject{flex:1;text-align:center;}}
+
+  /* Skip link */
+  .skip-link{position:absolute; top:-100px; left:12px; z-index:100; background:var(--ink); color:#fff; padding:10px 20px; border-radius:8px; font-weight:600; font-size:.9rem; text-decoration:none;}
+  .skip-link:focus{top:12px;}
+
+  .btn[disabled]{opacity:.6; cursor:not-allowed;}
 </style>
 </head>
 <body>
+<a class="skip-link" href="#contacto">Saltar al contenido</a>
 
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
   <symbol id="paw" viewBox="0 0 24 20">
@@ -234,12 +265,12 @@
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="5" x2="15" y2="5"/><line x1="3" y1="9" x2="15" y2="9"/><line x1="3" y1="13" x2="15" y2="13"/></svg>
     </button>
     <nav class="links" id="navLinks">
-      <a href="#para-quien">Para quien es</a>
+      <a href="#para-quien">Para quién es</a>
       <a href="#planes">Planes</a>
       <a href="#portfolio">Portfolio</a>
       <a href="#contacto">Contacto</a>
       <a href="#faq">FAQ</a>
-      <a class="btn-nav" href="https://wa.me/5493517424391" target="_blank" rel="noopener">WhatsApp</a>
+      <a class="btn-nav" data-cta="header-wa" href="https://wa.me/5493517424391" target="_blank" rel="noopener">WhatsApp</a>
     </nav>
   </div>
 </header>
@@ -252,7 +283,7 @@
       <p class="sub">Sitios web, tiendas, sistemas a medida — sin vueltas de agencia.</p>
       <p class="sub2">Hablamos cinco minutos por WhatsApp y te digo si puedo ayudarte.</p>
       <div class="ctas">
-        <a class="btn btn-primary" href="https://wa.me/5493517424391?text=Hola!%20Vi%20tu%20web%20y%20quiero%20charlar" target="_blank" rel="noopener">Charlamos</a>
+        <a class="btn btn-primary" data-cta="hero" href="https://wa.me/5493517424391?text=Hola!%20Vi%20tu%20web%20y%20quiero%20charlar" target="_blank" rel="noopener">Charlamos</a>
         <a class="btn btn-secondary" href="#portfolio">Ver trabajos</a>
       </div>
     </div>
@@ -289,7 +320,7 @@
 <section class="section section-alt" id="para-quien">
   <div class="wrap">
     <h2 class="section-title reveal">Esto es para vos si...</h2>
-    <p class="section-desc reveal">No importa si tenes un emprendimiento chico o un negocio armado. Estas tres son las cosas que hago. Si lo tuyo no encaja, igual hablame.</p>
+    <p class="section-desc reveal">No importa si tenés un emprendimiento chico o un negocio armado. Estas tres son las cosas que hago. Si lo tuyo no encaja, igual hablame.</p>
     <div class="pq-grid">
       <div class="pq-card reveal">
         <svg viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -303,7 +334,7 @@
           <rect x="22" y="56" width="28" height="3" rx="1.5" fill="#D94F43" opacity=".1"/>
         </svg>
         <h3>Necesitas una web</h3>
-        <p>Landing o sitio completo para presentar tu negocio. Desde USD 100.</p>
+        <p>Landing o sitio completo para presentar tu negocio. La primera gratis. Después desde $450.000.</p>
         <a class="btn btn-secondary btn-sm" href="/demos/inmobiliaria/index.html" target="_blank" rel="noopener">Ver ejemplo</a>
       </div>
       <div class="pq-card reveal rd1">
@@ -316,8 +347,8 @@
           <rect x="20" y="46" width="32" height="3" rx="1.5" fill="#D9A441" opacity=".1"/>
           <path d="M32 20 L36 14 L40 20" stroke="#D9A441" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/>
         </svg>
-        <h3>Queres vender online</h3>
-        <p>Tienda autoadministrable con catalogo, carrito y cobros.</p>
+        <h3>Querés vender online</h3>
+        <p>Tienda autoadministrable con catálogo, carrito y cobros.</p>
         <a class="btn btn-secondary btn-sm" href="/demos/entremimos/index.html" target="_blank" rel="noopener">Ver ejemplo</a>
       </div>
       <div class="pq-card reveal rd2">
@@ -334,8 +365,8 @@
           <rect x="16" y="50" width="40" height="3" rx="1.5" fill="#5E8C5A" opacity=".08"/>
         </svg>
         <h3>Necesitas un sistema</h3>
-        <p>CRM, stock, gestion a tu medida.</p>
-        <a class="btn btn-secondary btn-sm" href="https://app.flexcrm.com.ar" target="_blank" rel="noopener">Ver ejemplo</a>
+        <p>CRM, stock, gestión a tu medida.</p>
+        <a class="btn btn-secondary btn-sm" href="https://flexcrm.com.ar" target="_blank" rel="noopener">Ver ejemplo</a>
       </div>
     </div>
     <div class="pq-footnote reveal">
@@ -367,16 +398,16 @@
         <div class="plan-info">
           <div class="plan-head">
             <span class="plan-name">Fulano</span>
-            <span class="plan-price">Desde USD 100</span>
+            <span class="plan-price">Gratis</span>
           </div>
-          <p class="plan-desc">Landing de una pagina, lista en 48 a 72 horas.</p>
+          <p class="plan-desc">Landing de una página, lista en 48 a 72 horas.</p>
           <p class="plan-rec">Recomendado para: profesionales, pequeños comercios.</p>
           <div class="plan-includes">
-            <span><svg class="paw"><use href="#paw"/></svg> 1 pagina</span>
+            <span><svg class="paw"><use href="#paw"/></svg> 1 página</span>
             <span><svg class="paw"><use href="#paw"/></svg> WhatsApp integrado</span>
-            <span><svg class="paw"><use href="#paw"/></svg> Entrega rapida</span>
+            <span><svg class="paw"><use href="#paw"/></svg> Entrega rápida</span>
           </div>
-          <a class="btn btn-primary btn-sm" href="https://wa.me/5493517424391?text=Hola!%20Quiero%20saber%20mas%20del%20Plan%20Fulano" target="_blank" rel="noopener">Consultar</a>
+           <a class="btn btn-primary btn-sm" data-cta="planes-fulano" href="https://wa.me/5493517424391?text=Hola!%20Quiero%20mi%20landing%20gratis" target="_blank" rel="noopener">Consultar</a>
         </div>
       </div>
 
@@ -395,9 +426,9 @@
         <div class="plan-info">
           <div class="plan-head">
             <span class="plan-name">Ronco</span>
-            <span class="plan-price">Desde USD 350</span>
+            <span class="plan-price">Desde $450.000</span>
           </div>
-          <p class="plan-desc">Sitio completo con formulario, integracion de WhatsApp y redes, mas un mes de ajustes.</p>
+           <p class="plan-desc">Sitio completo con formulario, integración de WhatsApp y redes, más un mes de ajustes.</p>
           <p class="plan-rec">Recomendado para: restaurantes, tiendas de servicio, profesionales que quieren algo completo.</p>
           <div class="plan-includes">
             <span><svg class="paw"><use href="#paw"/></svg> Varias secciones</span>
@@ -405,7 +436,7 @@
             <span><svg class="paw"><use href="#paw"/></svg> Redes integradas</span>
             <span><svg class="paw"><use href="#paw"/></svg> 1 mes de ajustes</span>
           </div>
-          <a class="btn btn-primary btn-sm" href="https://wa.me/5493517424391?text=Hola!%20Quiero%20saber%20mas%20del%20Plan%20Ronco" target="_blank" rel="noopener">Consultar</a>
+           <a class="btn btn-primary btn-sm" data-cta="planes-ronco" href="https://wa.me/5493517424391?text=Hola!%20Quiero%20saber%20mas%20del%20Plan%20Ronco" target="_blank" rel="noopener">Consultar</a>
         </div>
       </div>
 
@@ -425,17 +456,17 @@
         <div class="plan-info">
           <div class="plan-head">
             <span class="plan-name">Malvina</span>
-            <span class="plan-price">Desde USD 800</span>
+            <span class="plan-price">Desde $900.000</span>
           </div>
-          <p class="plan-desc">Tienda online o sistema a medida con panel de administracion.</p>
-          <p class="plan-rec">Recomendado para: emprendimientos con catalogo, negocios que necesitan gestion.</p>
+          <p class="plan-desc">Tienda online o sistema a medida con panel de administración.</p>
+          <p class="plan-rec">Recomendado para: emprendimientos con catálogo, negocios que necesitan gestión.</p>
           <div class="plan-includes">
             <span><svg class="paw"><use href="#paw"/></svg> Panel admin</span>
             <span><svg class="paw"><use href="#paw"/></svg> Catalogo</span>
             <span><svg class="paw"><use href="#paw"/></svg> Carrito / cobros</span>
             <span><svg class="paw"><use href="#paw"/></svg> A tu medida</span>
           </div>
-          <a class="btn btn-primary btn-sm" href="https://wa.me/5493517424391?text=Hola!%20Quiero%20saber%20mas%20del%20Plan%20Malvina" target="_blank" rel="noopener">Consultar</a>
+           <a class="btn btn-primary btn-sm" data-cta="planes-malvina" href="https://wa.me/5493517424391?text=Hola!%20Quiero%20saber%20mas%20del%20Plan%20Malvina" target="_blank" rel="noopener">Consultar</a>
         </div>
       </div>
 
@@ -450,28 +481,27 @@
           <circle cx="28" cy="29" r="1.5" fill="#2B221C" opacity=".5"/>
           <circle cx="36" cy="29" r="1.5" fill="#2B221C" opacity=".5"/>
           <path d="M32 44 C32 44 34 42 36 44 C34 46 30 46 28 44 C30 42 32 44 32 44Z" fill="#2B221C" opacity=".25"/>
-          <text x="44" y="16" font-family="Caveat" font-size="16" fill="#635750" opacity=".4">zzz</text>
         </svg>
         <div class="plan-info">
           <div class="plan-head">
             <span class="plan-name">Tini</span>
-            <span class="plan-price">USD 40 / mes</span>
+            <span class="plan-price">$40.000 / mes</span>
           </div>
           <p class="plan-desc">Mantenimiento mensual: hosting, cambios menores, soporte.</p>
-          <p class="plan-rec">Para los que ya tienen su web y quieren que alguien la mantenga al dia.</p>
+          <p class="plan-rec">Para los que ya tienen su web y quieren que alguien la mantenga al día.</p>
           <div class="plan-includes">
             <span><svg class="paw"><use href="#paw"/></svg> Hosting incluido</span>
             <span><svg class="paw"><use href="#paw"/></svg> Cambios menores</span>
             <span><svg class="paw"><use href="#paw"/></svg> Soporte mensual</span>
           </div>
-          <a class="btn btn-primary btn-sm" href="https://wa.me/5493517424391?text=Hola!%20Quiero%20saber%20mas%20del%20Plan%20Tini%20de%20mantenimiento" target="_blank" rel="noopener">Consultar</a>
+           <a class="btn btn-primary btn-sm" data-cta="planes-tini" href="https://wa.me/5493517424391?text=Hola!%20Quiero%20saber%20mas%20del%20Plan%20Tini%20de%20mantenimiento" target="_blank" rel="noopener">Consultar</a>
         </div>
       </div>
     </div>
 
     <div class="plans-prompt reveal">
-      <p>¿No sabes cual elegir? Decime de que es tu negocio y te recomiendo en un mensaje.</p>
-      <a class="btn btn-primary" href="https://wa.me/5493517424391?text=Hola!%20Tengo%20un%20negocio%20de%20...%20y%20no%20se%20que%20plan%20elegir" target="_blank" rel="noopener" style="margin-top:14px;">Me recomendás?</a>
+      <p>¿No sabés cuál elegir? Decime de qué es tu negocio y te recomiendo en un mensaje.</p>
+      <a class="btn btn-primary" data-cta="planes-prompt" href="https://wa.me/5493517424391?text=Hola!%20Tengo%20un%20negocio%20de%20...%20y%20no%20se%20que%20plan%20elegir" target="_blank" rel="noopener" style="margin-top:14px;">Me recomendás?</a>
     </div>
   </div>
 </section>
@@ -479,8 +509,8 @@
 <!-- COMO TRABAJO -->
 <section class="section section-alt" id="como-trabajo">
   <div class="wrap">
-    <h2 class="section-title reveal" style="text-align:center;">Como trabajo</h2>
-    <p class="section-desc reveal" style="text-align:center;margin-left:auto;margin-right:auto;">Tres pasos, nada mas. Sin contratos largos, sin vueltas.</p>
+    <h2 class="section-title reveal" style="text-align:center;">Cómo trabajo</h2>
+    <p class="section-desc reveal" style="text-align:center;margin-left:auto;margin-right:auto;">Tres pasos, nada más. Sin contratos largos, sin vueltas.</p>
     <div class="process reveal">
       <div class="process-step">
         <span class="step-num">1.</span>
@@ -501,7 +531,7 @@
       <div class="process-step">
         <span class="step-num">3.</span>
         <h3>Te lo entrego</h3>
-        <p>Online, probado, con ajustes incluidos hasta que quede bien. Nada de "despues lo vemos".</p>
+        <p>Online, probado, con ajustes incluidos hasta que quede bien. Nada de "después lo vemos".</p>
       </div>
     </div>
   </div>
@@ -510,7 +540,7 @@
 <!-- PORTFOLIO -->
 <section class="section" id="portfolio">
   <div class="wrap">
-    <h2 class="section-title reveal" style="text-align:center;">Lo que ya arme</h2>
+    <h2 class="section-title reveal" style="text-align:center;">Lo que ya armé</h2>
     <p class="section-desc reveal" style="text-align:center;margin-left:auto;margin-right:auto;">Cada demo esta pensada para un rubro real. No son plantillas — son sitios que un cliente podria usar mañana.</p>
     <div class="port-grid">
 
@@ -528,13 +558,13 @@
 
       <div class="port-card reveal rd1">
         <div class="port-preview" style="background:#140F0A;">
-          <span class="port-tag tag-site">Gastronomia</span>
+          <span class="port-tag tag-site">Gastronomía</span>
           <svg viewBox="0 0 100 80" fill="none"><path d="M30 65 Q25 45 35 35 Q28 48 45 40 Q32 50 38 58 Z" fill="#E8742A" opacity=".8"/><path d="M50 65 Q43 40 55 28 Q48 42 62 35 Q50 48 55 58 Z" fill="#C4451A" opacity=".9"/><path d="M70 65 Q65 48 72 38 Q68 50 78 44 Q70 54 74 62 Z" fill="#E8B86D" opacity=".7"/><rect x="20" y="62" width="60" height="5" rx="1.5" fill="#6B5D52"/></svg>
         </div>
         <div class="port-info">
           <h3>El Fogon del Valle</h3>
           <p>Parrilla de lena con menu interactivo y reservas por WhatsApp.</p>
-          <a class="port-link" href="/demos/gastronomia/index.html" target="_blank" rel="noopener">Ver demo <span>→</span></a>
+          <a class="port-link" href="/demos/gastronomía/index.html" target="_blank" rel="noopener">Ver demo <span>→</span></a>
         </div>
       </div>
 
@@ -557,7 +587,7 @@
         </div>
         <div class="port-info">
           <h3>Entre Mimos</h3>
-          <p>E-commerce de bebes con catalogo y lista de regalos.</p>
+          <p>E-commerce de bebés con catálogo y lista de regalos.</p>
           <a class="port-link" href="/demos/entremimos/index.html" target="_blank" rel="noopener">Ver demo <span>→</span></a>
         </div>
       </div>
@@ -570,7 +600,7 @@
         <div class="port-info">
           <h3>CRM para retail</h3>
           <p>Sistema con ventas, stock, caja, cuenta corriente. Multi-sucursal.</p>
-          <a class="port-link" href="https://app.flexcrm.com.ar" target="_blank" rel="noopener">Ver demo <span>→</span></a>
+          <a class="port-link" href="https://flexcrm.com.ar" target="_blank" rel="noopener">Ver demo <span>→</span></a>
         </div>
       </div>
 
@@ -586,27 +616,27 @@
     <div class="faq-list reveal">
 
       <div class="faq-q">
-        <button onclick="toggleFAQ(this)">Cuanto cuesta?</button>
-        <div class="faq-answer"><div class="faq-answer-inner">Desde USD 100. Pero cada proyecto es distinto, asi que te doy un numero exacto antes de arrancar. Nada de presupuestos abiertos ni sorpresas.</div></div>
+        <button >¿Cuánto cuesta?</button>
+        <div class="faq-answer"><div class="faq-answer-inner">La landing básica es gratis. Un sitio completo desde $450.000, una tienda o sistema a medida desde $900.000. Cada proyecto es distinto igual: te doy un número exacto antes de arrancar. Nada de presupuestos abiertos ni sorpresas.</div></div>
       </div>
 
       <div class="faq-q">
-        <button onclick="toggleFAQ(this)">Necesito saber de tecnologia?</button>
-        <div class="faq-answer"><div class="faq-answer-inner">Para nada. Vos te ocupas del negocio, yo de la web. Te explico todo en criollo, sin palabras raras. Si algo no se entiende, la culpa es mia, no tuya.</div></div>
+        <button >Necesito saber de tecnología?</button>
+        <div class="faq-answer"><div class="faq-answer-inner">Para nada. Vos te ocupás del negocio, yo de la web. Te explico todo en criollo, sin palabras raras. Si algo no se entiende, la culpa es mía, no tuya.</div></div>
       </div>
 
       <div class="faq-q">
-        <button onclick="toggleFAQ(this)">Y si quiero cambios despues?</button>
-        <div class="faq-answer"><div class="faq-answer-inner">Si tenes el Plan Tini, los cambios chicos entran en la cuota mensual. Si no, te cotizo el cambio suelto. Siempre te aviso antes de hacer cualquier cosa que implique costo. No me gusta sorprender con la factura.</div></div>
+        <button >Y si quiero cambios después?</button>
+        <div class="faq-answer"><div class="faq-answer-inner">Si tenés el Plan Tini, los cambios chicos entran en la cuota mensual. Si no, te cotizo el cambio suelto. Siempre te aviso antes de hacer cualquier cosa que implique costo. No me gusta sorprender con la factura.</div></div>
       </div>
 
       <div class="faq-q">
-        <button onclick="toggleFAQ(this)">Como empezamos?</button>
-        <div class="faq-answer"><div class="faq-answer-inner">Me escribis por WhatsApp, charlamos cinco minutos, y si veo que puedo ayudarte te paso un presupuesto. Si te va bien, arrancamos. La mitad al inicio, la mitad cuando te entrego el sitio funcionando.</div></div>
+        <button >Como empezamos?</button>
+        <div class="faq-answer"><div class="faq-answer-inner">Me escribís por WhatsApp, charlamos cinco minutos, y si veo que puedo ayudarte te paso un presupuesto. Si te va bien, arrancamos. La mitad al inicio, la mitad cuando te entrego el sitio funcionando.</div></div>
       </div>
 
       <div class="faq-q">
-        <button onclick="toggleFAQ(this)">Que necesitas de mi?</button>
+        <button >Que necesitas de mi?</button>
         <div class="faq-answer"><div class="faq-answer-inner">Tu WhatsApp, fotos de tu negocio (o lo que quieras mostrar), y una charla de cinco minutos. Nada de llenar formularios eternos ni adjuntar documentos. Simple.</div></div>
       </div>
 
@@ -619,7 +649,7 @@
   <div class="wrap">
     <h2 class="section-title reveal" style="text-align:center;">Dejame tu consulta</h2>
     <p class="section-desc reveal" style="text-align:center;margin-left:auto;margin-right:auto;">Completá y te respondo en menos de 24 horas. Sin formularios eternos.</p>
-    <form action="https://app.flexcrm.com.ar/api/landing/lead" method="POST" class="reveal" style="max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:14px;">
+    <form id="landing-form" action="https://app.flexcrm.com.ar/api/landing/lead" method="POST" class="reveal" style="max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:14px;">
       <input type="hidden" name="pagina" value="unfulanodev" />
       <input type="text" name="nombre" required placeholder="Tu nombre *" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:none;transition:border .2s;" />
       <input type="email" name="email" placeholder="tu@email.com" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:none;transition:border .2s;" />
@@ -635,9 +665,9 @@
 <section class="section">
   <div class="wrap cta-section">
     <h2 class="reveal">Charlamos sin compromiso</h2>
-    <p class="reveal">No tengo equipo de ventas ni te voy a llamar veinte veces. Me escribis, vemos si sirvo, y si no, todo bien.</p>
+    <p class="reveal">No tengo equipo de ventas ni te voy a llamar veinte veces. Me escribís, vemos si sirvo, y si no, todo bien.</p>
     <div class="ctas reveal" style="justify-content:center;">
-      <a class="btn btn-primary" href="https://wa.me/5493517424391?text=Hola!%20Llegue%20a%20tu%20web%20y%20quiero%20charlar" target="_blank" rel="noopener">Escribime por WhatsApp</a>
+      <a class="btn btn-primary" data-cta="cta-final" href="https://wa.me/5493517424391?text=Hola!%20Llegue%20a%20tu%20web%20y%20quiero%20charlar" target="_blank" rel="noopener">Escribime por WhatsApp</a>
     </div>
     <p class="cta-alt reveal">O mandame un mail a <a href="mailto:contacto@unfulanodev.com.ar">contacto@unfulanodev.com.ar</a></p>
   </div>
@@ -662,39 +692,142 @@
 <script>
   document.documentElement.classList.add('js');
 
-  var navToggle = document.getElementById('navToggle');
-  var navLinks = document.getElementById('navLinks');
-  navToggle.addEventListener('click', function(e){
-    e.stopPropagation();
-    var open = navLinks.classList.toggle('open');
-    navToggle.setAttribute('aria-expanded', open);
-  });
-  document.addEventListener('click', function(e){
-    if (!e.target.closest('header') && navLinks.classList.contains('open')){
-      navLinks.classList.remove('open');
-      navToggle.setAttribute('aria-expanded', 'false');
-    }
-  });
-
-  var faqs = document.querySelectorAll('.faq-q');
-  function toggleFAQ(btn){
-    var parent = btn.closest('.faq-q');
-    var isOpen = parent.classList.contains('open');
-    faqs.forEach(function(f){ f.classList.remove('open'); });
-    if (!isOpen) parent.classList.add('open');
+  // Cookie consent
+  var CONSENT_KEY = 'ufd_consent';
+  function hasConsent() { return localStorage.getItem(CONSENT_KEY) === 'accepted'; }
+  function showBanner() {
+    if (localStorage.getItem(CONSENT_KEY)) return;
+    var b = document.createElement('div');
+    b.id = 'cookie-banner';
+    b.setAttribute('role', 'dialog');
+    b.setAttribute('aria-label', 'Consentimiento de cookies');
+    b.innerHTML = '<div class="cb-inner"><span>Contamos las visitas de forma anónima para mejorar el sitio. No usamos cookies de publicidad ni compartimos tus datos. Los datos del formulario de contacto solo se envían si vos los completás.</span><div class="cb-btns"><button class="cb-accept">Aceptar</button><button class="cb-reject">Rechazar</button></div></div>';
+    document.body.appendChild(b);
+    b.querySelector('.cb-accept').addEventListener('click', function(){ localStorage.setItem(CONSENT_KEY, 'accepted'); b.remove(); });
+    b.querySelector('.cb-reject').addEventListener('click', function(){ localStorage.setItem(CONSENT_KEY, 'rejected'); b.remove(); });
   }
 
+  // Pixel: gated by consent
+  var PIXEL_URL = 'https://app.flexcrm.com.ar/api/landing/pixel';
+  function sendPixel(extra) {
+    if (!hasConsent()) return;
+    var p = 'unfulanodev';
+    var params = new URLSearchParams({ p: p });
+    var utm = { utm_source: '', utm_medium: '', utm_campaign: '' };
+    if (window.location.search) {
+      var sp = new URLSearchParams(window.location.search);
+      sp.forEach(function(v, k) { params.append(k, v); });
+      utm = { utm_source: sp.get('utm_source')||'', utm_medium: sp.get('utm_medium')||'', utm_campaign: sp.get('utm_campaign')||'' };
+    }
+    params.set('ref', document.referrer || 'directo');
+    if (extra) { for (var k in extra) { params.set(k, extra[k]); } }
+    params.set('tipo', extra && extra.tipo === 'clic' ? 'clic' : 'pv');
+    var img = new Image();
+    img.src = PIXEL_URL + '?' + params.toString();
+  }
+
+  // CTA click tracking
+  document.querySelectorAll('a[data-cta]').forEach(function(el) {
+    el.addEventListener('click', function(e) {
+      sendPixel({ tipo: 'clic', seccion: this.getAttribute('data-cta') });
+    });
+  });
+
+  // Page view track
+  sendPixel();
+
+  // Save UTM to session for lead form
+  var landingUtm = {};
+  if (window.location.search) {
+    var usp = new URLSearchParams(window.location.search);
+    ['utm_source','utm_medium','utm_campaign'].forEach(function(k) { landingUtm[k] = usp.get(k) || ''; });
+  }
+  window.__landingUtm = landingUtm;
+
+  // Nav toggle a11y
+  var navToggle = document.getElementById('navToggle');
+  var navLinks = document.getElementById('navLinks');
+  if (navToggle && navLinks) {
+    navToggle.addEventListener('click', function(e){
+      e.stopPropagation();
+      var open = navLinks.classList.toggle('open');
+      navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+    });
+    document.addEventListener('click', function(e){
+      if (!e.target.closest('header') && navLinks.classList.contains('open')){
+        navLinks.classList.remove('open');
+        navToggle.setAttribute('aria-expanded', 'false');
+      }
+    });
+  }
+
+  // FAQ a11y
+  var faqs = document.querySelectorAll('.faq-q button');
+  faqs.forEach(function(btn, i) {
+    btn.setAttribute('aria-expanded', 'false');
+    btn.setAttribute('aria-controls', 'faq-a-' + i);
+    var answer = btn.nextElementSibling;
+    if (answer) answer.setAttribute('id', 'faq-a-' + i);
+    btn.addEventListener('click', function(){
+      var parent = this.closest('.faq-q');
+      var isOpen = parent.classList.contains('open');
+      faqs.forEach(function(b){ b.closest('.faq-q').classList.remove('open'); b.setAttribute('aria-expanded', 'false'); });
+      if (!isOpen) { parent.classList.add('open'); this.setAttribute('aria-expanded', 'true'); }
+    });
+  });
+
+  // Form: fetch with states, hidden fields for ref/UTM
+  var form = document.getElementById('landing-form');
+  if (form) {
+    form.addEventListener('submit', function(e) {
+      e.preventDefault();
+      var btn = this.querySelector('button[type=submit]');
+      var origText = btn.textContent;
+      btn.textContent = 'Enviando...';
+      btn.disabled = true;
+
+      var fd = new FormData(this);
+      var utm = window.__landingUtm || {};
+      var ref = document.referrer || '';
+      fd.set('pagina', 'unfulanodev');
+      fd.set('ref', ref);
+      fd.set('utm_source', utm.utm_source || '');
+      fd.set('utm_medium', utm.utm_medium || '');
+      fd.set('utm_campaign', utm.utm_campaign || '');
+
+      fetch(this.action, { method: 'POST', body: new URLSearchParams(fd) })
+        .then(function(r) {
+          if (r.redirected) { window.location.href = r.url; return; }
+          if (r.ok) {
+            btn.textContent = '✓ Enviado';
+            btn.style.background = 'var(--olive)';
+            setTimeout(function(){ window.location.href = '/gracias.html?from=unfulanodev'; }, 800);
+          } else {
+            btn.textContent = 'Error. Intentar de nuevo';
+            btn.disabled = false;
+            setTimeout(function(){ btn.textContent = origText; }, 3000);
+          }
+        })
+        .catch(function() {
+          btn.textContent = 'Error de red';
+          btn.disabled = false;
+          setTimeout(function(){ btn.textContent = origText; }, 3000);
+        });
+    });
+  }
+
+  // Reveal animations
   var reveals = document.querySelectorAll('.reveal');
   var observer = new IntersectionObserver(function(entries){
     entries.forEach(function(entry){
-      if (entry.isIntersecting){
-        entry.target.classList.add('revealed');
-        observer.unobserve(entry.target);
-      }
+      if (entry.isIntersecting){ entry.target.classList.add('revealed'); observer.unobserve(entry.target); }
     });
   }, {threshold:0.1, rootMargin:'0px 0px -40px 0px'});
   reveals.forEach(function(el){ observer.observe(el); });
+
+  showBanner();
 </script>
-<img src="https://app.flexcrm.com.ar/api/landing/pixel?p=unfulanodev" alt="" width="1" height="1" style="display:none">
+<!-- Noscript pixel fallback -->
+<noscript><img src="https://app.flexcrm.com.ar/api/landing/pixel?p=unfulanodev" alt="" width="1" height="1" style="display:none"></noscript>
 </body>
 </html>
