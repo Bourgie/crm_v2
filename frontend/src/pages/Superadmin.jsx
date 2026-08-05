@@ -79,7 +79,7 @@ export default function Superadmin() {
   const [logged, setLogged] = useState(false)
   const [user, setUser] = useState(null)
   const [tab, setTab] = useState('dashboard')
-  const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth > 1023)
 
   const [dash, setDash] = useState(null)
   const [empresas, setEmpresas] = useState([])
@@ -739,7 +739,7 @@ export default function Superadmin() {
       {/* Top bar */}
       <div className="topbar sa-topbar">
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <button type="button" onClick={() => setSidebarOpen(!sidebarOpen)} className="hamburger" style={{ background: 'none', border: 'none', color: 'var(--mu)', cursor: 'pointer', fontSize: 18, padding: 4, display: 'inline-flex' }}>☰</button>
+          <button type="button" onClick={() => setSidebarOpen(!sidebarOpen)} className="sa-hamburger" aria-label="Abrir menú">☰</button>
           <div className="topbar-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>🏢 FlexCRM <span className="badge badge-orange" style={{ fontSize: 10 }}>Super Admin</span></div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
@@ -761,10 +761,10 @@ export default function Superadmin() {
 
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Sidebar */}
-        {sidebarOpen && <div className="sa-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
+        {sidebarOpen && window.innerWidth <= 1023 && <div className="sa-sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
         <div className={`sa-sidebar${sidebarOpen ? ' open' : ''}`}>
           {SIDEBAR.map(([k, l]) => (
-            <button key={k} type="button" onClick={() => setTab(k)}
+            <button key={k} type="button" onClick={() => { setTab(k); if (window.innerWidth <= 1023) setSidebarOpen(false) }}
               className={`sa-nav-item${tab === k ? ' active' : ''}`}
               style={{ marginBottom: k === 'dashboard' ? 12 : 0, marginTop: k === 'soporte' ? 'auto' : 0 }}
               title={!sidebarOpen ? l : undefined}
