@@ -144,7 +144,7 @@ export default function Superadmin() {
   const [statsDias, setStatsDias] = useState(30)
   const [statsPagina, setStatsPagina] = useState('')
 
-  const [emailConfig, setEmailConfig] = useState({ smtp_host:'', smtp_port:'465', smtp_user:'', smtp_pass:'', smtp_from:'', smtp_from_name:'FlexCRM' })
+  const [emailConfig, setEmailConfig] = useState({ smtp_host:'', smtp_port:'465', smtp_user:'', smtp_pass:'', smtp_from:'', smtp_from_name:'Nico' })
   const [emailSaving, setEmailSaving] = useState(false)
   const [emailTesting, setEmailTesting] = useState(false)
   const [emailTestResult, setEmailTestResult] = useState(null)
@@ -1704,7 +1704,7 @@ export default function Superadmin() {
               {empModal === 'new' && (
                 <div className="fr">
                   <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Email admin inicial</label><input value={empForm.email} onChange={e => setEmpForm(p => ({ ...p, email: e.target.value }))} type="email" placeholder="admin@empresa.com" style={S.input} /></div>
-                  <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Contraseña admin</label><input type="password" value={empForm.password} onChange={e => setEmpForm(p => ({ ...p, password: e.target.value }))} placeholder="Mínimo 6 caracteres" style={S.input} /></div>
+                  <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Contraseña admin</label><input type="password" value={empForm.password} onChange={e => setEmpForm(p => ({ ...p, password: e.target.value }))} placeholder="Mínimo 8 caracteres" style={S.input} /></div>
                 </div>
               )}
               {empForm.plan_id && (

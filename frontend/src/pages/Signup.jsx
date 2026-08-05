@@ -6,7 +6,7 @@ import { PasswordInput } from '../components/PasswordInput'
 export function Signup() {
   const navigate = useNavigate()
   const { setMe } = useAuth()
-  const [form, setForm] = useState({ empresa_nombre: '', email: '', password: '', rubro: 'general' })
+  const [form, setForm] = useState({ empresa_nombre: '', email: '', password: '', rubro: 'general', nombre_dueno: '', apellido_dueno: '', telefono: '', ciudad: '', como_conociste: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -21,6 +21,9 @@ export function Signup() {
       setError('Todos los campos son obligatorios'); return
     }
     if (form.password.length < 8) { setError('La contraseña debe tener al menos 8 caracteres'); return }
+    if (!/[A-Z]/.test(form.password)) { setError('Debe contener al menos una mayúscula'); return }
+    if (!/[0-9]/.test(form.password)) { setError('Debe contener al menos un número'); return }
+    if (!/[^A-Za-z0-9]/.test(form.password)) { setError('Debe contener al menos un símbolo'); return }
     setLoading(true)
     try {
       const r = await fetch('/api/auth/signup', {
@@ -81,6 +84,37 @@ export function Signup() {
             <option value="restaurant">🍽️ Restaurant</option>
             <option value="otro">📌 Otro</option>
           </select>
+        </div>
+        <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Nombre dueño</label>
+            <input value={form.nombre_dueno} onChange={set('nombre_dueno')} placeholder="Opcional" style={{ width: '100%' }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Apellido dueño</label>
+            <input value={form.apellido_dueno} onChange={set('apellido_dueno')} placeholder="Opcional" style={{ width: '100%' }} />
+          </div>
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Teléfono / WhatsApp</label>
+          <input type="tel" value={form.telefono} onChange={set('telefono')} placeholder="+54 9 11 1234-5678" style={{ width: '100%' }} />
+        </div>
+        <div style={{ marginBottom: 12, display: 'flex', gap: 8 }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Ciudad</label>
+            <input value={form.ciudad} onChange={set('ciudad')} placeholder="Opcional" style={{ width: '100%' }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>¿Cómo nos conociste?</label>
+            <select value={form.como_conociste} onChange={set('como_conociste')} style={{ width: '100%' }}>
+              <option value="">—</option>
+              <option value="google">🔍 Google</option>
+              <option value="instagram">📸 Instagram</option>
+              <option value="recomendacion">💬 Recomendación</option>
+              <option value="facebook">📘 Facebook</option>
+              <option value="otro">📌 Otro</option>
+            </select>
+          </div>
         </div>
         {error && <div style={{ color: 'var(--bad)', fontSize: 12, marginBottom: 12, padding: '8px 12px', background: 'rgba(239,68,68,.06)', borderRadius: 8 }}>{error}</div>}
         <button type="button" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: 12 }} onClick={handleSignup} disabled={loading}>

@@ -374,7 +374,8 @@ router.post('/:id/enviar-email', authMiddleware, async (req, res) => {
       auth: { user: cfg.smtp_user, pass: cfg.smtp_pass },
     });
 
-    const from = cfg.smtp_from || 'noreply@flexcrm.com';
+    const { getGlobalFrom } = require('../lib/send-email');
+    const from = cfg.smtp_from || getGlobalFrom();
     const subject = 'Presupuesto N° ' + (p.numero || p.id.substr(-6)) + ' — ' + (cfg.nombre || 'FlexCRM');
     const html = `
       <p>Hola,</p>

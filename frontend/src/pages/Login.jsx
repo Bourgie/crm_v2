@@ -12,6 +12,17 @@ function parseJwt(token) {
   } catch { return null }
 }
 
+function getPwStrength(pw) {
+  let score = 0
+  if (pw.length >= 8) score++
+  if (/[A-Z]/.test(pw)) score++
+  if (/[0-9]/.test(pw)) score++
+  if (/[^A-Za-z0-9]/.test(pw)) score++
+  return score
+}
+const STRENGTH_COLORS = ['var(--bad)', '#f59e0b', '#84cc16', '#22c55e']
+const STRENGTH_LABELS = ['Débil', 'Regular', 'Buena', 'Fuerte']
+
 export function Login() {
   const [form, setForm] = useState({ usuario: '', password: '', empresa: '' })
   const [sucs, setSucs] = useState(null)
@@ -22,6 +33,9 @@ export function Login() {
   const [twofaCode, setTwofaCode] = useState('')
   const [twofaMode, setTwofaMode] = useState('totp')
   const [consentStep, setConsentStep] = useState(null)
+  const [mustChangePwStep, setMustChangePwStep] = useState(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState('')
 
   const { setMe } = useAuth()
   const { setSucs: setAppSucs, setProds, setClis, setSucSesion, setModulos, setRubro, setCfg } = useApp()
@@ -80,9 +94,22 @@ export function Login() {
       const data = await r.json()
       if (!r.ok) { setError(data.error || 'Error al iniciar sesión'); return }
 
+      // Must change password (forced)
+      if (data.require_password_change) {
+        setMustChangePwStep({ temp_token: data.temp_token, empresa: form.empresa.trim() || 'default', nombre: data.user?.nombre })
+        return
+      }
+
       // 2FA required
       if (data.require_2fa) {
         setTwofaStep({ temp_token: data.temp_token, empresa: form.empresa.trim() || 'default', nombre: data.user?.nombre })
+        return
+      }
+
+      // 2FA mandatory — user must set it up first
+      if (data.require_2fa_setup) {
+        const params = `forced=1&temp_token=${encodeURIComponent(data.temp_token)}&empresa=${encodeURIComponent(data.empresa || form.empresa.trim() || 'default')}`
+        navigate(`/app/2fa-setup?${params}`, { replace: true })
         return
       }
 
@@ -129,6 +156,35 @@ export function Login() {
       const data = await r.json()
       if (!r.ok) { setError(data.error || 'Código inválido'); return }
       await proceedWithLogin(data, twofaStep.empresa)
+    } catch (err) {
+      setError(err.message || 'Error de conexión')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  async function handleForcedPasswordChange(e) {
+    e.preventDefault()
+    setError('')
+    if (newPassword !== newPasswordConfirm) { setError('Las contraseñas no coinciden'); return }
+    if (newPassword.length < 8) { setError('Mínimo 8 caracteres'); return }
+    if (!/[A-Z]/.test(newPassword)) { setError('Debe contener al menos una mayúscula'); return }
+    if (!/[0-9]/.test(newPassword)) { setError('Debe contener al menos un número'); return }
+    if (!/[^A-Za-z0-9]/.test(newPassword)) { setError('Debe contener al menos un símbolo'); return }
+    setLoading(true)
+    try {
+      const r = await fetch('/api/auth/forced-password-change', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          temp_token: mustChangePwStep.temp_token,
+          password_nuevo: newPassword,
+        }),
+      })
+      const data = await r.json()
+      if (!r.ok) { setError(data.error || 'Error al cambiar contraseña'); return }
+      await proceedWithLogin(data, mustChangePwStep.empresa)
     } catch (err) {
       setError(err.message || 'Error de conexión')
     } finally {
@@ -245,6 +301,52 @@ export function Login() {
   }
 
   const set = (field) => (e) => setForm((f) => ({ ...f, [field]: e.target.value }))
+
+  if (mustChangePwStep) {
+    const strength = getPwStrength(newPassword)
+    return (
+      <div style={styles.wrap}>
+        <div style={styles.card}>
+          <div style={styles.logo}>Flex<span style={{ color: 'var(--ac)' }}>CRM</span></div>
+          <h2 style={{ marginBottom: 4 }}>Nueva contraseña</h2>
+          <p style={{ color: 'var(--mu)', fontSize: 13, marginBottom: 24 }}>
+            {mustChangePwStep.nombre ? `Hola ${mustChangePwStep.nombre}, ` : ''}tu contraseña debe ser actualizada para continuar.
+          </p>
+          <form onSubmit={handleForcedPasswordChange}>
+            <div className="fg">
+              <label>Nueva contraseña</label>
+              <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
+                placeholder="Mín. 8 caracteres, mayúscula, número y símbolo" required
+              />
+              {newPassword.length > 0 && (
+                <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1, height: 3, background: 'var(--sf)', borderRadius: 2 }}>
+                    <div style={{ width: `${(strength / 4) * 100}%`, height: '100%', background: STRENGTH_COLORS[strength], borderRadius: 2, transition: 'width .2s' }} />
+                  </div>
+                  <span style={{ fontSize: 11, color: STRENGTH_COLORS[strength], fontWeight: 600 }}>{STRENGTH_LABELS[strength]}</span>
+                </div>
+              )}
+            </div>
+            <div className="fg">
+              <label>Confirmar contraseña</label>
+              <input type="password" value={newPasswordConfirm} onChange={e => setNewPasswordConfirm(e.target.value)}
+                placeholder="Repetí la contraseña" required
+              />
+            </div>
+            {error && (
+              <div style={{ background: '#fee2e2', color: 'var(--bad)', padding: '10px 14px', borderRadius: 8, fontSize: 13, marginBottom: 14, marginTop: 10 }}>
+                ⚠️ {error}
+              </div>
+            )}
+            <button type="submit" className="btn btn-primary btn-lg" style={{ width: '100%', justifyContent: 'center', marginTop: 12 }}
+              disabled={loading || newPassword.length < 8 || newPassword !== newPasswordConfirm}>
+              {loading ? <><span className="spinner" style={{ width: 16, height: 16 }} /> Guardando...</> : 'Guardar y continuar →'}
+            </button>
+          </form>
+        </div>
+      </div>
+    )
+  }
 
   if (twofaStep) {
     return (

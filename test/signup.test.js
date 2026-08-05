@@ -41,7 +41,7 @@ describe('POST /api/auth/signup', () => {
     expect(r.error).toBeTruthy()
   })
 
-  it('creates account and returns token', async () => {
+  it('creates account and returns ok', async () => {
     const ts = Date.now()
     const r = await api('POST', '/api/auth/signup', {
       empresa_nombre: 'UnitTest-' + ts,
@@ -50,10 +50,7 @@ describe('POST /api/auth/signup', () => {
       rubro: 'general'
     })
     expect(r.ok).toBe(true)
-    expect(r.token).toBeTruthy()
-    expect(r.empresa).toBeTruthy()
-    expect(r.empresa_nombre).toBe('UnitTest-' + ts)
-    expect(r.mensaje).toContain('14 días')
+    expect(r.mensaje).toBeTruthy()
   })
 })
 

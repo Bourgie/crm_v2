@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useApi } from '../hooks/useApi'
-import { useApp, useToast } from '../store'
+import { useApp, useToast, useAuth } from '../store'
 import { Modal } from '../components/Modal'
-import { Field, EmptyRow, Loader } from '../components/UI'
+import { Field, EmptyRow, Loader, ConfirmDialog } from '../components/UI'
 import { exportExcel } from '../utils/excel'
 import QRCode from 'qrcode'
 
@@ -110,7 +110,7 @@ function imprimirRetiro(concepto, monto, firma) {
 
 // ── Cobro multi-método ────────────────────────────────────────
 function ModalCobro({ open, onClose, venta, pagosMethods, onConfirm }) {
-  const initialRows = [{ metodo: 'efectivo', monto: String(venta?.total || ''), cuotas: '1', obs: '' }]
+  const initialRows = [{ metodo: 'efectivo', monto: String(venta?.total || ''), cuotas: '1', obs: '', nro_comprobante: '' }]
   const [rows, setRows] = useState(initialRows)
   const [descPct, setDescPct] = useState('')
   const [codigoInput, setCodigoInput] = useState('')
@@ -145,7 +145,7 @@ function ModalCobro({ open, onClose, venta, pagosMethods, onConfirm }) {
   function addRow() {
     const usado = new Set(rows.map((r) => r.metodo))
     const libre = pagosMethods.find((p) => !usado.has(p.id)) || pagosMethods[0]
-    setRows((p) => [...p, { metodo: libre?.id || 'efectivo', monto: String(Math.max(0, totalConDesc - sumBases)), cuotas: '1', obs: '' }])
+    setRows((p) => [...p, { metodo: libre?.id || 'efectivo', monto: String(Math.max(0, totalConDesc - sumBases)), cuotas: '1', obs: '', nro_comprobante: '' }])
   }
 
   async function validarCodigo() {
@@ -171,7 +171,7 @@ function ModalCobro({ open, onClose, venta, pagosMethods, onConfirm }) {
         const metInfo = pagosMethods.find((p) => p.id === r.metodo) || {}
         const rec = r.metodo === 'credito' ? (parseFloat(metInfo.recargo) || 0) : 0
         const base = parseFloat(r.monto) || 0
-        return { id: r.metodo, monto: String(Math.round(base + base * rec / 100)), monto_base: base, recargo_pct: rec, cuotas: r.cuotas || '1', obs: r.obs }
+        return { id: r.metodo, monto: String(Math.round(base + base * rec / 100)), monto_base: base, recargo_pct: rec, cuotas: r.cuotas || '1', obs: r.obs, nro_comprobante: r.nro_comprobante || '' }
       })
       await onConfirm({ pagos, descuento_pct: desc, total_cobrado: sumFinals, codigo_descuento: codigoValido ? codigoValido.codigo : undefined })
       onClose()
@@ -253,6 +253,11 @@ function ModalCobro({ open, onClose, venta, pagosMethods, onConfirm }) {
             <input type="text" value={row.obs} onChange={(e) => setRow(i, 'obs', e.target.value)}
               placeholder={esCredito ? 'Tipo tarjeta, N° ticket...' : 'Observación (opcional)'}
               style={{ width: '100%', marginTop: 6, padding: '5px 8px', borderRadius: 7, border: '1.5px solid var(--bd)', fontSize: 11 }} />
+            {row.metodo === 'transferencia' && (
+              <input type="text" value={row.nro_comprobante || ''} onChange={(e) => setRow(i, 'nro_comprobante', e.target.value)}
+                placeholder="N° comprobante de transferencia *"
+                style={{ width: '100%', marginTop: 6, padding: '5px 8px', borderRadius: 7, border: '1.5px solid #f59e0b', fontSize: 11, fontWeight: 600 }} />
+            )}
           </div>
         )
       })}
@@ -675,6 +680,7 @@ export function Caja() {
   const [modalMov, setModalMov] = useState(null)
   const [modalCierre, setModalCierre] = useState(false)
   const [modalCobro, setModalCobro] = useState(null)        // venta normal
+  const [dupConfirm, setDupConfirm] = useState(null)          // confirm duplicado comprobante
   const [modalComprobante, setModalComprobante] = useState(null)  // venta ctacte
   const [modalCompTipo, setModalCompTipo] = useState(null)      // tipo comprobante post-cobro
   // pendientes ya no se cobran en caja — pasan a cuenta corriente
@@ -781,7 +787,7 @@ export function Caja() {
     await ejecutarCobro(venta, pagos, descuento_pct, codigo_descuento)
   }
 
-  async function ejecutarCobro(venta, pagos, descuento_pct, codigo_descuento) {
+  async function ejecutarCobro(venta, pagos, descuento_pct, codigo_descuento, confirmarDuplicado) {
     const sorted = [...pagos].sort((a, b) => (parseFloat(b.monto) || 0) - (parseFloat(a.monto) || 0))
     const pagoPrincipal = sorted[0]?.id || 'efectivo'
     const esMixto = pagos.length > 1
@@ -789,7 +795,7 @@ export function Caja() {
     const ctacteMonto = ctactePagos.reduce((a, p) => a + (parseFloat(p.monto) || 0), 0)
     const pagosSinCtacte = pagos.filter((p) => p.id !== 'ctacte')
 
-    await api('POST', `/ventas/${venta.id}/cobrar`, {
+    const body = {
       pago: esMixto && pagosSinCtacte.length > 0 ? 'mixto' : (pagosSinCtacte[0]?.id || pagoPrincipal),
       pagos_detalle: pagosSinCtacte.length > 0 ? pagosSinCtacte : pagos,
       pago_principal: pagosSinCtacte[0]?.id || pagoPrincipal,
@@ -797,10 +803,22 @@ export function Caja() {
       descuento_pct,
       codigo_descuento,
       suc_id: sucSesion,
-    })
+    }
+    if (confirmarDuplicado) body.confirmar_duplicado = true
+
+    const r = await api('POST', `/ventas/${venta.id}/cobrar`, body)
+
+    if (r.advertencia) {
+      setDupConfirm({
+        venta, pagos, descuento_pct, codigo_descuento,
+        duplicados: r.duplicados || [],
+        permite_confirmar: r.permite_confirmar
+      })
+      return
+    }
+
     toast(`✅ Cobro registrado — Venta #${venta.numero}`, 'ok')
     load()
-    // Ask for comprobante type
     setModalCompTipo({ venta, pagos })
   }
 
@@ -1160,6 +1178,27 @@ export function Caja() {
             </div>
           </div>
         </div>
+      )}
+      {/* Confirm duplicado comprobante */}
+      {dupConfirm && (
+        <ConfirmDialog
+          open={!!dupConfirm}
+          onClose={() => setDupConfirm(null)}
+          title="Comprobante duplicado"
+          danger={false}
+          confirmLabel={dupConfirm.permite_confirmar ? 'Confirmar de todas formas' : undefined}
+          onConfirm={dupConfirm.permite_confirmar ? async () => {
+            const { venta, pagos, descuento_pct, codigo_descuento } = dupConfirm
+            setDupConfirm(null)
+            await ejecutarCobro(venta, pagos, descuento_pct, codigo_descuento, true)
+          } : undefined}
+          message={(() => {
+            const list = dupConfirm.duplicados.slice(0, 3).map(d =>
+              `- Venta #${d.venta_numero || '—'} — ${fmt(d.monto || 0)} (${d.suc_nombre || '—'}) — ${new Date(d.fecha).toLocaleDateString('es-AR')}`
+            ).join('\n')
+            return `Este comprobante ya fue registrado:\n\n${list}\n\n${dupConfirm.permite_confirmar ? '' : 'Solo un admin o supervisor puede confirmar.'}`
+          })()}
+        />
       )}
     </div>
   )

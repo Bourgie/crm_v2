@@ -43,6 +43,9 @@ export function ActivarCuenta() {
       setError('La contraseña debe tener al menos 8 caracteres')
       return
     }
+    if (!/[A-Z]/.test(password)) { setError('Debe contener al menos una mayúscula'); return }
+    if (!/[0-9]/.test(password)) { setError('Debe contener al menos un número'); return }
+    if (!/[^A-Za-z0-9]/.test(password)) { setError('Debe contener al menos un símbolo'); return }
     if (password !== confirm) {
       setError('Las contraseñas no coinciden')
       return

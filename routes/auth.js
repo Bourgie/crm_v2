@@ -3,6 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const rateLimit = require('express-rate-limit');
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
 const { authMiddleware, requireRol, getSecret } = require('../middleware/auth');
@@ -139,8 +140,18 @@ function enforceSessionLimit(db, userId) {
   }
 }
 
+// ── Login IP rate limiter ──
+const loginIpLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  message: { error: 'Demasiados intentos desde esta IP. Esperá 15 minutos.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => require('../lib/suspicious-activity').getIp(req),
+});
+
 // POST /api/auth/login
-router.post('/login', validate(loginSchema), async (req, res) => {
+router.post('/login', loginIpLimiter, validate(loginSchema), async (req, res) => {
   const { usuario, password, empresa } = req.body;
   const { getEmpresaDB } = require('../db_sqlite');
   const userDB = getEmpresaDB(empresa);
@@ -200,11 +211,13 @@ router.post('/login', validate(loginSchema), async (req, res) => {
       let h = cfg.smtp_host, p = parseInt(cfg.smtp_port)||465, u = cfg.smtp_user, pass = cfg.smtp_pass, from = cfg.smtp_from;
       if (!h || !u || !pass) { h = getGlobalConfig('smtp_host'); p = parseInt(getGlobalConfig('smtp_port'))||465; u = getGlobalConfig('smtp_user'); pass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : ''; from = getGlobalConfig('smtp_from')||u||''; }
       if (h && u && pass) {
-        const fromName = getGlobalConfig('smtp_from_name')||'FlexCRM';
+        const { getRemitente } = require('../lib/send-email');
+        const fromName = getRemitente().fromName;
         const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
+        const tutorialesUrl = process.env.TUTORIALES_URL || `${appUrl}/tutoriales`;
         const { sendEmail } = require('../lib/send-email');
         const { verificationEmail } = require('../lib/email-templates');
-        await sendEmail(h, p, u, pass, '"'+fromName+'" <'+from+'>', user.email, 'Verificá tu email — FlexCRM', verificationEmail('FlexCRM', appUrl+'/api/auth/verify-email/'+verToken)).catch(()=>{});
+        await sendEmail(h, p, u, pass, `"${fromName}" <${from}>`, user.email, 'Verificá tu email y empezá — FlexCRM', verificationEmail(cfg.nombre || empresa, empresa, user.usuario || '', appUrl+'/api/auth/verify-email/'+verToken, appUrl, tutorialesUrl)).catch(()=>{});
       }
     } catch(e) {}
     await new Promise(r => setTimeout(r, progressiveDelay(1)));
@@ -231,6 +244,7 @@ router.post('/login', validate(loginSchema), async (req, res) => {
   } catch(e) { /* non-blocking */ }
 
   // Check if user has 2FA enabled
+  const { is2faMandatory } = require('./auth-2fa');
   const twofaRow = userDB.raw.prepare("SELECT enabled FROM user_2fa WHERE user_id=? AND enabled=1").get(user.id);
   if (twofaRow) {
     const tempToken = jwt.sign(
@@ -239,6 +253,16 @@ router.post('/login', validate(loginSchema), async (req, res) => {
       { expiresIn: '5m' }
     );
     return res.json({ require_2fa: true, temp_token: tempToken, user: { nombre: user.nombre, email: user.email || '' } });
+  }
+
+  // 2FA mandatory but user hasn't set it up yet
+  if (is2faMandatory(user, userDB)) {
+    const tempToken = jwt.sign(
+      { id: user.id, purpose: '2fa_setup', empresa },
+      getSecret(),
+      { expiresIn: '15m' }
+    );
+    return res.json({ require_2fa_setup: true, temp_token: tempToken, empresa, user: { nombre: user.nombre, email: user.email || '' } });
   }
 
   // ── Consent check (per-empresa, admin-only) ──
@@ -437,7 +461,8 @@ router.post('/activar-cuenta', async (req, res) => {
   const { token, empresa, password, acepta_terminos, acepta_privacidad } = req.body;
   if (!token || !empresa || !password) return res.status(400).json({ error: 'Token, empresa y contraseña requeridos' });
   if (!acepta_terminos || !acepta_privacidad) return res.status(400).json({ error: 'Debés aceptar los términos y la política de privacidad' });
-  if (password.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
+  const pwErr = require('../lib/password-policy').validatePassword(password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
 
   try {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
@@ -586,6 +611,72 @@ router.post('/cambiar-password', authMiddleware, validate(changePasswordSchema),
   res.json({ ok: true });
 });
 
+// POST /api/auth/forced-password-change — unauthenticated password change during login
+router.post('/forced-password-change', async (req, res) => {
+  const { temp_token, password_nuevo } = req.body;
+  if (!temp_token || !password_nuevo) return res.status(400).json({ error: 'Token y contraseña requeridos' });
+
+  const pwErr = require('../lib/password-policy').validatePassword(password_nuevo);
+  if (pwErr) return res.status(400).json({ error: pwErr });
+
+  let payload;
+  try {
+    payload = jwt.verify(temp_token, getSecret());
+  } catch (e) {
+    return res.status(401).json({ error: 'Token temporal inválido o expirado' });
+  }
+  if (payload.purpose !== 'change_password') return res.status(401).json({ error: 'Token inválido' });
+
+  const empresa = payload.empresa;
+  const { getEmpresaDB, uid } = require('../db_sqlite');
+  const userDB = getEmpresaDB(empresa);
+  const user = userDB.findOne('usuarios', payload.id);
+  if (!user || !user.activo) return res.status(401).json({ error: 'Usuario no válido' });
+
+  const recentPasswords = userDB.raw.prepare(
+    "SELECT password_hash FROM password_history WHERE user_id=? ORDER BY created_at DESC LIMIT 5"
+  ).all(payload.id).map(r => r.password_hash);
+  for (const oldHash of recentPasswords) {
+    if (await bcrypt.compare(password_nuevo, oldHash)) {
+      return res.status(400).json({ error: 'No podés usar una contraseña reciente. Elegí una que no hayas usado antes.' });
+    }
+  }
+
+  if (user.password) {
+    userDB.insert('password_history', {
+      id: 'ph_' + uid(),
+      user_id: payload.id,
+      password_hash: user.password,
+      created_at: new Date().toISOString(),
+    });
+  }
+
+  const hash = await bcrypt.hash(password_nuevo, 10);
+  userDB.update('usuarios', payload.id, { password: hash, must_change_password: 0, password_changed_at: new Date().toISOString() });
+
+  userDB.raw.prepare("UPDATE password_reset_tokens SET usado=1 WHERE usuario_id=? AND id LIKE 'rt_%'").run(payload.id);
+
+  suspicious.auditPasswordReset(req, userDB, user)
+
+  const { accessToken, refreshToken } = generateTokens(user, empresa);
+  enforceSessionLimit(userDB, payload.id);
+
+  const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  userDB.insert('password_reset_tokens', {
+    id: 'rt_' + uid(),
+    usuario_id: payload.id,
+    email: user.email || '',
+    token: refreshHash,
+    expires: new Date(Date.now() + REFRESH_TOKEN_EXPIRY).toISOString(),
+    usado: 0,
+    creado: new Date().toISOString(),
+  });
+
+  setRefreshCookie(res, refreshToken);
+  setAccessCookie(res, accessToken);
+  res.json(buildLoginResponse(user, accessToken, refreshToken, userDB));
+});
+
 // GET /api/auth/usuarios
 router.get('/usuarios', authMiddleware, requireRol('admin','supervisor'), (req, res) => {
   const db = _getDB(req);
@@ -677,7 +768,7 @@ function checkSignupEmailLimit(email) {
 
 // ── Public signup (auto-provisión de empresa + trial) ──
 router.post('/signup', async (req, res) => {
-  const { empresa_nombre, email, password, rubro, website } = req.body;
+  const { empresa_nombre, email, password, rubro, website, nombre_dueno, apellido_dueno, telefono, ciudad, como_conociste } = req.body;
 
   // Honeypot (hidden field — bots fill it)
   if (website && website.length > 0) {
@@ -688,8 +779,8 @@ router.post('/signup', async (req, res) => {
   if (!empresa_nombre || !email || !password) {
     return res.status(400).json({ error: 'Nombre del negocio, email y contraseña requeridos' });
   }
-  if (password.length < 8) return res.status(400).json({ error: 'La contraseña debe tener al menos 8 caracteres' });
-  if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) return res.status(400).json({ error: 'La contraseña debe incluir una mayúscula y un número' });
+  const pwErr = require('../lib/password-policy').validatePassword(password);
+  if (pwErr) return res.status(400).json({ error: pwErr });
 
   // Per-email rate limit
   if (!checkSignupEmailLimit(email)) {
@@ -732,7 +823,17 @@ router.post('/signup', async (req, res) => {
   empDB.setConfig({
     rubro: rubro || 'general', nombre: empresa_nombre,
     modulos_habilitados: JSON.stringify(['pos', 'caja', 'clientes', 'ventas', 'productos', 'ctacte', 'presupuestos', 'reportes']),
+    nombre_dueno: nombre_dueno || '', apellido_dueno: apellido_dueno || '',
+    telefono: telefono || '', ciudad: ciudad || '', como_conociste: como_conociste || '',
   });
+
+  // Store extra fields in master.empresas.config
+  if (nombre_dueno || telefono || ciudad || como_conociste) {
+    try {
+      const extra = { nombre_dueno: nombre_dueno || '', apellido_dueno: apellido_dueno || '', telefono: telefono || '', ciudad: ciudad || '', como_conociste: como_conociste || '' };
+      master.prepare("UPDATE empresas SET config = ? WHERE id = ?").run(JSON.stringify(extra), empresaId);
+    } catch(e) { /* non-critical */ }
+  }
 
   // Disposable email
   try {
@@ -744,8 +845,10 @@ router.post('/signup', async (req, res) => {
   const hash = await bcrypt.hash(password, 10);
   const adminId = 'u' + uid();
   const usuario = email.split('@')[0].replace(/[^a-z0-9_]/g, '_').substring(0, 20);
+  const adminNombre = nombre_dueno || 'Admin';
+  const adminApellido = apellido_dueno || null;
   empDB.insert('usuarios', {
-    id: adminId, nombre: 'Admin', usuario: usuario,
+    id: adminId, nombre: adminNombre, apellido: adminApellido || '', usuario: usuario,
     email: email.trim().toLowerCase(), password: hash,
     rol: 'admin', roles: JSON.stringify(['admin']), activo: true,
     email_verificado: 0, creado: new Date().toISOString(), password_changed_at: new Date().toISOString(),
@@ -753,7 +856,7 @@ router.post('/signup', async (req, res) => {
 
   const empId = uid();
   empDB.insert('empleados', {
-    id: empId, nombre: 'Admin', apellido: null, email: email.trim().toLowerCase(),
+    id: empId, nombre: adminNombre, apellido: adminApellido || null, email: email.trim().toLowerCase(),
     fecha_ingreso: new Date().toISOString().substr(0, 10), activo: 1,
     usuario_id: adminId, creado: new Date().toISOString(),
   });
@@ -789,14 +892,14 @@ router.post('/signup', async (req, res) => {
     const h = getGlobalConfig('smtp_host'), p = parseInt(getGlobalConfig('smtp_port'))||465;
     const u = getGlobalConfig('smtp_user'), ep = getGlobalConfig('smtp_pass');
     const pass = ep ? decryptValue(ep) : '';
-    const from = getGlobalConfig('smtp_from') || u || '';
-    const fromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
     const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
+    const tutorialesUrl = process.env.TUTORIALES_URL || `${appUrl}/tutoriales`;
     const verifyLink = `${appUrl}/api/auth/verify-email/${verToken}`;
-    if (h && u && pass && from) {
-      const { sendEmail } = require('../lib/send-email');
+    if (h && u && pass) {
+      const { sendEmail, getRemitente } = require('../lib/send-email');
       const { verificationEmail } = require('../lib/email-templates');
-      await sendEmail(h, p, u, pass, `"${fromName}" <${from}>`, email, 'Verifica tu email — FlexCRM', verificationEmail(empresa_nombre, verifyLink));
+      const rem = getRemitente();
+      await sendEmail(h, p, u, pass, rem.formatted, email, 'Verificá tu email y empezá — FlexCRM', verificationEmail(empresa_nombre, finalCodigo, usuario, verifyLink, appUrl, tutorialesUrl));
       console.log('[Signup] Verification email to:', email);
     }
   } catch(e) {
@@ -869,11 +972,13 @@ router.post('/verify-email/resend', async (req, res) => {
       const { decryptValue } = require('../lib/crypto-utils');
       const h = getGlobalConfig('smtp_host'), p = parseInt(getGlobalConfig('smtp_port'))||465;
       const u = getGlobalConfig('smtp_user'), pass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
-      const from = getGlobalConfig('smtp_from')||u||''; const fromName = getGlobalConfig('smtp_from_name')||'FlexCRM';
       const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
-      const { sendEmail } = require('../lib/send-email');
+      const tutorialesUrl = process.env.TUTORIALES_URL || `${appUrl}/tutoriales`;
+      const { sendEmail, getRemitente } = require('../lib/send-email');
       const { verificationEmail } = require('../lib/email-templates');
-      await sendEmail(h, p, u, pass, '"'+fromName+'" <'+from+'>', email, 'Verifica tu email — FlexCRM', verificationEmail('FlexCRM', appUrl+'/api/auth/verify-email/'+verToken));
+      const rem = getRemitente();
+      const cfg = empDB.getConfig();
+      await sendEmail(h, p, u, pass, rem.formatted, email, 'Verificá tu email y empezá — FlexCRM', verificationEmail(cfg.nombre || foundCodigo, foundCodigo, found.usuario || '', appUrl+'/api/auth/verify-email/'+verToken, appUrl, tutorialesUrl));
     }
     res.json({ ok: true, mensaje: 'Si la cuenta existe, recibiras un nuevo email.' });
   } catch(e) { res.json({ ok: true, mensaje: 'Si la cuenta existe, recibiras un nuevo email.' }); }
@@ -962,7 +1067,7 @@ router.post('/usuarios/:id/reset-password', authMiddleware, requireRol('admin'),
   }
 
   const hash = await bcrypt.hash(tempPassword, 10);
-  db.update('usuarios', req.params.id, { password: hash, debe_cambiar_password: 1, password_changed_at: new Date().toISOString() });
+  db.update('usuarios', req.params.id, { password: hash, must_change_password: 1, password_changed_at: new Date().toISOString() });
 
   // Invalidate all refresh tokens
   db.raw.prepare("UPDATE password_reset_tokens SET usado=1 WHERE usuario_id=? AND id LIKE 'rt_%'").run(req.params.id);
@@ -974,7 +1079,7 @@ router.post('/usuarios/:id/reset-password', authMiddleware, requireRol('admin'),
     const port = parseInt(cfg.smtp_port) || 465;
     const smtpUser = cfg.smtp_user;
     const smtpPass = cfg.smtp_pass;
-    const from = cfg.smtp_from || 'noreply@unfulanodev.com.ar';
+    const from = cfg.smtp_from || (require('../lib/send-email').getGlobalFrom());
     if (host && smtpUser && smtpPass && user.email) {
       const loginLink = `${req.protocol}://${req.get('host')}/app/login?e=${req.user.empresa || 'default'}`;
       const html = `<div style="font-family:sans-serif;padding:24px;max-width:480px;margin:0 auto">
@@ -1049,7 +1154,8 @@ router.post('/forgot-password', validate(forgotPasswordSchema), async (req, res)
         const encryptedPass = getGlobalConfig('smtp_pass');
         smtpPass = encryptedPass ? decryptValue(encryptedPass) : '';
         from = getGlobalConfig('smtp_from') || smtpUser;
-        const fromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
+        const { getRemitente } = require('../lib/send-email');
+        const { fromName } = getRemitente();
         if (from && fromName) from = `"${fromName}" <${from}>`;
       } catch (g) { /* global SMTP not available */ }
     }
@@ -1114,7 +1220,7 @@ router.post('/reset-password', validate(resetPasswordSchema), async (req, res) =
     const host = cfg.smtp_host;
     const smtpUser = cfg.smtp_user;
     const smtpPass = cfg.smtp_pass;
-    const from = cfg.smtp_from || 'noreply@unfulanodev.com.ar';
+    const from = cfg.smtp_from || (require('../lib/send-email').getGlobalFrom());
     if (host && smtpUser && smtpPass && rt.email) {
       const loginLink = `${req.protocol}://${req.get('host')}/app/login`;
       await sendEmail(host, parseInt(cfg.smtp_port) || 465, smtpUser, smtpPass, from, rt.email, 'Contraseña actualizada — FlexCRM', buildResetConfirmedHtml(loginLink));

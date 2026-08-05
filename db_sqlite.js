@@ -635,6 +635,10 @@ sqlite.prepare("INSERT OR REPLACE INTO schema_version(version) VALUES(?)").run(C
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS consentimientos_empresa (id TEXT PRIMARY KEY, empresa_codigo TEXT NOT NULL, tipo TEXT NOT NULL, version TEXT NOT NULL, aceptado_por TEXT NOT NULL, ip TEXT, user_agent TEXT, creado TEXT NOT NULL)"); } catch(e) {}
 try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_consentimiento_empresa ON consentimientos_empresa(empresa_codigo, tipo)"); } catch(e) {}
 
+// Comprobantes de transferencia bancaria (unicidad cross-sucursal)
+try { sqlite.exec("CREATE TABLE IF NOT EXISTS comprobantes_transferencia (id TEXT PRIMARY KEY, nro TEXT NOT NULL, nro_normalizado TEXT NOT NULL, venta_id TEXT, ctacte_mov_id TEXT, cliente_id TEXT, suc_id TEXT, monto REAL, fecha TEXT, usuario TEXT, usuario_id TEXT, anulado INTEGER DEFAULT 0)"); } catch(e) {}
+try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_comp_transf ON comprobantes_transferencia(nro_normalizado) WHERE anulado = 0"); } catch(e) {}
+
 // ─── SEED ────────────────────────────────────────────────────
 function buildSeed() {
   const existing = sqlite.prepare("SELECT COUNT(*) as n FROM sucursales").get();
@@ -913,6 +917,7 @@ const COLS = {
   ausencias:['id','empleado_id','tipo','fecha_inicio','fecha_fin','motivo','certificado','aprobado_por','creado'],
   asistencias:['id','empleado_id','tipo','fecha_hora','suc_id','notas','creado'],
   historial_salarios:['id','empleado_id','salario_anterior','salario_nuevo','fecha','motivo','modificado_por'],
+  comprobantes_transferencia:['id','nro','nro_normalizado','venta_id','ctacte_mov_id','cliente_id','suc_id','monto','fecha','usuario','usuario_id','anulado'],
   consentimientos_empresa:['id','empresa_codigo','tipo','version','aceptado_por','ip','user_agent','creado'],
   company_integrations:['id','provider','external_account_id','external_user_id','seller_id','access_token','refresh_token','expires_at','config_json','status','last_sync','last_error','last_health_check','health_status','created_at','updated_at'],
   integration_logs:['id','provider','tipo','status','mensaje','usuario_id','usuario_nombre','ip','respuesta_ms','created_at'],

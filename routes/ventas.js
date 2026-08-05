@@ -208,6 +208,32 @@ router.post('/:id/cobrar', requireRol('cajero','admin','supervisor'), (req,res) 
     descuentoNum = Math.round((v.total || 0) * descuentoPct / 100);
   }
 
+  // ── Validar comprobantes de transferencia (unicidad) ──
+  const { buscarDuplicado, duplicadoInfo } = require('../lib/comprobantes');
+  const pagosTransferencia = (pagosDetalle && Array.isArray(pagosDetalle))
+    ? pagosDetalle.filter(p => p.id === 'transferencia' && p.nro_comprobante)
+    : (pago === 'transferencia' && req.body.nro_comprobante ? [{ id: 'transferencia', nro_comprobante: req.body.nro_comprobante }] : []);
+  const compDup = [];
+  for (const pt of pagosTransferencia) {
+    const found = buscarDuplicado(db, pt.nro_comprobante);
+    if (found) compDup.push(...found);
+  }
+  if (compDup.length && req.body.confirmar_duplicado !== true) {
+    const userRoles = Array.isArray(req.user.roles) ? req.user.roles : [req.user.rol];
+    const esAdmin = userRoles.some(r => ['admin', 'supervisor'].includes(r));
+    return res.json({
+      advertencia: true,
+      mensaje: 'Uno o más comprobantes de transferencia ya fueron registrados.',
+      duplicados: duplicadoInfo(db, compDup),
+      permite_confirmar: esAdmin
+    });
+  }
+  if (compDup.length && req.body.confirmar_duplicado === true) {
+    const userRoles = Array.isArray(req.user.roles) ? req.user.roles : [req.user.rol];
+    const esAdmin = userRoles.some(r => ['admin', 'supervisor'].includes(r));
+    if (!esAdmin) return res.status(403).json({ error: 'Solo admin o supervisor pueden confirmar un comprobante duplicado.' });
+  }
+
   db.update('ventas',req.params.id,{cobrada:true,pago,pago_principal:pagoPrincipal,fecha_cobro:new Date().toISOString(),cobrado_por:req.user.nombre,pagos_detalle:pagosDetalle,ctacte_monto:ctacteMonto,descuento:descuentoNum,descuento_pct:descuentoPct,codigo_descuento:codigoDesc?codigoDesc.toUpperCase():undefined});
 
   // Registrar monto de c/cte en cuenta corriente del cliente
@@ -232,6 +258,12 @@ router.post('/:id/cobrar', requireRol('cajero','admin','supervisor'), (req,res) 
       const montoEf = parseFloat(pagosParaCaja[0].monto)||0;
       if(montoEf > 0) { const pg0=pagosParaCaja[0]; db.insert('movimientos_caja',{id:uid(),caja_id:cajaHoy.id,suc_id:cajaHoy.suc_id,fecha:new Date().toISOString(),tipo:'ingreso',concepto:'Cobro Venta #'+v.numero+' ('+pg0.id+(pg0.cuotas&&pg0.cuotas!=='1'?' '+pg0.cuotas+'c':'')+')',monto:montoEf,auto:true,venta_id:v.id,pago_metodo:pg0.id,cuotas:pg0.cuotas||'1',obs_pago:pg0.obs||'',recargo_pct:parseFloat(pg0.recargo_pct)||0,anulado:false}); }
     }
+  }
+
+  // ── Registrar comprobantes de transferencia ──
+  const { registrar: registrarComp } = require('../lib/comprobantes');
+  for (const pt of pagosTransferencia) {
+    try { registrarComp(db, { nro: pt.nro_comprobante, venta_id: v.id, cliente_id: v.cliente_id, suc_id: v.suc_id, monto: parseFloat(pt.monto) || v.total, usuario: req.user.nombre, usuario_id: req.user.id }); } catch(e) { /* non-critical, uniqueness already checked */ }
   }
 
   // Auto-create postventa pipeline opportunity (non-blocking)
@@ -380,6 +412,10 @@ router.post('/:id/anular', requireRol('admin','supervisor'), (req,res) => {
 
   const itemsAnul = todosItems.slice(0,3).map(function(i){return i.nombre+' x'+i.cantidad;}).join(', ');
   db.audit(req.user, venta.suc_id, 'ventas', esParcial?'devolucion_parcial':'anular', (esParcial?'Devolución parcial':'Anulación')+' Venta #'+venta.numero+' | '+itemsAnul, req.params.id);
+
+  // ── Liberar comprobantes de transferencia asociados ──
+  try { require('../lib/comprobantes').liberarVenta(db, req.params.id); } catch(e) { /* non-critical */ }
+
   res.json({ ok: true, monto_devolucion: montoDevolucion, parcial: esParcial });
 });
 

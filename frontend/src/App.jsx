@@ -62,6 +62,7 @@ export default function App() {
         <Route path="/politica-de-privacidad" element={<L><Privacidad /></L>} />
         <Route path="/politica-de-cookies" element={<L><CookiesPolicy /></L>} />
         <Route path="/app/activar-cuenta" element={<L><ActivarCuenta /></L>} />
+        <Route path="/app/2fa-setup" element={<L><Setup2FA /></L>} />
         <Route path="/app" element={<RequireAuth><Layout /></RequireAuth>}>
         <Route index element={<Navigate to="/app/dashboard" replace />} />
         <Route path="dashboard"      element={<Dashboard />} />

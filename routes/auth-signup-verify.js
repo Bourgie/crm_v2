@@ -21,13 +21,10 @@ router.post('/signup', async (req, res) => {
     try { const { saAuditExtended } = require('../db_master'); saAuditExtended('system', 'signup_fallido', null, 'Campos incompletos', buildMeta()); } catch {}
     return res.status(400).json({ error: 'Nombre del negocio, email y contrasena requeridos' });
   }
-  if (password.length < 8) {
-    try { const { saAuditExtended } = require('../db_master'); saAuditExtended('system', 'signup_fallido', null, 'Password muy corta', buildMeta()); } catch {}
-    return res.status(400).json({ error: 'La contrasena debe tener al menos 8 caracteres' });
-  }
-  if (!/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
-    try { const { saAuditExtended } = require('../db_master'); saAuditExtended('system', 'signup_fallido', null, 'Password sin mayuscula/numero', buildMeta()); } catch {}
-    return res.status(400).json({ error: 'La contrasena debe incluir una mayuscula y un numero' });
+  const pwErr = require('../lib/password-policy').validatePassword(password);
+  if (pwErr) {
+    try { const { saAuditExtended } = require('../db_master'); saAuditExtended('system', 'signup_fallido', null, pwErr, buildMeta()); } catch {}
+    return res.status(400).json({ error: pwErr });
   }
 
   // Disposable email check

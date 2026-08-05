@@ -106,10 +106,8 @@ router.post('/login', superadminLoginLimiter, validate(superadminLoginSchema), a
 
 router.put('/password', superAuth, async (req, res) => {
   const { password_actual, password_nuevo } = req.body;
-  if(!password_nuevo || password_nuevo.length < 8)
-    return res.status(400).json({error:'Minimo 8 caracteres'});
-  if(!/[A-Z]/.test(password_nuevo) || !/[0-9]/.test(password_nuevo) || !/[^A-Za-z0-9]/.test(password_nuevo))
-    return res.status(400).json({error:'Debe contener mayúscula, número y símbolo'});
+  const pwErr = require('../lib/password-policy').validatePassword(password_nuevo);
+  if(pwErr) return res.status(400).json({error:pwErr});
   const sa = master.prepare("SELECT * FROM superadmin WHERE id=?").get(req.sadmin.id);
   if(!sa || !await bcrypt.compare(password_actual, sa.password))
     return res.status(401).json({error:'Contraseña actual incorrecta'});
@@ -454,7 +452,8 @@ router.post('/empresas', superAuth, async (req, res) => {
           const smtpUser = getGlobalConfig('smtp_user');
           const smtpPass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
           const smtpFrom = getGlobalConfig('smtp_from') || smtpUser || '';
-          const fromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
+          const { getRemitente } = require('../lib/send-email');
+          const fromName = getRemitente().fromName;
           if (smtpHost && smtpUser && smtpPass && smtpFrom) {
             const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
             const activateLink = `${appUrl}/app/activar-cuenta?token=${actToken}&empresa=${codigo}`;
@@ -465,7 +464,7 @@ router.post('/empresas', superAuth, async (req, res) => {
               host: smtpHost, port: smtpPort, secure: smtpPort === 465,
               auth: { user: smtpUser, pass: smtpPass },
             });
-            await transporter.sendMail({ from: `"${fromName}" <${smtpFrom}>`, to: admin_email, subject: 'Activá tu cuenta — FlexCRM', html });
+            await transporter.sendMail({ from: getRemitente().formatted, to: admin_email, subject: 'Activá tu cuenta — FlexCRM', html });
             console.log('[SA] Email de activación enviado a:', admin_email);
           }
         } catch(ee) { console.error('[SA] Error enviando email activación:', ee.message); }
@@ -626,8 +625,8 @@ router.delete('/empresas/:id', superAuth, (req, res) => {
             const u = getGlobalConfig('smtp_user');
             const pass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
             const from = getGlobalConfig('smtp_from')||u||'';
-            const fromName = getGlobalConfig('smtp_from_name')||'FlexCRM';
-            const { sendEmail } = require('../lib/send-email');
+            const { sendEmail, getRemitente } = require('../lib/send-email');
+            const { fromName } = getRemitente();
             const html = `<div style="font-family:sans-serif;padding:20px"><h2>Empresa eliminada: ${empresaNombre}</h2>
 <p><strong>Codigo:</strong> ${empresaCodigo}</p><p>Adjunto el backup final de todos los datos.</p></div>`;
             const backupPath = path.join(__dirname, '../data/backups', backupFilename);
@@ -1010,8 +1009,8 @@ router.post('/solicitudes-eliminacion/:id/resolver', superAuth, async (req, res)
             const u = getGlobalConfig('smtp_user');
             const pass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
             const from = getGlobalConfig('smtp_from')||u||'';
-            const fromName = getGlobalConfig('smtp_from_name')||'FlexCRM';
-            const { sendEmail } = require('../lib/send-email');
+            const { sendEmail, getRemitente } = require('../lib/send-email');
+            const { fromName } = getRemitente();
             const html = `<div style="font-family:sans-serif;padding:20px"><h2>Tu cuenta ha sido eliminada</h2>
 <p>Hola, tu empresa <strong>${empresa.nombre}</strong> (${empresa.codigo}) fue eliminada de FlexCRM según lo solicitado.</p>
 <p>Adjuntamos el backup final de todos tus datos.</p></div>`;
@@ -1045,8 +1044,8 @@ router.post('/solicitudes-eliminacion/:id/resolver', superAuth, async (req, res)
           const u = getGlobalConfig('smtp_user');
           const pass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
           const from = getGlobalConfig('smtp_from')||u||'';
-          const fromName = getGlobalConfig('smtp_from_name')||'FlexCRM';
-          const { sendEmail } = require('../lib/send-email');
+          const { sendEmail, getRemitente } = require('../lib/send-email');
+          const { fromName } = getRemitente();
           const html = `<div style="font-family:sans-serif;padding:20px"><h2>Solicitud de eliminación rechazada</h2>
 <p>Hola, la solicitud de eliminación de tu cuenta en FlexCRM fue <strong>rechazada</strong>.</p>
 <p>Si necesitás ayuda, contactanos respondiendo este email.</p></div>`;
@@ -1147,7 +1146,7 @@ router.post('/empresas/:codigo/reset-password', superAuth, (req, res) => {
   if (!admin) return res.status(404).json({ error: 'Sin usuario admin en esta empresa' });
   const nueva = Math.random().toString(36).slice(2, 10) + 'A1!';
   const hash = bcrypt.hashSync(nueva, 10);
-  empDB.update('usuarios', admin.id, { password: hash, debe_cambiar_password: 1 });
+  empDB.update('usuarios', admin.id, { password: hash, must_change_password: 1 });
   saAudit(req.sadmin.id, 'reset_password', e.id, 'Password reseteado para admin de ' + e.codigo);
   res.json({ ok: true, usuario: admin.usuario, mensaje: 'Contrasea reseteada. Entregala de forma segura al administrador de la empresa.' });
 });
@@ -1177,12 +1176,15 @@ router.post('/empresas/:codigo/resend-verification', superAuth, async (req, res)
     const h = getGlobalConfig('smtp_host'), p = parseInt(getGlobalConfig('smtp_port')) || 465;
     const u = getGlobalConfig('smtp_user'), pass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
     const from = getGlobalConfig('smtp_from') || u || '';
-    const fromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
+    const { getRemitente } = require('../lib/send-email');
+    const rem = getRemitente();
     const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
+    const tutorialesUrl = process.env.TUTORIALES_URL || `${appUrl}/tutoriales`;
     const { sendEmail } = require('../lib/send-email');
     const { verificationEmail } = require('../lib/email-templates');
-    await sendEmail(h, p, u, pass, '"' + fromName + '" <' + from + '>', admin.email, 'Verifica tu email — FlexCRM',
-      verificationEmail(e.nombre || 'FlexCRM', appUrl + '/api/auth/verify-email/' + verToken));
+    const empCodigo = e.codigo || '';
+    await sendEmail(h, p, u, pass, rem.formatted, admin.email, 'Verificá tu email y empezá — FlexCRM',
+      verificationEmail(e.nombre || 'FlexCRM', empCodigo, admin.usuario || '', appUrl + '/api/auth/verify-email/' + verToken, appUrl, tutorialesUrl));
     saAudit(req.sadmin.id, 'resend_verification', e.id, 'Email verificacion reenviado a ' + admin.email);
     res.json({ ok: true, mensaje: 'Email de verificacion reenviado a ' + admin.email });
   } catch (err) {
@@ -1435,10 +1437,11 @@ router.post('/forgot-password', superadminForgotPasswordLimiter, async (req, res
   const { decryptValue } = require('../lib/crypto-utils');
   const smtpPass = getGlobalConfig('smtp_pass') ? decryptValue(getGlobalConfig('smtp_pass')) : '';
   const smtpFrom = getGlobalConfig('smtp_from') || smtpUser || '';
-  const smtpFromName = getGlobalConfig('smtp_from_name') || 'FlexCRM';
+  const { getRemitente } = require('../lib/send-email');
+  const smtpFromName = getRemitente().fromName;
   if (smtpHost && smtpUser && smtpPass && smtpFrom && userEmail) {
     const resetLink = `${process.env.APP_URL || 'https://app.flexcrm.com.ar'}/admin?token=${token}`;
-    const { sendEmail } = require('../lib/send-email');
+    const { sendEmail, getRemitente } = require('../lib/send-email');
     const html = `<div style="font-family:sans-serif;padding:20px"><h2>Restablecer contraseña</h2><p>Recibiste este email porque solicitaste restablecer tu contraseña de superadmin en FlexCRM.</p><p><a href="${resetLink}" style="display:inline-block;padding:12px 32px;background:#F97316;color:#fff;font-size:15px;font-weight:700;text-decoration:none;border-radius:8px">Restablecer contraseña</a></p><p style="color:#64748b;font-size:12px">Este enlace expira en 1 hora. Si no solicitaste este cambio, ignorá este mensaje.</p></div>`;
     try {
       await sendEmail(smtpHost, smtpPort, smtpUser, smtpPass, `"${smtpFromName}" <${smtpFrom}>`, userEmail, 'Restablecer contraseña — FlexCRM SuperAdmin', html);

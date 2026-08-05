@@ -184,7 +184,8 @@ router.post('/oportunidades/:id/enviar-email', authMiddleware, async (req, res) 
       secure: (parseInt(cfg.smtp_port) || 465) === 465,
       auth: { user: cfg.smtp_user, pass: cfg.smtp_pass },
     });
-    const from = cfg.smtp_from || 'noreply@flexcrm.com';
+    const { getGlobalFrom } = require('../lib/send-email');
+    const from = cfg.smtp_from || getGlobalFrom();
     const subject = 'Oportunidad: ' + op.nombre + ' — ' + (cfg.nombre || 'FlexCRM');
     const html = `<p>Hola,</p>
       <p>Te contactamos desde <strong>${cfg.nombre || 'FlexCRM'}</strong> con respecto a: <strong>${op.nombre}</strong>.</p>

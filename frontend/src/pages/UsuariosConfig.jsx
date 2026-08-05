@@ -1214,7 +1214,10 @@ function MiCuentaTab({ api, toast }) {
 
   async function cambiarPass() {
     if (!form.password_actual || !form.password_nuevo) return toast('Completá todos los campos', 'err')
-    if (form.password_nuevo.length < 6) return toast('Mínimo 6 caracteres', 'err')
+    if (form.password_nuevo.length < 8) return toast('Mínimo 8 caracteres', 'err')
+    if (!/[A-Z]/.test(form.password_nuevo)) return toast('Debe contener al menos una mayúscula', 'err')
+    if (!/[0-9]/.test(form.password_nuevo)) return toast('Debe contener al menos un número', 'err')
+    if (!/[^A-Za-z0-9]/.test(form.password_nuevo)) return toast('Debe contener al menos un símbolo', 'err')
     if (form.password_nuevo !== form.password_repetir) return toast('Las contraseñas nuevas no coinciden', 'err')
     setSaving(true)
     try {
@@ -1247,7 +1250,7 @@ function MiCuentaTab({ api, toast }) {
           <input type="password" value={form.password_actual} onChange={e => setForm(p=>({...p,password_actual:e.target.value}))} placeholder="••••••••"/>
         </Field>
         <Field label="Nueva contraseña">
-          <input type="password" value={form.password_nuevo} onChange={e => setForm(p=>({...p,password_nuevo:e.target.value}))} placeholder="Mín. 6 caracteres" minLength={6}/>
+          <input type="password" value={form.password_nuevo} onChange={e => setForm(p=>({...p,password_nuevo:e.target.value}))} placeholder="Mín. 8 caracteres, mayúscula, número y símbolo" minLength={8}/>
         </Field>
         <Field label="Repetir nueva contraseña">
           <input type="password" value={form.password_repetir} onChange={e => setForm(p=>({...p,password_repetir:e.target.value}))} placeholder="Confirmar"/>

@@ -239,7 +239,6 @@ router.post('/:id/cancelar', requireRol('admin', 'supervisor'), (req, res) => {
   }
 
   db.audit(req.user, t.suc_origen, 'transferencias', 'cancelar', 'Cancelación Transfer #'+t.numero, req.params.id);
-  db.audit(req.user, t.suc_origen, 'transferencias', 'cancelar', 'Cancelación Transfer #'+t.numero, req.params.id);
   db.update('transferencias', req.params.id, { estado: 'cancelada' });
   res.json({ ok: true });
 });

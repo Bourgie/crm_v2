@@ -519,8 +519,9 @@ export function CtaCte() {
   const [modalHist, setModalHist] = useState(null)   // {cliente}
   const [historial, setHistorial] = useState([])
   const [loadingHist, setLoadingHist] = useState(false)
-  const [formPago, setFormPago] = useState({ monto: '', obs: '', metodo: 'efectivo' })
+  const [formPago, setFormPago] = useState({ monto: '', obs: '', metodo: 'efectivo', nro_comprobante: '' })
   const [saving, setSaving] = useState(false)
+  const [dupConfirm, setDupConfirm] = useState(null)
 
   const load = useCallback(async () => {
     try {
@@ -557,15 +558,30 @@ export function CtaCte() {
     if (!formPago.monto) { toast('Ingresá el monto', 'err'); return }
     setSaving(true)
     try {
-      await api('POST', '/ctacte/pago', {
-        cliente_id: modalPago.id,   // backend espera cliente_id, no cli_id
+      const body = {
+        cliente_id: modalPago.id,
         suc_id: sucSesion,
         monto: parseFloat(formPago.monto),
         concepto: formPago.obs || 'Pago cuenta corriente',
-        pago_metodo: formPago.metodo,   // backend espera pago_metodo
-      })
+        pago_metodo: formPago.metodo,
+      }
+      if (formPago.metodo === 'transferencia' && formPago.nro_comprobante) {
+        body.nro_comprobante = formPago.nro_comprobante
+      }
+      const r = await api('POST', '/ctacte/pago', body)
+
+      if (r.advertencia) {
+        setDupConfirm({
+          duplicados: r.duplicados || [],
+          permite_confirmar: r.permite_confirmar,
+          body
+        })
+        setSaving(false)
+        return
+      }
+
       toast('Pago registrado', 'ok')
-      setModalPago(null); setFormPago({ monto: '', obs: '', metodo: 'efectivo' }); load()
+      setModalPago(null); setFormPago({ monto: '', obs: '', metodo: 'efectivo', nro_comprobante: '' }); load()
     } catch (e) { toast(e.message, 'err') }
     finally { setSaving(false) }
   }
@@ -628,7 +644,7 @@ export function CtaCte() {
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         <button type="button" className="btn btn-icon btn-sm" title="Historial" onClick={() => { setModalHist(c); loadHistorial(c.id) }}>📋</button>
                         {(c.saldo || 0) > 0 && (
-                          <button type="button" className="btn btn-sm" style={{ background: '#dcfce7', color: '#15803d', border: 'none' }} onClick={() => { setModalPago(c); setFormPago({ monto: String(Math.max(0, c.saldo || 0)), obs: '', metodo: 'efectivo' }) }}>💵 Cobrar</button>
+                          <button type="button" className="btn btn-sm" style={{ background: '#dcfce7', color: '#15803d', border: 'none' }} onClick={() => { setModalPago(c); setFormPago({ monto: String(Math.max(0, c.saldo || 0)), obs: '', metodo: 'efectivo', nro_comprobante: '' }) }}>💵 Cobrar</button>
                         )}
                       </div>
                     </td>
@@ -668,6 +684,9 @@ export function CtaCte() {
               </select>
             </Field>
             <Field label="Observaciones"><input value={formPago.obs} onChange={(e) => setFormPago((p) => ({ ...p, obs: e.target.value }))} placeholder="Notas opcionales..." /></Field>
+            {formPago.metodo === 'transferencia' && (
+              <Field label="N° Comprobante" required><input value={formPago.nro_comprobante} onChange={(e) => setFormPago((p) => ({ ...p, nro_comprobante: e.target.value }))} placeholder="N° comprobante de transferencia" style={{ border: '1.5px solid #f59e0b', fontWeight: 600 }} /></Field>
+            )}
           </>
         )}
       </Modal>
@@ -695,6 +714,35 @@ export function CtaCte() {
           </div>
         )}
       </Modal>
+      {/* Confirm duplicado comprobante */}
+      {dupConfirm && (
+        <ConfirmDialog
+          open={!!dupConfirm}
+          onClose={() => setDupConfirm(null)}
+          title="Comprobante duplicado"
+          danger={false}
+          confirmLabel={dupConfirm.permite_confirmar ? 'Confirmar de todas formas' : undefined}
+          onConfirm={dupConfirm.permite_confirmar ? async () => {
+            const { body } = dupConfirm
+            setDupConfirm(null)
+            setSaving(true)
+            try {
+              const r = await api('POST', '/ctacte/pago', { ...body, confirmar_duplicado: true })
+              if (r.ok) {
+                toast('Pago registrado', 'ok')
+                setModalPago(null); setFormPago({ monto: '', obs: '', metodo: 'efectivo', nro_comprobante: '' }); load()
+              }
+            } catch (e) { toast(e.message, 'err') }
+            finally { setSaving(false) }
+          } : undefined}
+          message={(() => {
+            const list = dupConfirm.duplicados.slice(0, 3).map(d =>
+              `- Venta #${d.venta_numero || '—'} — ${fmt(d.monto || 0)} (${d.suc_nombre || '—'}) — ${new Date(d.fecha).toLocaleDateString('es-AR')}`
+            ).join('\n')
+            return `Este comprobante ya fue registrado:\n\n${list}\n\n${dupConfirm.permite_confirmar ? '' : 'Solo un admin o supervisor puede confirmar.'}`
+          })()}
+        />
+      )}
     </div>
   )
 }

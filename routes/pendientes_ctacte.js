@@ -209,13 +209,35 @@ ctacteRouter.get('/',(req,res)=>{
 
 ctacteRouter.post('/pago',(req,res)=>{
   const db = _getDB(req);
-  const {cliente_id,monto,concepto,suc_id,pago_metodo}=req.body;
+  const {cliente_id,monto,concepto,suc_id,pago_metodo,nro_comprobante}=req.body;
   if(!cliente_id||!monto) return res.status(400).json({error:'Datos incompletos'});
   if(suc_id){
     const hoy=new Date().toISOString().substr(0,10);
     const cajaHoy=db.where('cajas',c=>c.suc_id===suc_id&&c.fecha.substr(0,10)===hoy&&c.estado==='abierta')[0];
     if(!cajaHoy) return res.status(400).json({error:'La caja está cerrada. Abrila para registrar cobros.'});
   }
+
+  // ── Validar comprobante de transferencia ──
+  if (pago_metodo === 'transferencia' && nro_comprobante) {
+    const { buscarDuplicado, duplicadoInfo } = require('../lib/comprobantes');
+    const found = buscarDuplicado(db, nro_comprobante);
+    if (found && req.body.confirmar_duplicado !== true) {
+      const userRoles = Array.isArray(req.user.roles) ? req.user.roles : [req.user.rol];
+      const esAdmin = userRoles.some(r => ['admin', 'supervisor'].includes(r));
+      return res.json({
+        advertencia: true,
+        mensaje: 'Este comprobante de transferencia ya fue registrado.',
+        duplicados: duplicadoInfo(db, found),
+        permite_confirmar: esAdmin
+      });
+    }
+    if (found && req.body.confirmar_duplicado === true) {
+      const userRoles = Array.isArray(req.user.roles) ? req.user.roles : [req.user.rol];
+      const esAdmin = userRoles.some(r => ['admin', 'supervisor'].includes(r));
+      if (!esAdmin) return res.status(403).json({ error: 'Solo admin o supervisor pueden confirmar un comprobante duplicado.' });
+    }
+  }
+
   const id=uid(); const fecha=new Date().toISOString();
   db.insert('ctacte_movimientos',{id,cliente_id,tipo:'pago',concepto:concepto||'Pago cuenta corriente',monto:parseFloat(monto),fecha,suc_id:suc_id||null,cancelado:false,usuario:req.user.nombre});
   if(suc_id){
@@ -223,6 +245,12 @@ ctacteRouter.post('/pago',(req,res)=>{
     const cajaHoy=db.where('cajas',c=>c.suc_id===suc_id&&c.fecha.substr(0,10)===hoy&&c.estado==='abierta')[0];
     if(cajaHoy){const cli=db.findOne('clientes',cliente_id);db.insert('movimientos_caja',{id:uid(),caja_id:cajaHoy.id,suc_id,fecha,tipo:'ingreso',concepto:'Cobro c/cte '+cli?.nombre+' '+cli?.apellido,monto:parseFloat(monto),auto:true,pago_metodo:pago_metodo||'efectivo',usuario:req.user.nombre,anulado:false});}
   }
+
+  // ── Registrar comprobante de transferencia ──
+  if (pago_metodo === 'transferencia' && nro_comprobante) {
+    try { const { registrar: registrarComp } = require('../lib/comprobantes'); registrarComp(db, { nro: nro_comprobante, ctacte_mov_id: id, cliente_id, suc_id, monto: parseFloat(monto), usuario: req.user.nombre, usuario_id: req.user.id }); } catch(e) { /* non-critical */ }
+  }
+
   db.audit(req.user, req.body.suc_id||req.user.suc_id||null, 'ctacte', 'pago', 'Cobro $'+monto+' — '+(concepto||'Pago ctacte'), id);
   res.json({ok:true,id});
 });
