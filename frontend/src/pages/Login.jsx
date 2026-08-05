@@ -92,7 +92,14 @@ export function Login() {
         }),
       })
       const data = await r.json()
-      if (!r.ok) { setError(data.error || 'Error al iniciar sesión'); return }
+      if (!r.ok) {
+        if (data.email_pendiente) {
+          setError('Tu cuenta no está verificada. Revisá tu email (' + (form.usuario || form.empresa) + ') y hacé clic en el link de verificación.')
+        } else {
+          setError(data.error || 'Error al iniciar sesión')
+        }
+        return
+      }
 
       // Must change password (forced)
       if (data.require_password_change) {

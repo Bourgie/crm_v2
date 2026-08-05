@@ -117,6 +117,13 @@ export default function Superadmin() {
   const [passModal, setPassModal] = useState(false)
   const [passForm, setPassForm] = useState({ password_actual: '', password_nuevo: '', repetir: '' })
 
+  const [sa2faStep, setSa2faStep] = useState(null)
+  const [sa2faCode, setSa2faCode] = useState('')
+  const [sa2faSetup, setSa2faSetup] = useState(null)
+  const [sa2faQr, setSa2faQr] = useState(null)
+  const [sa2faSecret, setSa2faSecret] = useState(null)
+  const [saConfiar, setSaConfiar] = useState(true)
+
   const [empModal, setEmpModal] = useState(null)
   const [empForm, setEmpForm] = useState({ codigo: '', nombre: '', rubro: 'general', plan_id: '', vencimiento: '', umax: '5', smax: '2', email: '', password: '', mods_extra: [], mods_bloqueados: [] })
   const [empSaving, setEmpSaving] = useState(false)
@@ -209,8 +216,48 @@ export default function Superadmin() {
 
   async function saLogin() {
     setLoginLoading(true); setLoginErr('')
-    try { const r = await saApi('POST', '/login', loginForm); setLogged(true); setUser(r); loadAll() }
+    try {
+      const r = await saApi('POST', '/login', loginForm)
+      if (r.require_2fa) { setSa2faStep({ temp_token: r.temp_token, nombre: r.nombre }); return }
+      if (r.require_2fa_setup) { setSa2faSetup({ temp_token: r.temp_token, nombre: r.nombre }); saStartSetup(r.temp_token); return }
+      if (r.require_password_change) { setLoginErr('Debés cambiar tu contraseña. Contactá al administrador.'); return }
+      if (r.dispositivo_confiable) { /* trusted device login — no 2FA needed */ }
+      setLogged(true); setUser(r); loadAll()
+    }
     catch (e) { setLoginErr(e.message) }
+    finally { setLoginLoading(false) }
+  }
+
+  async function saVerify2fa() {
+    setLoginLoading(true); setLoginErr('')
+    try {
+      const r = await saApi('POST', '/2fa/verify-login', { temp_token: sa2faStep.temp_token, code: sa2faCode, confiar_dispositivo: saConfiar })
+      setLogged(true); setUser(r); loadAll()
+      setSa2faStep(null); setSa2faCode('')
+    } catch(e) { setLoginErr(e.message) }
+    finally { setLoginLoading(false) }
+  }
+
+  async function saStartSetup(tempToken) {
+    try {
+      const r = await saApi('POST', '/2fa/setup-forced', { temp_token: tempToken || sa2faSetup.temp_token })
+      setSa2faQr(r.otpauth); setSa2faSecret(r.secret)
+    } catch(e) { setLoginErr(e.message) }
+  }
+
+  async function saConfirmSetup() {
+    if (sa2faCode.length < 6) { setLoginErr('Ingresá el código de 6 dígitos'); return }
+    setLoginLoading(true); setLoginErr('')
+    try {
+      const r = await saApi('POST', '/2fa/confirm-forced', { temp_token: sa2faSetup.temp_token, code: sa2faCode, confiar_dispositivo: saConfiar })
+      setLogged(true); setUser(r); loadAll()
+      setSa2faSetup(null); setSa2faQr(null); setSa2faSecret(null); setSa2faCode('')
+      if (r.backup_codes) {
+        const codesText = r.backup_codes.join('\n')
+        window.alert('¡2FA activado!\n\nGuardá estos códigos de respaldo:\n\n' + codesText + '\n\nSe copiaron al portapapeles.')
+        navigator.clipboard?.writeText(codesText)
+      }
+    } catch(e) { setLoginErr(e.message) }
     finally { setLoginLoading(false) }
   }
 
@@ -675,7 +722,63 @@ export default function Superadmin() {
       <h2 style={{ fontSize: 22, fontWeight: 900, marginBottom: 6 }}>Super Admin</h2>
       <p style={{ color: 'var(--mu)', fontSize: 13, marginBottom: 24 }}>FlexCRM — Panel de control</p>
 
-      {saReset ? (
+      {sa2faStep && (
+        <div className="card" style={{ textAlign: 'left' }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Verificación en dos pasos</h3>
+          <p style={{ color: 'var(--mu)', fontSize: 12, marginBottom: 16 }}>Ingresá el código de tu app de autenticación.</p>
+          <div style={{ marginBottom: 12 }}>
+            <input value={sa2faCode} onChange={e => setSa2faCode(e.target.value)} placeholder="000000" maxLength={6} inputMode="numeric"
+              style={{ width: '100%', textAlign: 'center', fontSize: 24, letterSpacing: 8, fontFamily: 'monospace' }} />
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 12, cursor: 'pointer' }}>
+            <input type="checkbox" checked={saConfiar} onChange={e => setSaConfiar(e.target.checked)} />
+            Confiar en este dispositivo (no pedir 2FA por 90 días)
+          </label>
+          {loginErr && <div style={{ color: 'var(--bad)', fontSize: 12, marginBottom: 12 }}>{loginErr}</div>}
+          <button type="button" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: 10 }}
+            onClick={saVerify2fa} disabled={loginLoading || sa2faCode.length < 6}>
+            {loginLoading ? '⏳' : '→ Verificar'}
+          </button>
+          <button type="button" className="btn btn-secondary" style={{ width: '100%', marginTop: 8 }}
+            onClick={() => { setSa2faStep(null); setSa2faCode(''); setLoginErr('') }}>← Cancelar</button>
+        </div>
+      )}
+
+      {sa2faSetup && (
+        <div className="card" style={{ textAlign: 'left' }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Configurar autenticación en dos pasos</h3>
+          <div style={{ background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)', borderRadius: 8, padding: 10, marginBottom: 12, fontSize: 12 }}>
+            El superadmin debe tener 2FA activado. Usá Google Authenticator, Authy o Microsoft Authenticator.
+          </div>
+          {sa2faQr && (
+            <div style={{ marginBottom: 12, textAlign: 'center', background: '#fff', borderRadius: 8, padding: 12 }}>
+              <p style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 8 }}>Escaneá este código QR:</p>
+              <canvas ref={useRef()} id="sa-qr-canvas" style={{ display: 'none' }} />
+              <div style={{ fontFamily: 'monospace', fontSize: 11, wordBreak: 'break-all', marginTop: 8, color: 'var(--mu)' }}>
+                Clave: {sa2faSecret}
+              </div>
+            </div>
+          )}
+          <div style={{ marginBottom: 12 }}>
+            <input value={sa2faCode} onChange={e => setSa2faCode(e.target.value)} placeholder="Código de 6 dígitos" maxLength={6} inputMode="numeric"
+              style={{ width: '100%', textAlign: 'center', fontSize: 22, letterSpacing: 6, fontFamily: 'monospace' }} />
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, marginBottom: 12, cursor: 'pointer' }}>
+            <input type="checkbox" checked={saConfiar} onChange={e => setSaConfiar(e.target.checked)} />
+            Confiar en este dispositivo
+          </label>
+          {loginErr && <div style={{ color: 'var(--bad)', fontSize: 12, marginBottom: 12 }}>{loginErr}</div>}
+          <button type="button" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: 10 }}
+            onClick={saConfirmSetup} disabled={loginLoading || !sa2faQr || sa2faCode.length < 6}>
+            {loginLoading ? '⏳' : '→ Activar 2FA y entrar'}
+          </button>
+          <button type="button" className="btn btn-secondary" style={{ width: '100%', marginTop: 8 }}
+            onClick={() => { setSa2faSetup(null); setSa2faQr(null); setLoginErr('') }}>← Volver</button>
+        </div>
+      )}
+
+      {!sa2faStep && !sa2faSetup && (<>
+        {saReset ? (
         <div className="card" style={{ textAlign: 'left' }}>
           {resetDone ? (
             <div style={{ textAlign: 'center' }}>
@@ -723,7 +826,7 @@ export default function Superadmin() {
           {loginErr && <div style={{ color: 'var(--bad)', fontSize: 12, marginBottom: 12 }}>{loginErr}</div>}
           <button type="button" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: 10 }} onClick={saLogin} disabled={loginLoading}>{loginLoading ? '⏳' : '→ Ingresar'}</button>
         </div>
-      )}
+      )}</>)}
       <a href="/" style={{ color: 'var(--mu)', fontSize: 12, marginTop: 12, display: 'inline-block' }}>← Volver al CRM</a>
     </div>
   )

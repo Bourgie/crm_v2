@@ -37,6 +37,16 @@ function authMiddleware(req, res, next) {
     const userDB = req.db || (payload.empresa ? getEmpresaDB(payload.empresa) : db);
     const user = userDB.findOne('usuarios', payload.id);
     if (!user || !user.activo) return res.status(401).json({ error: 'Usuario no válido' });
+
+    // Check session active (if sid present)
+    if (payload.sid) {
+      try {
+        const session = userDB.raw.prepare("SELECT activo FROM user_sessions WHERE id=?").get(payload.sid);
+        if (!session || !session.activo) {
+          return res.status(401).json({ error: 'Sesión cerrada. Volvé a iniciar sesión.', session_closed: true });
+        }
+      } catch(e) { /* non-blocking */ }
+    }
     // Check password expiry
     if (user.password_changed_at) {
       try {

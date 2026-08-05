@@ -106,6 +106,15 @@ export function Usuarios() {
     } catch(e) { toast(e.message,'err') }
   }
 
+  async function reset2FA(u) {
+    if (!window.confirm(`¿Resetear la configuración de 2FA de ${u.nombre}?\n\nDeberá configurarlo de nuevo al ingresar.`)) return
+    try {
+      await api('POST','/auth/usuarios/'+u.id+'/reset-2fa')
+      toast('2FA reseteado','ok')
+      load()
+    } catch(e) { toast(e.message,'err') }
+  }
+
   if (loading) return <Loader/>
 
   return (
@@ -117,9 +126,9 @@ export function Usuarios() {
       <div className="card" style={{padding:0}}>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Usuario</th><th>Nombre</th><th>Email</th><th>Rol</th><th>Sucursales</th><th>Estado</th><th style={{width:80}}></th></tr></thead>
+            <thead><tr><th>Usuario</th><th>Nombre</th><th>Email</th><th>Rol</th><th>Sucursales</th><th>Estado</th><th>2FA</th><th style={{width:80}}></th></tr></thead>
             <tbody>
-              {users.length===0 ? <EmptyRow cols={7} icon="👤" text="Sin usuarios"/>
+              {users.length===0 ? <EmptyRow cols={8} icon="👤" text="Sin usuarios"/>
                 : users.map((u) => (
                   <tr key={u.id} style={{opacity:u.activo===false?.5:1}}>
                     <td data-label="Usuario" style={{fontFamily:'monospace',fontWeight:600}}>{u.usuario}</td>
@@ -136,11 +145,22 @@ export function Usuarios() {
                         : 'Todas'}
                     </td>
                     <td data-label="Estado"><span className={`badge ${u.activo!==false?'badge-green':'badge-gray'}`}>{u.activo!==false?'Activo':'Inactivo'}</span></td>
+                    <td data-label="2FA">
+                      <span className={`badge ${u.has_2fa ? 'badge-green' : 'badge-gray'}`}>
+                        {u.has_2fa ? '✓ 2FA' : '✗ 2FA'}
+                      </span>
+                      {u.force2fa != null && (
+                        <span style={{ fontSize: 10, marginLeft: 4, color: u.force2fa ? '#f59e0b' : 'var(--mu)' }}>
+                          {u.force2fa ? '(oblig.)' : '(exento)'}
+                        </span>
+                      )}
+                    </td>
                     <td>
                       <div style={{display:'flex',gap:4}}>
                         <button type="button" className="btn btn-icon btn-sm" onClick={()=>openEdit(u)}>✏️</button>
                         {u.id!==me?.id && <>
                           <button type="button" className="btn btn-icon btn-sm" onClick={()=>resetPassword(u)} title="Resetear contraseña">🔒</button>
+                          <button type="button" className="btn btn-icon btn-sm" onClick={()=>reset2FA(u)} title="Resetear 2FA">🔐</button>
                           <button type="button" className="btn btn-icon btn-sm" onClick={()=>toggleActivo(u)}>{u.activo!==false?'🚫':'✅'}</button>
                         </>}
                       </div>
@@ -233,6 +253,8 @@ export function Config() {
     smtp_host:'', smtp_port:'465', smtp_user:'', smtp_pass:'', smtp_from:'',
     inactividad_minutos:'15', login_max_intentos:'3', login_bloqueo_minutos:'15',
     password_expira_dias:'0', password_historial_count:'5',
+    '2fa_obligatorio':'0',
+    login_ip_restriccion:'0', login_ips_autorizadas:'[]',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -417,6 +439,62 @@ export function Config() {
               <div style={{ fontSize: 11, color: 'var(--mu)', padding: '8px 12px', background: 'var(--sf)', borderRadius: 6 }}>
                 💡 Los usuarios deberán cambiar su contraseña cada <strong>{form.password_expira_dias === '0' ? 'que nunca expira' : form.password_expira_dias + ' días'}</strong>. Se mantienen las últimas 5 contraseñas para evitar reutilización.
               </div>
+            </div>
+            <div style={{ borderTop: '1px solid var(--bd)', marginTop: 16, paddingTop: 16 }}>
+              <div style={{ background: 'rgba(34,197,94,.06)', border: '1px solid rgba(34,197,94,.2)', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14 }}>
+                🔐 Autenticación en dos pasos (2FA)
+              </div>
+              <Field label="Exigir 2FA a todos los usuarios">
+                <select value={form['2fa_obligatorio']} onChange={set('2fa_obligatorio')}>
+                  <option value="0">Opcional</option>
+                  <option value="1">Obligatorio (recomendado)</option>
+                </select>
+              </Field>
+              <div style={{ fontSize: 11, color: 'var(--mu)', padding: '8px 12px', background: 'var(--sf)', borderRadius: 6 }}>
+                💡 Cuando está <strong>obligatorio</strong>, los usuarios sin 2FA configurado deberán activarlo al iniciar sesión. El administrador puede eximir a usuarios específicos desde el listado de usuarios.
+              </div>
+            </div>
+            <div style={{ borderTop: '1px solid var(--bd)', marginTop: 16, paddingTop: 16 }}>
+              <div style={{ background: 'rgba(99,102,241,.06)', border: '1px solid rgba(99,102,241,.2)', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 14 }}>
+                🌐 Restricción de acceso por IP
+              </div>
+              <Field label="Restringir login por IP">
+                <select value={form.login_ip_restriccion} onChange={set('login_ip_restriccion')}>
+                  <option value="0">Desactivado</option>
+                  <option value="1">Solo IPs autorizadas</option>
+                </select>
+              </Field>
+              {form.login_ip_restriccion === '1' && (
+                <>
+                  <Field label="IPs autorizadas (una por línea)">
+                    <textarea value={(() => { try { return JSON.parse(form.login_ips_autorizadas || '[]').join('\n') } catch { return '' } })()}
+                      onChange={e => {
+                        const lines = e.target.value.split('\n').map(l => l.trim()).filter(Boolean)
+                        setForm(p => ({ ...p, login_ips_autorizadas: JSON.stringify(lines) }))
+                      }}
+                      rows={4} placeholder={"181.164.10.5\n181.164.10.0/24\n2001:db8::1"} style={{ fontFamily: 'monospace', fontSize: 12 }} />
+                  </Field>
+                  <div style={{ fontSize: 11, color: 'var(--mu)', padding: '8px 12px', background: 'var(--sf)', borderRadius: 6, marginBottom: 8 }}>
+                    💡 Solo los usuarios que se conecten desde estas IPs podrán iniciar sesión. Esto aplica a <strong>todos los usuarios</strong> de la empresa. El superadmin al usar "login como" queda exento.
+                  </div>
+                  <button type="button" className="btn btn-secondary btn-sm" style={{ width: '100%' }}
+                    onClick={async () => {
+                      try {
+                        const r = await fetch('/api/auth/mi-ip', { credentials: 'include' })
+                        const d = await r.json()
+                        const current = (() => { try { return JSON.parse(form.login_ips_autorizadas || '[]') } catch { return [] } })()
+                        if (!current.includes(d.ip)) {
+                          setForm(p => ({ ...p, login_ips_autorizadas: JSON.stringify([...current, d.ip]) }))
+                          toast(`IP ${d.ip} agregada`, 'ok')
+                        } else {
+                          toast('Tu IP ya está en la lista', '')
+                        }
+                      } catch { toast('Error al obtener IP', 'err') }
+                    }}>
+                    📡 Agregar mi IP actual
+                  </button>
+                </>
+              )}
             </div>
           </>
         )}

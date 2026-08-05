@@ -17,10 +17,45 @@ export function MiCuenta() {
   const [consentData, setConsentData] = useState(null)
   const [exportando, setExportando] = useState(false)
   const [firmando, setFirmando] = useState(false)
+  const [sesiones, setSesiones] = useState([])
+  const [historial, setHistorial] = useState([])
+  const [loadingSesiones, setLoadingSesiones] = useState(true)
 
   useEffect(() => {
     reloadConsent()
+    loadSesiones()
   }, [])
+
+  async function loadSesiones() {
+    setLoadingSesiones(true)
+    try {
+      const [s, h] = await Promise.all([
+        api('GET', '/auth/me/sesiones').catch(() => []),
+        api('GET', '/auth/me/ultimas-sesiones').catch(() => []),
+      ])
+      setSesiones(Array.isArray(s) ? s : [])
+      setHistorial(Array.isArray(h) ? h : [])
+    } catch(e) {}
+    finally { setLoadingSesiones(false) }
+  }
+
+  async function cerrarSesion(sid) {
+    if (!window.confirm('¿Cerrar esta sesión?')) return
+    try {
+      await api('POST', '/auth/me/sesiones/' + sid + '/cerrar')
+      toast('Sesión cerrada', 'ok')
+      loadSesiones()
+    } catch(e) { toast(e.message, 'err') }
+  }
+
+  async function cerrarTodasLasSesiones() {
+    if (!window.confirm('¿Cerrar todas las otras sesiones? Solo quedará activa esta.')) return
+    try {
+      await api('POST', '/auth/me/sesiones/cerrar-todas')
+      toast('Todas las otras sesiones cerradas', 'ok')
+      loadSesiones()
+    } catch(e) { toast(e.message, 'err') }
+  }
 
   async function reloadConsent() {
     try {
@@ -267,6 +302,49 @@ export function MiCuenta() {
             </button>
           </>
         )}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div style={{ fontWeight: 600, fontSize: 14 }}>💻 Sesiones activas</div>
+          {sesiones.filter(s => !s.es_actual && s.activo).length > 0 && (
+            <button type="button" className="btn btn-sm btn-secondary" onClick={cerrarTodasLasSesiones}
+              style={{ fontSize: 11 }}>Cerrar todas las otras</button>
+          )}
+        </div>
+        {loadingSesiones ? <span style={{ fontSize: 12, color: 'var(--mu)' }}>Cargando...</span>
+        : sesiones.length === 0 ? <span style={{ fontSize: 12, color: 'var(--mu)' }}>Sin sesiones registradas.</span>
+        : sesiones.map(s => (
+          <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--bd)', fontSize: 12 }}>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span>{s.user_agent ? (s.user_agent.includes('Mobile') ? '📱' : s.user_agent.includes('Windows') || s.user_agent.includes('Mac') ? '💻' : '🌐') : '🌐'}</span>
+                <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{s.ip || 'Desconocida'}</span>
+                {s.activo && <span className="badge badge-green" style={{ fontSize: 10 }}>Activa</span>}
+                {s.es_actual && <span className="badge badge-blue" style={{ fontSize: 10 }}>Esta sesión</span>}
+                {!s.activo && <span className="badge badge-gray" style={{ fontSize: 10 }}>Cerrada</span>}
+              </div>
+              <div style={{ color: 'var(--mu)', fontSize: 10, marginTop: 2 }}>
+                {s.ultimo_acceso ? new Date(s.ultimo_acceso).toLocaleString('es-AR') : ''}
+              </div>
+            </div>
+            {s.activo && !s.es_actual && (
+              <button type="button" className="btn btn-sm btn-secondary" style={{ fontSize: 10, padding: '2px 8px' }}
+                onClick={() => cerrarSesion(s.id)}>Cerrar</button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>📋 Últimos ingresos</div>
+        {historial.length === 0 ? <span style={{ fontSize: 12, color: 'var(--mu)' }}>Sin registros.</span>
+        : historial.map((h, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--bd)', fontSize: 12 }}>
+            <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{h.ip || '—'}</span>
+            <span style={{ color: 'var(--mu)', fontSize: 11 }}>{h.fecha ? new Date(h.fecha).toLocaleString('es-AR') : ''}</span>
+          </div>
+        ))}
       </div>
     </div>
   )

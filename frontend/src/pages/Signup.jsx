@@ -1,18 +1,31 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../store'
 import { PasswordInput } from '../components/PasswordInput'
 
 export function Signup() {
-  const navigate = useNavigate()
-  const { setMe } = useAuth()
   const [form, setForm] = useState({ empresa_nombre: '', email: '', password: '', rubro: 'general', nombre_dueno: '', apellido_dueno: '', telefono: '', ciudad: '', como_conociste: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [aceptaTerminos, setAceptaTerminos] = useState(false)
+  const [resending, setResending] = useState(false)
+  const [resent, setResent] = useState(false)
 
   const set = (f) => (e) => setForm(p => ({ ...p, [f]: e.target.value }))
+
+  async function handleResend() {
+    setResending(true); setError('')
+    try {
+      const r = await fetch('/api/auth/verify-email/resend', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: form.email.trim() }),
+      })
+      const data = await r.json()
+      if (r.ok) setResent(true)
+      else setError(data.error || 'Error al reenviar')
+    } catch (e) { setError('Error de conexión') }
+    finally { setResending(false) }
+  }
 
   async function handleSignup() {
     setError(''); setSuccess('')
@@ -33,20 +46,35 @@ export function Signup() {
       })
       const data = await r.json()
       if (!r.ok) throw new Error(data.error || 'Error al crear la cuenta')
-      setMe({ nombre: data.nombre, empresa: data.empresa, rol: 'admin' })
-      setSuccess(data.mensaje || 'Cuenta creada')
-      setTimeout(() => navigate('/app/dashboard', { replace: true }), 1500)
+      setSuccess(true)
     } catch (e) { setError(e.message) }
     finally { setLoading(false) }
   }
 
   if (success) {
     return (
-      <div style={{ maxWidth: 'min(420px, 94vw)', margin: '80px auto', textAlign: 'center', padding: '0 12px' }}>
-        <div style={{ fontSize: 52, marginBottom: 12 }}>🚀</div>
-        <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>¡Cuenta creada!</h2>
-        <p style={{ color: 'var(--ok)', fontSize: 14, marginBottom: 20 }}>{success}</p>
-        <p style={{ color: 'var(--mu)', fontSize: 13 }}>Redirigiendo al panel...</p>
+      <div style={{ maxWidth: 'min(440px, 94vw)', margin: '60px auto', textAlign: 'center', padding: '0 12px' }}>
+        <div style={{ fontSize: 52, marginBottom: 12 }}>📧</div>
+        <h2 style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>¡Revisá tu email!</h2>
+        <p style={{ color: 'var(--mu)', fontSize: 14, marginBottom: 4 }}>Enviamos un link de verificación a</p>
+        <p style={{ fontWeight: 700, fontSize: 15, marginBottom: 20 }}>{form.email}</p>
+        <p style={{ color: 'var(--mu)', fontSize: 13, marginBottom: 28, lineHeight: 1.6 }}>
+          Abrí el mail y hacé clic en <strong>"Verificar email y empezar"</strong> para activar tu cuenta.
+        </p>
+        {!resent ? (
+          <div>
+            <p style={{ color: 'var(--mu)', fontSize: 12, marginBottom: 8 }}>¿No te llegó? Revisá spam o reenvialo:</p>
+            <button type="button" className="btn btn-secondary" style={{ padding: '10px 24px' }} onClick={handleResend} disabled={resending}>
+              {resending ? '⏳ Reenviando...' : '📤 Reenviar email de verificación'}
+            </button>
+          </div>
+        ) : (
+          <p style={{ color: 'var(--ok)', fontSize: 13, marginTop: 8 }}>✅ Email reenviado. Revisá tu bandeja de entrada.</p>
+        )}
+        {error && <p style={{ color: 'var(--bad)', fontSize: 12, marginTop: 16 }}>{error}</p>}
+        <p style={{ marginTop: 32, fontSize: 13, color: 'var(--mu)' }}>
+          <a href="/app/login" style={{ color: 'var(--ac)', fontWeight: 600 }}>Ir al inicio de sesión</a>
+        </p>
       </div>
     )
   }

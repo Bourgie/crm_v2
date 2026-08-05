@@ -69,12 +69,24 @@ router.post('/login', superadminLoginLimiter, validate(superadminLoginSchema), a
   const { usuario, password } = req.body;
   const sa = master.prepare("SELECT * FROM superadmin WHERE usuario=? AND activo=1").get(usuario);
   if(!sa) {
-    // Dummy bcrypt compare to prevent user enumeration via timing
     await bcrypt.compare(password, '$2a$10$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
     return res.status(401).json({error:'Credenciales incorrectas'});
   }
   if(!await bcrypt.compare(password, sa.password))
     return res.status(401).json({error:'Credenciales incorrectas'});
+
+  let saData = {};
+  try { saData = JSON.parse(sa.data || '{}'); } catch(e) {}
+
+  // IP restriction check
+  if (saData.sa_ip_restriccion && Array.isArray(saData.sa_ips) && saData.sa_ips.length > 0) {
+    const clientIP = (req.ip || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.connection?.remoteAddress || '').replace(/^::ffff:/, '');
+    const { ipInList } = require('../lib/ip-utils');
+    if (!ipInList(clientIP, saData.sa_ips)) {
+      saAudit(sa.id, 'login_ip_denegada', null, 'IP no autorizada: ' + clientIP);
+      return res.status(403).json({ error: 'Acceso no permitido desde esta IP.' });
+    }
+  }
 
   if (sa.must_change_password) {
     const tempToken = jwt.sign(
@@ -85,17 +97,44 @@ router.post('/login', superadminLoginLimiter, validate(superadminLoginSchema), a
     return res.json({ require_password_change: true, temp_token: tempToken, nombre: sa.nombre });
   }
 
-  // Check if superadmin has 2FA enabled
-  let saData = {};
-  try { saData = JSON.parse(sa.data || '{}'); } catch(e) {}
+  // Device trust — skip 2FA if trusted device cookie is present
+  const deviceCookie = req.cookies && req.cookies['sa_device'];
+  const trustedDevices = saData.sa_devices || [];
+  let trustedMatch = null;
+  if (deviceCookie && saData.sa_2fa_saltar_dispositivo !== false) {
+    const hash = crypto.createHash('sha256').update(deviceCookie).digest('hex');
+    trustedMatch = trustedDevices.find(d => d.hash === hash);
+    if (trustedMatch) {
+      trustedMatch.ultimo_uso = new Date().toISOString();
+      master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(saData), sa.id);
+    }
+  }
+
+  // 2FA check
   if (saData.twofa_enabled && saData.twofa_secret) {
-    const crypto = require('crypto');
+    if (trustedMatch) {
+      // Trusted device — skip 2FA
+      const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin'}, SA_SECRET, {expiresIn:'8h'});
+      saAudit(sa.id, 'login_dispositivo_confiable', null, 'Login superadmin con dispositivo confiable');
+      setAuthCookie(res, token);
+      return res.json({nombre:sa.nombre, dispositivo_confiable: true});
+    }
     const tempToken = jwt.sign(
       { id: sa.id, purpose: '2fa', role: 'superadmin' },
       SA_SECRET,
       { expiresIn: '5m' }
     );
     return res.json({ require_2fa: true, temp_token: tempToken, nombre: sa.nombre });
+  }
+
+  // 2FA mandatory — force setup
+  if (saData.sa_2fa_obligatorio !== false) {
+    const tempToken = jwt.sign(
+      { id: sa.id, purpose: '2fa_setup', role: 'superadmin' },
+      SA_SECRET,
+      { expiresIn: '15m' }
+    );
+    return res.json({ require_2fa_setup: true, temp_token: tempToken, nombre: sa.nombre });
   }
 
   const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin'}, SA_SECRET, {expiresIn:'8h'});
@@ -191,6 +230,11 @@ router.post('/2fa/disable', superAuth, (req, res) => {
   const sa = master.prepare("SELECT * FROM superadmin WHERE id=?").get(req.sadmin.id);
   let data = {};
   try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+  if (data.sa_2fa_obligatorio !== false) {
+    // Check if there are other superadmins — don't lock out the last one
+    const count = master.prepare("SELECT COUNT(*) as n FROM superadmin WHERE activo=1").get().n || 0;
+    if (count <= 1) return res.status(400).json({ error: 'No podés deshabilitar 2FA siendo el único superadmin activo.' });
+  }
   delete data.twofa_secret;
   delete data.twofa_enabled;
   delete data.twofa_backup;
@@ -199,9 +243,83 @@ router.post('/2fa/disable', superAuth, (req, res) => {
   res.json({ ok: true, mensaje: '2FA deshabilitado' });
 });
 
+// POST /api/superadmin/2fa/setup-forced — setup sin cookie de sesión (temp_token)
+router.post('/2fa/setup-forced', (req, res) => {
+  const { temp_token } = req.body;
+  if (!temp_token) return res.status(400).json({ error: 'Token temporal requerido' });
+  let payload;
+  try { payload = jwt.verify(temp_token, SA_SECRET); }
+  catch (e) { return res.status(401).json({ error: 'Token temporal inválido o expirado' }); }
+  if (payload.purpose !== '2fa_setup' || payload.role !== 'superadmin') return res.status(401).json({ error: 'Token inválido' });
+
+  const sa = master.prepare("SELECT * FROM superadmin WHERE id=?").get(payload.id);
+  if (!sa) return res.status(401).json({ error: 'Superadmin no encontrado' });
+  let data = {};
+  try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+  if (data.twofa_enabled) return res.status(400).json({ error: '2FA ya está activo' });
+
+  const label = sa.email || sa.usuario || 'superadmin';
+  const secret = totp.generateSecret();
+  const otpauth = totp.toURI({ label, issuer: 'FlexCRM SuperAdmin', secret });
+  data.twofa_secret = secret;
+  data.twofa_enabled = false;
+  master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), sa.id);
+  res.json({ secret, otpauth, email: label });
+});
+
+// POST /api/superadmin/2fa/confirm-forced — confirma 2FA + completa login sin sesión
+router.post('/2fa/confirm-forced', validate(require('../middleware/validate').twofaConfirmSchema), (req, res) => {
+  const { temp_token, code, confiar_dispositivo } = req.body;
+  let payload;
+  try { payload = jwt.verify(temp_token, SA_SECRET); }
+  catch (e) { return res.status(401).json({ error: 'Token temporal inválido o expirado' }); }
+  if (payload.purpose !== '2fa_setup' || payload.role !== 'superadmin') return res.status(401).json({ error: 'Token inválido' });
+
+  const sa = master.prepare("SELECT * FROM superadmin WHERE id=?").get(payload.id);
+  if (!sa) return res.status(401).json({ error: 'Superadmin no encontrado' });
+  let data = {};
+  try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+  if (!data.twofa_secret) return res.status(400).json({ error: 'Ejecutá /2fa/setup-forced primero' });
+  if (data.twofa_enabled) return res.status(400).json({ error: '2FA ya está activo' });
+
+  const isValid = totp.verify({ token: code, secret: data.twofa_secret }).valid;
+  if (!isValid) return res.status(400).json({ error: 'Código inválido' });
+
+  const crypto = require('crypto');
+  const backupCodes = [];
+  for (let i = 0; i < 10; i++) {
+    const bc = crypto.randomBytes(4).toString('hex').toUpperCase();
+    backupCodes.push(bc);
+  }
+  data.twofa_enabled = true;
+  data.twofa_backup = backupCodes.map(c => crypto.createHash('sha256').update(c).digest('hex'));
+
+  // Device trust
+  if (confiar_dispositivo !== false) {
+    const devToken = crypto.randomBytes(32).toString('hex');
+    const devHash = crypto.createHash('sha256').update(devToken).digest('hex');
+    const clientUA = (req.headers['user-agent'] || '').substring(0, 200);
+    const clientIP = (req.ip || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || '').replace(/^::ffff:/, '');
+    if (!Array.isArray(data.sa_devices)) data.sa_devices = [];
+    data.sa_devices.push({ hash: devHash, ip: clientIP, ua: clientUA, creado: new Date().toISOString(), ultimo_uso: new Date().toISOString() });
+    if (data.sa_devices.length > 10) data.sa_devices = data.sa_devices.slice(-10);
+    res.cookie('sa_device', devToken, {
+      httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production',
+      path: '/api/superadmin', maxAge: 90 * 24 * 60 * 60 * 1000,
+    });
+  }
+
+  master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), sa.id);
+  saAudit(sa.id, '2fa_activado', null, '2FA activado (setup forzado)');
+
+  const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin'}, SA_SECRET, {expiresIn:'8h'});
+  setAuthCookie(res, token);
+  res.json({ nombre:sa.nombre, backup_codes: backupCodes, mensaje: '2FA activado. Guardá tus códigos de respaldo.' });
+});
+
 // POST /api/superadmin/2fa/verify-login
 router.post('/2fa/verify-login', validate(require('../middleware/validate').superadmin2faVerifySchema), (req, res) => {
-  const { temp_token, code } = req.body;
+  const { temp_token, code, confiar_dispositivo } = req.body;
   let payload;
   try {
     payload = jwt.verify(temp_token, SA_SECRET);
@@ -224,13 +342,71 @@ router.post('/2fa/verify-login', validate(require('../middleware/validate').supe
     const bcIndex = (data.twofa_backup || []).indexOf(hash);
     if (bcIndex === -1) return res.status(400).json({ error: 'Código inválido o ya usado' });
     data.twofa_backup.splice(bcIndex, 1);
-    master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), req.sadmin.id);
   }
+
+  // Device trust — register/refresh trusted device
+  if (confiar_dispositivo !== false) {
+    const devToken = crypto.randomBytes(32).toString('hex');
+    const devHash = crypto.createHash('sha256').update(devToken).digest('hex');
+    const clientUA = (req.headers['user-agent'] || '').substring(0, 200);
+    const clientIP = (req.ip || req.headers['x-forwarded-for']?.split(',')[0]?.trim() || '').replace(/^::ffff:/, '');
+    if (!Array.isArray(data.sa_devices)) data.sa_devices = [];
+    // Replace existing device with same hash if any
+    const existingIdx = data.sa_devices.findIndex(d => d.hash === devHash);
+    if (existingIdx >= 0) {
+      data.sa_devices[existingIdx].ultimo_uso = new Date().toISOString();
+    } else {
+      data.sa_devices.push({ hash: devHash, ip: clientIP, ua: clientUA, creado: new Date().toISOString(), ultimo_uso: new Date().toISOString() });
+      if (data.sa_devices.length > 10) data.sa_devices = data.sa_devices.slice(-10);
+    }
+    res.cookie('sa_device', devToken, {
+      httpOnly: true, sameSite: 'strict', secure: process.env.NODE_ENV === 'production',
+      path: '/api/superadmin', maxAge: 90 * 24 * 60 * 60 * 1000,
+    });
+  }
+
+  master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), sa.id);
 
   const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin'}, SA_SECRET, {expiresIn:'8h'});
   saAudit(sa.id, 'login_2fa', null, 'Login superadmin con 2FA');
   setAuthCookie(res, token);
   res.json({nombre:sa.nombre});
+});
+
+// GET /api/superadmin/2fa/devices — list trusted devices
+router.get('/2fa/devices', superAuth, (req, res) => {
+  const sa = master.prepare("SELECT data FROM superadmin WHERE id=?").get(req.sadmin.id);
+  let data = {};
+  try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+  const devices = (data.sa_devices || []).map((d, i) => ({ index: i, ip: d.ip, ua: d.ua, creado: d.creado, ultimo_uso: d.ultimo_uso }));
+  res.json({ devices });
+});
+
+// POST /api/superadmin/2fa/devices/revoke — revoke trusted device
+router.post('/2fa/devices/revoke', superAuth, (req, res) => {
+  const { index } = req.body;
+  const sa = master.prepare("SELECT * FROM superadmin WHERE id=?").get(req.sadmin.id);
+  let data = {};
+  try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+  if (!Array.isArray(data.sa_devices) || index === undefined || index < 0 || index >= data.sa_devices.length) {
+    return res.status(400).json({ error: 'Dispositivo inválido' });
+  }
+  data.sa_devices.splice(index, 1);
+  master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), sa.id);
+  saAudit(req.sadmin.id, 'dispositivo_revocado', null, 'Dispositivo confiable revocado');
+  res.json({ ok: true });
+});
+
+// POST /api/superadmin/2fa/devices/revocar-todos — revoke all trusted devices
+router.post('/2fa/devices/revocar-todos', superAuth, (req, res) => {
+  const sa = master.prepare("SELECT * FROM superadmin WHERE id=?").get(req.sadmin.id);
+  let data = {};
+  try { data = JSON.parse(sa.data || '{}'); } catch(e) {}
+  data.sa_devices = [];
+  master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), sa.id);
+  saAudit(req.sadmin.id, 'dispositivos_revocados', null, 'Todos los dispositivos confiables revocados');
+  res.clearCookie('sa_device', { path: '/api/superadmin' });
+  res.json({ ok: true });
 });
 
 router.get('/me', superAuth, (req, res) => {

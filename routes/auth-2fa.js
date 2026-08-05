@@ -46,10 +46,13 @@ function generateBackupCodes(userId, userDB) {
   return codes;
 }
 
-function issueSessionTokens(res, user, empresa, userDB) {
+function issueSessionTokens(res, user, empresa, userDB, req) {
   const auth = require('./auth');
-  const { accessToken, refreshToken } = auth.generateTokens(user, empresa);
-  const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+  const cryptoMod = require('crypto');
+  const refreshHashPlaceholder = cryptoMod.createHash('sha256').update(crypto.randomBytes(16).toString('hex')).digest('hex');
+  const sid = auth.createSessionRecord(userDB, user.id, refreshHashPlaceholder, req || { headers: { 'user-agent': '' }, ip: '' });
+  const { accessToken, refreshToken } = auth.generateTokens(user, empresa, sid);
+  const refreshHash = cryptoMod.createHash('sha256').update(refreshToken).digest('hex');
   userDB.insert('password_reset_tokens', {
     id: 'rt_' + uid(),
     usuario_id: user.id,
@@ -59,9 +62,10 @@ function issueSessionTokens(res, user, empresa, userDB) {
     usado: 0,
     creado: new Date().toISOString(),
   });
+  userDB.raw.prepare("UPDATE user_sessions SET token_hash=? WHERE id=?").run(refreshHash, sid);
   auth.setRefreshCookie(res, refreshToken);
   auth.setAccessCookie(res, accessToken);
-  return auth.buildLoginResponse(user, accessToken, refreshToken, userDB);
+  return { ...auth.buildLoginResponse(user, accessToken, refreshToken, userDB, sid), session_id: sid };
 }
 
 // GET /api/auth/2fa/status — si el usuario tiene 2FA activo + si es obligatorio

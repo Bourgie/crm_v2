@@ -84,9 +84,11 @@ function findVendedorForUser(user, userDB) {
   return v || null;
 }
 
-function buildLoginResponse(user, token, refreshToken, empresaDB) {
+function buildLoginResponse(user, token, refreshToken, empresaDB, sessionId) {
   const userDB = empresaDB || db;
   const { password: _, ...userData } = user;
+  if (sessionId) userData.session_id = sessionId;
+  if (!userData.roles) userData.roles = [userData.rol];
   if (!userData.roles) userData.roles = [userData.rol];
   if (!Array.isArray(userData.suc_sesiones_permitidas)) {
     try { userData.suc_sesiones_permitidas = JSON.parse(userData.suc_sesiones_permitidas || '[]'); }
@@ -99,14 +101,27 @@ function buildLoginResponse(user, token, refreshToken, empresaDB) {
   return { user: userData, sucursal: suc, vendedor };
 }
 
-function generateTokens(user, empresa) {
-  const accessToken = jwt.sign(
-    { id: user.id, rol: user.rol, empresa: empresa },
-    getSecret(),
-    { expiresIn: ACCESS_TOKEN_EXPIRY }
-  );
+function generateTokens(user, empresa, sid) {
+  const payload = { id: user.id, rol: user.rol, empresa: empresa };
+  if (sid) payload.sid = sid;
+  const accessToken = jwt.sign(payload, getSecret(), { expiresIn: ACCESS_TOKEN_EXPIRY });
   const refreshToken = crypto.randomBytes(40).toString('hex');
   return { accessToken, refreshToken };
+}
+
+function createSessionRecord(userDB, userId, refreshHash, req) {
+  const sid = 'sid_' + require('../db_sqlite').uid();
+  const clientIP = getIp(req) || '';
+  const clientUA = (req.headers['user-agent'] || '').substring(0, 200);
+  userDB.raw.prepare("INSERT INTO user_sessions(id, usuario_id, token_hash, ip, user_agent, creado, ultimo_acceso, activo) VALUES(?,?,?,?,?,?,?,1)")
+    .run(sid, userId, refreshHash, clientIP, clientUA, new Date().toISOString(), new Date().toISOString());
+  return sid;
+}
+
+function updateSessionToken(userDB, sid, newRefreshHash) {
+  try {
+    userDB.raw.prepare("UPDATE user_sessions SET token_hash=?, ultimo_acceso=? WHERE id=?").run(newRefreshHash, new Date().toISOString(), sid);
+  } catch(e) {}
 }
 
 function setRefreshCookie(res, token) {
@@ -130,14 +145,19 @@ function setAccessCookie(res, token) {
 }
 
 function enforceSessionLimit(db, userId) {
-  const active = db.raw.prepare(
-    "SELECT id FROM password_reset_tokens WHERE usuario_id=? AND usado=0 AND id LIKE 'rt_%' AND expires > datetime('now') ORDER BY creado ASC"
-  ).all(userId);
-  if (active.length >= MAX_CONCURRENT_SESSIONS) {
-    const toRevoke = active.slice(0, active.length - MAX_CONCURRENT_SESSIONS + 1);
-    const stmt = db.raw.prepare("UPDATE password_reset_tokens SET usado=1 WHERE id=?");
-    toRevoke.forEach(r => stmt.run(r.id));
-  }
+  try {
+    const active = db.raw.prepare(
+      "SELECT id FROM user_sessions WHERE usuario_id=? AND activo=1 ORDER BY creado ASC"
+    ).all(userId);
+    if (active.length >= MAX_CONCURRENT_SESSIONS) {
+      const toRevoke = active.slice(0, active.length - MAX_CONCURRENT_SESSIONS + 1);
+      const stmt = db.raw.prepare("UPDATE user_sessions SET activo=0 WHERE id=?");
+      toRevoke.forEach(r => stmt.run(r.id));
+      // Also mark corresponding refresh tokens
+      const rtStmt = db.raw.prepare("UPDATE password_reset_tokens SET usado=1 WHERE usuario_id=? AND id LIKE 'rt_%' AND usado=0");
+      rtStmt.run(userId);
+    }
+  } catch(e) { /* non-blocking */ }
 }
 
 // ── Login IP rate limiter ──
@@ -197,8 +217,13 @@ router.post('/login', loginIpLimiter, validate(loginSchema), async (req, res) =>
   resetAttempts(userDB, lockKey);
   suspicious.auditLoginSuccess(req, userDB, user)
 
-  // Check email verification — do not reveal account existence
+  // Check email verification — do not reveal account existence at first, but once authed, surface the state
   if (user.email_verificado === 0 || user.email_verificado === false) {
+    // Diagnostic: log cuantos usuarios comparten este email en la DB (detecta duplicados por re-entry)
+    try {
+      const sameEmailCount = userDB.raw.prepare("SELECT COUNT(*) as n FROM usuarios WHERE email=? AND activo=1").get(user.email);
+      console.log('[Login] usuario '+(user.usuario||'')+' ('+user.email+') mail sin verificar, count duplicados email: '+sameEmailCount.n);
+    } catch(e) {}
     // Silently resend verification email
     try {
       const verToken = crypto.randomBytes(20).toString('hex');
@@ -221,7 +246,7 @@ router.post('/login', loginIpLimiter, validate(loginSchema), async (req, res) =>
       }
     } catch(e) {}
     await new Promise(r => setTimeout(r, progressiveDelay(1)));
-    return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+    return res.status(401).json({ error: 'Revisá tu email y verificá tu cuenta antes de ingresar.', email_pendiente: true });
   }
 
   if (user.must_change_password) {
@@ -232,6 +257,23 @@ router.post('/login', loginIpLimiter, validate(loginSchema), async (req, res) =>
     );
     return res.json({ require_password_change: true, temp_token: tempToken, user: { nombre: user.nombre, email: user.email || '' } });
   }
+
+  // IP restriction check
+  try {
+    const cfg = userDB.getConfig();
+    if (cfg.login_ip_restriccion === '1' || cfg.login_ip_restriccion === 1 || cfg.login_ip_restriccion === true) {
+      const ipList = (() => { try { return JSON.parse(cfg.login_ips_autorizadas || '[]'); } catch { return []; } })();
+      if (Array.isArray(ipList) && ipList.length > 0) {
+        const clientIP = (getIp(req) || '').replace(/^::ffff:/, '');
+        const { ipInList } = require('../lib/ip-utils');
+        if (!ipInList(clientIP, ipList)) {
+          userDB.audit(user, null, 'auth', 'login_ip_denegada', 'IP no autorizada: ' + clientIP, user.id, { ip: clientIP });
+          await new Promise(r => setTimeout(r, progressiveDelay(1)));
+          return res.status(401).json({ error: 'No podés ingresar desde esta conexión.' });
+        }
+      }
+    }
+  } catch(e) { /* non-blocking */ }
 
   try {
     const allSucsRaw = userDB.find('sucursales', {});
@@ -333,9 +375,15 @@ router.post('/login', loginIpLimiter, validate(loginSchema), async (req, res) =>
     creado: new Date().toISOString(),
   });
 
+  // Create session record
+  const sid = createSessionRecord(userDB, user.id, refreshHash, req);
+  // Re-issue token now with sid
+  const finalPayload = { id: user.id, rol: user.rol, empresa: empresa, sid };
+  const finalAccessToken = jwt.sign(finalPayload, getSecret(), { expiresIn: ACCESS_TOKEN_EXPIRY });
+
   setRefreshCookie(res, refreshToken);
-  setAccessCookie(res, accessToken);
-  res.json(buildLoginResponse(user, accessToken, refreshToken, userDB));
+  setAccessCookie(res, finalAccessToken);
+  res.json(buildLoginResponse(user, finalAccessToken, refreshToken, userDB, sid));
 });
 
 // ── POST /api/auth/aceptar-terminos ──
@@ -528,8 +576,15 @@ router.post('/refresh', (req, res) => {
   // Mark old refresh as used
   userDB.update('password_reset_tokens', stored.id, { usado: 1 });
 
+  // Recover existing session (by old token hash)
+  let existingSid = null;
+  try {
+    const sess = userDB.raw.prepare("SELECT id FROM user_sessions WHERE token_hash=? AND activo=1").get(hash);
+    if (sess) existingSid = sess.id;
+  } catch(e) {}
+
   // Issue new tokens
-  const { accessToken, refreshToken: newRefresh } = generateTokens(user, empresa);
+  const { accessToken, refreshToken: newRefresh } = generateTokens(user, empresa, existingSid);
   const newHash = crypto.createHash('sha256').update(newRefresh).digest('hex');
   userDB.insert('password_reset_tokens', {
     id: 'rt_' + uid(),
@@ -540,6 +595,11 @@ router.post('/refresh', (req, res) => {
     usado: 0,
     creado: new Date().toISOString(),
   });
+
+  // Update session token_hash + ultimo_acceso
+  if (existingSid) {
+    userDB.raw.prepare("UPDATE user_sessions SET token_hash=?, ultimo_acceso=? WHERE id=?").run(newHash, new Date().toISOString(), existingSid);
+  }
 
   setRefreshCookie(res, newRefresh);
   setAccessCookie(res, accessToken);
@@ -557,11 +617,19 @@ router.post('/logout', (req, res) => {
     try {
       const stored = userDB.where('password_reset_tokens', t => t.token === hash)[0];
       if (stored) userDB.update('password_reset_tokens', stored.id, { usado: 1 });
+      userDB.raw.prepare("UPDATE user_sessions SET activo=0 WHERE token_hash=?").run(hash);
     } catch(e) { /* non-blocking */ }
   }
   res.clearCookie('refresh-token', { path: '/api/auth' });
   res.clearCookie('access-token', { path: '/' });
   res.json({ ok: true });
+});
+
+// GET /api/auth/mi-ip — returns the client's IP (for adding to allowlist)
+router.get('/mi-ip', (req, res) => {
+  const { getIp } = require('../lib/suspicious-activity');
+  const clientIP = (getIp(req) || '').replace(/^::ffff:/, '');
+  res.json({ ip: clientIP });
 });
 
 // GET /api/auth/me
@@ -681,10 +749,20 @@ router.post('/forced-password-change', async (req, res) => {
 router.get('/usuarios', authMiddleware, requireRol('admin','supervisor'), (req, res) => {
   const db = _getDB(req);
   const empleados = db.all('empleados');
+  const twofaUsers = new Set();
+  try {
+    db.raw.prepare("SELECT user_id FROM user_2fa WHERE enabled=1").all().forEach(r => twofaUsers.add(r.user_id));
+  } catch(e) {}
   return res.json(db.find('usuarios', { activo: true }).map(u => {
     const {password,...r}=u;
     const emp = empleados.find(e => e.usuario_id === u.id);
     if (emp) r.empleado_id = emp.id;
+    r.has_2fa = twofaUsers.has(u.id);
+    try {
+      const d = typeof u.data === 'string' ? JSON.parse(u.data || '{}') : (u.data || {});
+      r.data = d;
+      r.force2fa = d.force2fa;
+    } catch(e) { r.data = {}; }
     return r;
   }));
 });
@@ -841,26 +919,51 @@ router.post('/signup', async (req, res) => {
     if (isDisposableEmail(email)) return res.status(400).json({ error: 'Usa un email valido para registrarte.' });
   } catch {}
 
-  // Create admin user (email_verificado=0)
+  // Create admin user (email_verificado=0) — handle re-entry to a stale DB
   const hash = await bcrypt.hash(password, 10);
-  const adminId = 'u' + uid();
   const usuario = email.split('@')[0].replace(/[^a-z0-9_]/g, '_').substring(0, 20);
   const adminNombre = nombre_dueno || 'Admin';
   const adminApellido = apellido_dueno || null;
-  empDB.insert('usuarios', {
-    id: adminId, nombre: adminNombre, apellido: adminApellido || '', usuario: usuario,
-    email: email.trim().toLowerCase(), password: hash,
-    rol: 'admin', roles: JSON.stringify(['admin']), activo: true,
-    email_verificado: 0, creado: new Date().toISOString(), password_changed_at: new Date().toISOString(),
-  });
+  const existingAdmin = empDB.where('usuarios', u => u.email === email.trim().toLowerCase() && u.activo)[0];
+  let adminId, isReEntry = false;
+  if (existingAdmin) {
+    adminId = existingAdmin.id;
+    isReEntry = true;
+    console.log('[Signup] Re-entry detectado para empresa '+finalCodigo+' — actualizando admin existente ' + adminId);
+    empDB.update('usuarios', adminId, {
+      nombre: adminNombre, apellido: adminApellido || '', usuario,
+      password: hash, rol: 'admin', roles: JSON.stringify(['admin']), activo: true,
+      email_verificado: 0, password_changed_at: new Date().toISOString(),
+    });
+    // Mark old tokens used for this user
+    empDB.raw.prepare("UPDATE email_tokens SET usado=1 WHERE usuario_id=?").run(adminId);
+    // Also re-verify all other users with the same email (cleanup)
+    empDB.raw.prepare("UPDATE usuarios SET email_verificado=0 WHERE email=? AND id!=?").run(email.trim().toLowerCase(), adminId);
+  } else {
+    adminId = 'u' + uid();
+    empDB.insert('usuarios', {
+      id: adminId, nombre: adminNombre, apellido: adminApellido || '', usuario: usuario,
+      email: email.trim().toLowerCase(), password: hash,
+      rol: 'admin', roles: JSON.stringify(['admin']), activo: true,
+      email_verificado: 0, creado: new Date().toISOString(), password_changed_at: new Date().toISOString(),
+    });
+  }
 
-  const empId = uid();
-  empDB.insert('empleados', {
-    id: empId, nombre: adminNombre, apellido: adminApellido || null, email: email.trim().toLowerCase(),
-    fecha_ingreso: new Date().toISOString().substr(0, 10), activo: 1,
-    usuario_id: adminId, creado: new Date().toISOString(),
-  });
-  empDB.insert('sucursales', { id: uid(), nombre: empresa_nombre, dir: '', activo: true, creado: new Date().toISOString() });
+  if (!isReEntry) {
+    const empId = uid();
+    empDB.insert('empleados', {
+      id: empId, nombre: adminNombre, apellido: adminApellido || null, email: email.trim().toLowerCase(),
+      fecha_ingreso: new Date().toISOString().substr(0, 10), activo: 1,
+      usuario_id: adminId, creado: new Date().toISOString(),
+    });
+    empDB.insert('sucursales', { id: uid(), nombre: empresa_nombre, dir: '', activo: true, creado: new Date().toISOString() });
+  } else {
+    // Ensure sucursal exists on re-entry
+    const sucCount = empDB.raw.prepare("SELECT COUNT(*) as n FROM sucursales WHERE activo=1").get();
+    if (!sucCount || sucCount.n === 0) {
+      empDB.insert('sucursales', { id: uid(), nombre: empresa_nombre, dir: '', activo: true, creado: new Date().toISOString() });
+    }
+  }
 
   // Generate verification token
   const verToken = crypto.randomBytes(20).toString('hex');
@@ -889,10 +992,18 @@ router.post('/signup', async (req, res) => {
   try {
     const { getGlobalConfig } = require('../db_master');
     const { decryptValue } = require('../lib/crypto-utils');
-    const h = getGlobalConfig('smtp_host'), p = parseInt(getGlobalConfig('smtp_port'))||465;
-    const u = getGlobalConfig('smtp_user'), ep = getGlobalConfig('smtp_pass');
-    const pass = ep ? decryptValue(ep) : '';
-    const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
+    let h = getGlobalConfig('smtp_host'), p = parseInt(getGlobalConfig('smtp_port'))||465;
+    let u = getGlobalConfig('smtp_user'), ep = getGlobalConfig('smtp_pass');
+    let pass = ep ? decryptValue(ep) : '';
+    // Fallback to env SMTP if global config is missing
+    const { getNotificationSMTP } = require('../lib/send-email');
+    if (!h || !u || !pass) {
+      const envSmtp = getNotificationSMTP();
+      if (envSmtp.host) {
+        h = envSmtp.host; p = envSmtp.port; u = envSmtp.user; pass = envSmtp.pass;
+      }
+    }
+    const appUrl = process.env.APP_URL || (req.get('host') ? (`${req.protocol}://${req.get('host')}`) : 'https://app.flexcrm.com.ar');
     const tutorialesUrl = process.env.TUTORIALES_URL || `${appUrl}/tutoriales`;
     const verifyLink = `${appUrl}/api/auth/verify-email/${verToken}`;
     if (h && u && pass) {
@@ -901,6 +1012,9 @@ router.post('/signup', async (req, res) => {
       const rem = getRemitente();
       await sendEmail(h, p, u, pass, rem.formatted, email, 'Verificá tu email y empezá — FlexCRM', verificationEmail(empresa_nombre, finalCodigo, usuario, verifyLink, appUrl, tutorialesUrl));
       console.log('[Signup] Verification email to:', email);
+    } else {
+      console.error('[Signup] SMTP no configurado para:', email);
+      try { const { saAuditExtended } = require('../db_master'); saAuditExtended('system', 'smtp_error', finalCodigo, 'SMTP global/env no configurado para enviar verificacion', { email }); } catch {}
     }
   } catch(e) {
     console.error('[Signup] Email error:', e.message);
@@ -931,6 +1045,10 @@ router.get('/verify-email/:token', async (req, res) => {
 
     const empDB = getEmpresaDB(foundCodigo);
     empDB.raw.prepare("UPDATE usuarios SET email_verificado=1 WHERE id=?").run(found.usuario_id);
+    // Also verify any duplicate users with the same email (re-entry a una DB vieja)
+    if (found.email) {
+      empDB.raw.prepare("UPDATE usuarios SET email_verificado=1 WHERE email=? AND id!=? AND email_verificado=0").run(found.email, found.usuario_id);
+    }
     empDB.raw.prepare("UPDATE email_tokens SET usado=1 WHERE id=?").run(found.id);
     try { saAuditExtended('system', 'email_verificado', foundCodigo, 'Email: '+found.email, { email: found.email }); } catch {}
 
@@ -1009,6 +1127,19 @@ router.put('/usuarios/:id', authMiddleware, requireRol('admin'), async (req, res
   if (usuario) upd.usuario = usuario;
   if (Array.isArray(roles) && roles.length) upd.roles = roles;
   if (Array.isArray(suc_sesiones_permitidas)) upd.suc_sesiones_permitidas = suc_sesiones_permitidas;
+  // Per-user 2FA override
+  const { force2fa } = req.body;
+  if (force2fa !== undefined) {
+    const existingUser = db.findOne('usuarios', req.params.id);
+    let userData = {};
+    try { userData = typeof existingUser.data === 'string' ? JSON.parse(existingUser.data || '{}') : (existingUser.data || {}); } catch(e) {}
+    if (force2fa === null) {
+      delete userData.force2fa;
+    } else {
+      userData.force2fa = !!force2fa;
+    }
+    upd.data = JSON.stringify(userData);
+  }
   if (password && password.length >= 8) {
     // Check password history (last 5)
     const recentPasswords = db.raw.prepare(
@@ -1095,7 +1226,7 @@ router.post('/usuarios/:id/reset-password', authMiddleware, requireRol('admin'),
     }
   } catch (e) { /* non-blocking */ }
 
-  res.json({ ok: true, mensaje: 'Contrasea restablecida. El usuario debe cambiarla al ingresar.' + (user.email ? ' Se envio por email.' : '') });
+  res.json({ ok: true, temp_password: tempPassword, mensaje: 'Contraseña restablecida. El usuario debe cambiarla al ingresar.' + (user.email ? ' Se envió por email.' : '') });
 });
 
 function buildResetEmailHtml(resetLink, empresaNombre) {
@@ -1271,8 +1402,57 @@ router.post('/firmar-terminos', authMiddleware, async (req, res) => {
   }
 });
 
+// ── Session management ──
+// GET /api/auth/me/sesiones
+router.get('/me/sesiones', authMiddleware, (req, res) => {
+  const userDB = _getDB(req);
+  const sessions = userDB.raw.prepare(
+    "SELECT id, ip, user_agent, creado, ultimo_acceso, activo FROM user_sessions WHERE usuario_id=? ORDER BY ultimo_acceso DESC"
+  ).all(req.user.id);
+  const currentSid = req.user.sid;
+  res.json(sessions.map(s => ({ ...s, es_actual: s.id === currentSid })));
+});
+
+// POST /api/auth/me/sesiones/:sid/cerrar
+router.post('/me/sesiones/:sid/cerrar', authMiddleware, (req, res) => {
+  const userDB = _getDB(req);
+  const session = userDB.raw.prepare("SELECT * FROM user_sessions WHERE id=? AND usuario_id=?").get(req.params.sid, req.user.id);
+  if (!session) return res.status(404).json({ error: 'Sesión no encontrada' });
+  if (session.id === req.user.sid) return res.status(400).json({ error: 'Usá cerrar sesión para cerrar la sesión actual.' });
+  userDB.raw.prepare("UPDATE user_sessions SET activo=0 WHERE id=?").run(req.params.sid);
+  userDB.raw.prepare("UPDATE password_reset_tokens SET usado=1 WHERE token=? AND usado=0").run(session.token_hash);
+  userDB.audit(req.user, req.user.suc_id, 'auth', 'sesion_cerrada', 'Cerró sesión ' + req.params.sid, null, { ip: getIp(req) });
+  res.json({ ok: true });
+});
+
+// POST /api/auth/me/sesiones/cerrar-todas
+router.post('/me/sesiones/cerrar-todas', authMiddleware, (req, res) => {
+  const userDB = _getDB(req);
+  const currentSid = req.user.sid;
+  userDB.raw.prepare("UPDATE user_sessions SET activo=0 WHERE usuario_id=? AND id!=?").run(req.user.id, currentSid || '');
+  userDB.raw.prepare("UPDATE password_reset_tokens SET usado=1 WHERE usuario_id=? AND token NOT IN (SELECT token_hash FROM user_sessions WHERE id=?)").run(req.user.id, currentSid || '');
+  userDB.audit(req.user, req.user.suc_id, 'auth', 'sesiones_cerradas', 'Cerró todas las otras sesiones', null, { ip: getIp(req) });
+  res.json({ ok: true });
+});
+
+// GET /api/auth/me/ultimas-sesiones — historial de ingresos desde audit_log
+router.get('/me/ultimas-sesiones', authMiddleware, (req, res) => {
+  const userDB = _getDB(req);
+  const rows = userDB.raw.prepare(
+    "SELECT fecha, data FROM audit_log WHERE usuario_id=? AND accion='login' ORDER BY fecha DESC LIMIT 20"
+  ).all(req.user.id);
+  const historial = rows.map(r => {
+    let d = {};
+    try { d = JSON.parse(r.data || '{}'); } catch(e) {}
+    return { fecha: r.fecha, ip: d.ip || '', ua: d.ua || '' };
+  });
+  res.json(historial);
+});
+
 module.exports = router;
 module.exports.buildLoginResponse = buildLoginResponse;
 module.exports.generateTokens = generateTokens;
 module.exports.setRefreshCookie = setRefreshCookie;
 module.exports.setAccessCookie = setAccessCookie;
+module.exports.createSessionRecord = createSessionRecord;
+module.exports.enforceSessionLimit = enforceSessionLimit;

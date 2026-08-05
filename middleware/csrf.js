@@ -12,6 +12,7 @@ const SKIP_PATHS = [
   '/api/auth/reset-password',
   '/api/auth/signup',
   '/api/auth/refresh',
+  '/api/auth/verify-email/resend',
   '/api/auth/2fa/verify-login',
   '/api/auth/2fa/setup-forced',
   '/api/auth/2fa/confirm-login',
