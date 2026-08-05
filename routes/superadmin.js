@@ -19,6 +19,7 @@ const { master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa,
         syncEmpresaIntegracionesDesdePlan } = require('../db_master');
 const { getEmpresaDB } = require('../db_sqlite');
 const { validate, superadminLoginSchema } = require('../middleware/validate');
+const { purgeEmpresa } = require('../lib/purgeEmpresa');
 
 const SA_SECRET = process.env.SA_SECRET || (() => { throw new Error('SA_SECRET no configurado. Revisá el archivo .env'); })();
 
@@ -642,12 +643,8 @@ router.delete('/empresas/:id', superAuth, (req, res) => {
     // Hard delete from master DB
     master.prepare("DELETE FROM empresas WHERE id=?").run(empresaId);
 
-    // Delete tenant database file
-    try {
-      const dbPath = path.join(__dirname, '../data', `empresa_${empresaCodigo}.db`);
-      const fs = require('fs');
-      if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
-    } catch(fe) { console.error('[DeleteEmpresa] File error:', fe.message); }
+    // Purge tenant DB files (incluye -wal/-shm) y filas huerfanas en master
+    purgeEmpresa(empresaId, empresaCodigo);
 
     saAudit(req.sadmin.id, 'eliminar_empresa', empresaId, 'Eliminada: ' + empresaNombre + (backupFilename ? ' — Backup: '+backupFilename : ''));
     res.json({ ok: true, backup: backupFilename, mensaje: 'Empresa eliminada.' });
@@ -1030,11 +1027,7 @@ router.post('/solicitudes-eliminacion/:id/resolver', superAuth, async (req, res)
 
     // Hard delete
     master.prepare("DELETE FROM empresas WHERE id=?").run(sol.empresa_id);
-    try {
-      const dbPath = path.join(__dirname, '../data', `empresa_${empresa.codigo}.db`);
-      const fs = require('fs');
-      if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
-    } catch(fe) { console.error('[DeleteSolicitud] File error:', fe.message); }
+    purgeEmpresa(sol.empresa_id, empresa.codigo);
 
     saAudit(req.sadmin.id, 'eliminar_empresa_solicitada', sol.empresa_id,
       'Eliminada por solicitud: ' + empresa.nombre + ' — ' + sol.email + (backupFilename ? ' Backup: '+backupFilename : ''));
