@@ -433,8 +433,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 .sa-sidebar {
   width: 220px; min-height: 100vh;
-  background: var(--sf); color: var(--tx);
-  border-right: 1px solid var(--bd);
+  background: var(--sb-bg); color: var(--sb-tx);
   display: flex; flex-direction: column;
   flex-shrink: 0; transition: transform .25s ease;
 }
@@ -459,21 +458,20 @@ tbody tr:last-child td { border-bottom: none; }
 /* SA Sidebar nav */
 .sa-nav-section {
   font-size: 9px; text-transform: uppercase; letter-spacing: 1px;
-  color: var(--mu); padding: 12px 12px 4px; font-weight: 700;
+  color: var(--sb-mu); padding: 12px 12px 4px; font-weight: 700;
 }
 
 .sa-nav-item {
   display: flex; align-items: center; gap: 10px;
-  padding: 9px 12px; border-left: 3px solid transparent;
-  border-radius: 0 8px 8px 0; cursor: pointer;
-  font-size: 13px; font-weight: 500; color: var(--tx);
-  transition: all .15s; background: none;
+  padding: 9px 12px; border-radius: 8px; cursor: pointer;
+  font-size: 13px; font-weight: 500; color: var(--sb-tx);
+  transition: all .15s; border: none; background: none;
   width: 100%; text-align: left; font-family: inherit;
   min-height: 36px;
 }
 
-.sa-nav-item:hover { background: rgba(15,23,42,.05); }
-.sa-nav-item.active { background: rgba(249,115,22,.12); color: var(--ac); border-left-color: var(--ac); }
+.sa-nav-item:hover { background: rgba(255,255,255,.07); }
+.sa-nav-item.active { background: var(--ac); color: #fff; }
 
 .sa-nav-icon { font-size: 16px; flex-shrink: 0; width: 20px; text-align: center; }
 .sa-nav-label { white-space: nowrap; }
@@ -485,8 +483,7 @@ tbody tr:last-child td { border-bottom: none; }
 
 .sa-sidebar-logo {
   padding: 16px 14px; font-size: 16px; font-weight: 800;
-  color: var(--tx); display: flex; align-items: center; gap: 8px;
-  border-bottom: 1px solid var(--bd); margin-bottom: 8px;
+  color: #fff; display: flex; align-items: center; gap: 8px;
 }
 
 /* SA Table */
