@@ -23,15 +23,15 @@ function ProdTile({ prod, lista, onClick }) {
   const stock = getStock(prod)
   const sinStock = stock <= 0
   return (
-    <div onClick={() => onClick(prod)}   // Always allow click - handle sinStock in addToCart
+    <div onClick={() => onClick(prod)} className="pos-tile"
       style={{ border: `1.5px solid ${sinStock ? 'var(--warn)' : 'var(--bd)'}`, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', background: 'var(--bg)', transition: 'border-color .12s', display: 'flex', flexDirection: 'column', gap: 2 }}
       onMouseEnter={(e) => { e.currentTarget.style.borderColor = sinStock ? 'var(--bad)' : 'var(--ac)'; e.currentTarget.style.background = sinStock ? 'rgba(239,68,68,.04)' : 'rgba(249,115,22,.04)' }}
       onMouseLeave={(e) => { e.currentTarget.style.borderColor = sinStock ? 'var(--warn)' : 'var(--bd)'; e.currentTarget.style.background = 'var(--bg)' }}
     >
-      <div style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prod.favorito ? '⭐ ' : ''}{prod.nombre}</div>
+      <div className="pos-tile-name" style={{ fontWeight: 700, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{prod.favorito ? '⭐ ' : ''}{prod.nombre}</div>
       <div style={{ fontSize: 11, color: 'var(--mu)' }}>{prod.talle ? `T: ${prod.talle}` : ''}{prod.color ? ` · ${prod.color}` : ''}</div>
-      <div style={{ fontWeight: 800, color: 'var(--ac)', fontSize: 15, marginTop: 2 }}>{fmt(precio)}</div>
-      <div style={{ fontSize: 10, color: sinStock ? 'var(--warn)' : 'var(--mu)', marginTop: 1 }}>
+      <div className="pos-tile-price" style={{ fontWeight: 800, color: 'var(--ac)', fontSize: 15, marginTop: 2 }}>{fmt(precio)}</div>
+      <div className="pos-tile-stock" style={{ fontSize: 10, color: sinStock ? 'var(--warn)' : 'var(--mu)', marginTop: 1 }}>
         {sinStock ? '⚠️ Sin stock — genera pedido' : `Stock: ${stock}`}{lista > 1 ? ` · L${lista}` : ''}
       </div>
     </div>
@@ -46,9 +46,9 @@ function CartItem({ item, onQty, onRemove }) {
         <div style={{ fontSize: 11, color: 'var(--mu)' }}>{item.talle ? `T: ${item.talle}` : ''} {fmt(item.precio)} c/u{item.lista > 1 ? ` · L${item.lista}` : ''}</div>
       </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-        <button type="button" onClick={() => onQty(item.prod_id, item.talle, -1)} style={btnQty}>−</button>
+        <button type="button" className="pos-btn-qty" onClick={() => onQty(item.prod_id, item.talle, -1)} style={btnQty}>−</button>
         <span style={{ minWidth: 26, textAlign: 'center', fontWeight: 700, fontSize: 14 }}>{item.cantidad}</span>
-        <button type="button" onClick={() => onQty(item.prod_id, item.talle, +1)} style={btnQty}>+</button>
+        <button type="button" className="pos-btn-qty" onClick={() => onQty(item.prod_id, item.talle, +1)} style={btnQty}>+</button>
       </div>
       <div style={{ width: 68, textAlign: 'right', fontWeight: 700, fontSize: 13, flexShrink: 0 }}>{fmt(item.precio * item.cantidad)}</div>
       <button type="button" onClick={() => onRemove(item.prod_id, item.talle)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mu)', fontSize: 16, padding: '0 2px' }}>✕</button>
@@ -56,7 +56,7 @@ function CartItem({ item, onQty, onRemove }) {
   )
 }
 
-const btnQty = { width: 26, height: 26, borderRadius: 6, border: '1.5px solid var(--bd)', background: 'var(--sf)', cursor: 'pointer', fontWeight: 700, fontSize: 15, className: 'pos-btn-qty' }
+const btnQty = { width: 26, height: 26, borderRadius: 6, border: '1.5px solid var(--bd)', background: 'var(--sf)', cursor: 'pointer', fontWeight: 700, fontSize: 15 }
 const LISTA_LABELS = { 1: 'Lista 1', 2: 'Lista 2', 3: 'Lista 3' }
 
 function isMobileDevice() {
@@ -93,7 +93,7 @@ export function POS() {
     api('GET', '/clientes').then((d) => { if (Array.isArray(d)) setClis(d) }).catch(() => {})
   }, [sucSesion])
 
-  useEffect(() => { searchRef.current?.focus() }, [])
+  useEffect(() => { if (!esMovil) searchRef.current?.focus() }, [])
 
   const lista = cliente?.lista || 1
 
@@ -115,24 +115,26 @@ export function POS() {
     ? allClis.filter((c) => (c.nombre + ' ' + (c.apellido || '') + ' ' + (c.tel || '')).toLowerCase().includes(buscadorCli.toLowerCase())).slice(0, 7)
     : []
 
-  function addToCart(prod) {
+  function addToCart(prod, cant = 1) {
     const precio = precioLista(prod, lista)
     const stock = getStock(prod)
     if (stock <= 0) {
       toast('⚠️ Sin stock — se generará pedido pendiente al registrar', '')
+    } else if (cant > stock) {
+      toast(`⚠️ Pediste ${cant}, hay ${stock}. Se generará pedido por la diferencia.`, '')
     } else if (stock < 3) {
       toast(`⚠️ Stock bajo: ${stock} unidades disponibles`, '')
     }
     setCart((prev) => {
       const ex = prev.find((i) => i.prod_id === prod.id && i.talle === prod.talle)
       if (ex) {
-        const newQty = ex.cantidad + 1
-        if (newQty > stock && stock > 0) toast('⚠️ Cantidad supera el stock disponible — se generará pedido', '')
+        const newQty = ex.cantidad + cant
+        if (newQty > stock && stock > 0) toast('⚠️ Cantidad supera el stock — se generará pedido', '')
         return prev.map((i) => i.prod_id === prod.id && i.talle === prod.talle ? { ...i, cantidad: newQty } : i)
       }
-      return [...prev, { prod_id: prod.id, nombre: prod.nombre, talle: prod.talle, precio, costo: prod.costo || 0, cantidad: 1, lista, sinStock: stock <= 0 }]
+      return [...prev, { prod_id: prod.id, nombre: prod.nombre, talle: prod.talle, precio, costo: prod.costo || 0, cantidad: cant, lista, sinStock: stock <= 0 }]
     })
-    setSearch(''); searchRef.current?.focus()
+    if (!esMovil) { setSearch(''); searchRef.current?.focus() }
   }
 
   function updateQty(prod_id, talle, delta) {
@@ -151,17 +153,15 @@ export function POS() {
     if (exact) addToCart(exact)
   }
 
-  // Lector USB / cámara: matchea código de barras o SKU exacto
   function cargarPorCodigo(codigo) {
     const prod = findProductByCodigo(allProds, codigo)
     if (!prod) {
       const q = normalizarCodigo(codigo)
       if (q) toast(`Código "${q}" no encontrado`, 'err')
-      setSearch(''); searchRef.current?.focus()
-      return null
+      if (!esMovil) { setSearch(''); searchRef.current?.focus() }
+      return
     }
     addToCart(prod)
-    return prod
   }
 
   function handleKeyDown(e) {
@@ -211,7 +211,7 @@ export function POS() {
         <div style={{ display: 'flex', gap: 6 }}>
           <div style={{ position: 'relative', flex: 1 }}>
             <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--mu)' }}>🔍</span>
-            <input ref={searchRef} value={search} onChange={(e) => handleSearch(e.target.value)} onKeyDown={handleKeyDown} placeholder="🔍 Buscar producto · 📷 Escanear código" autoComplete="off" className="pos-search" style={{ paddingLeft: 38, fontSize: 14, fontWeight: 500, width: '100%' }} />
+            <input ref={searchRef} value={search} onChange={(e) => handleSearch(e.target.value)} onKeyDown={handleKeyDown} placeholder="Buscar producto..." autoComplete="off" className="pos-search" style={{ paddingLeft: 38, fontSize: 14, fontWeight: 500, width: '100%' }} />
           </div>
           {esMovil && (
             <button type="button" onClick={() => setEscaneando(true)} aria-label="Escanear con la cámara"
@@ -327,7 +327,11 @@ export function POS() {
 
     </div>
 
-    <ScannerModal open={escaneando} onClose={() => setEscaneando(false)} onScan={cargarPorCodigo} />
+    <ScannerModal open={escaneando} onClose={() => setEscaneando(false)} onResolveProducto={(codigo) => {
+      const prod = findProductByCodigo(allProds, codigo)
+      if (!prod) return null
+      return { prod, precio: precioLista(prod, lista), stock: getStock(prod) }
+    }} onAgregar={(prod, cant) => addToCart(prod, cant)} />
     </>
   )
 }
