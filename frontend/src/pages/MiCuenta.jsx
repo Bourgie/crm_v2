@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import { useApi } from '../hooks/useApi'
 import { useAuth, useToast } from '../store'
 import { PageHeader, Field, Loader } from '../components/UI'
@@ -149,6 +150,16 @@ export function MiCuenta() {
         <button type="button" className="btn btn-primary" onClick={cambiarPass} disabled={saving} style={{ marginTop: 8 }}>
           {saving ? '⏳ Cambiando...' : 'Cambiar contraseña'}
         </button>
+      </div>
+
+      <div className="card" style={{ marginBottom: 16 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 6 }}>🔐 Autenticación en dos pasos (2FA)</div>
+        <p style={{ fontSize: 12, color: 'var(--mu)', marginBottom: 12 }}>
+          Agregá una capa extra de seguridad: además de tu contraseña, se pedirá un código de 6 dígitos al ingresar.
+        </p>
+        <Link to="/app/2fa" className="btn btn-primary">
+          Administrar 2FA
+        </Link>
       </div>
 
       {me?.rol === 'admin' && (

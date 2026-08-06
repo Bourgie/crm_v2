@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const rateLimit = require('express-rate-limit');
 const { master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa,
         getPlanes, getPlan, getModulos, saAudit,

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import QRCode from 'qrcode'
 
 const API = '/api/superadmin'
 
@@ -61,6 +62,7 @@ const SIDEBAR = [
   ['legal', '⚖️ Legal'],
   ['notificaciones', '🔔 Notificaciones'],
   ['roles', '👤 Roles'],
+  ['seguridad', '🔐 Seguridad'],
   ['audit', '📋 Auditoría'],
 ]
 
@@ -73,6 +75,18 @@ const S = {
   select: {},
   textarea: { resize: 'vertical' },
   chip: { display:'inline-flex',alignItems:'center',gap:4,padding:'2px 10px',borderRadius:99,fontSize:11,fontWeight:600 },
+}
+
+function SaQR({ otpauth }) {
+  const ref = useRef(null)
+  useEffect(() => {
+    if (ref.current && otpauth) {
+      QRCode.toCanvas(ref.current, otpauth, { width: 220, margin: 2 }, (err) => {
+        if (err) console.error('QR error:', err)
+      })
+    }
+  }, [otpauth])
+  return <canvas ref={ref} style={{ background: '#fff', borderRadius: 8 }} />
 }
 
 export default function Superadmin() {
@@ -123,6 +137,15 @@ export default function Superadmin() {
   const [sa2faQr, setSa2faQr] = useState(null)
   const [sa2faSecret, setSa2faSecret] = useState(null)
   const [saConfiar, setSaConfiar] = useState(true)
+
+  // Panel Seguridad (2FA propio del superadmin)
+  const [saSecEnabled, setSaSecEnabled] = useState(null)
+  const [saSecSetup, setSaSecSetup] = useState(null)
+  const [saSecCode, setSaSecCode] = useState('')
+  const [saSecBackup, setSaSecBackup] = useState(null)
+  const [saSecDevices, setSaSecDevices] = useState(null)
+  const [saSecLoading, setSaSecLoading] = useState(false)
+  const [saSecErr, setSaSecErr] = useState('')
 
   const [empModal, setEmpModal] = useState(null)
   const [empForm, setEmpForm] = useState({ codigo: '', nombre: '', rubro: 'general', plan_id: '', vencimiento: '', umax: '5', smax: '2', email: '', password: '', mods_extra: [], mods_bloqueados: [] })
@@ -259,6 +282,57 @@ export default function Superadmin() {
       }
     } catch(e) { setLoginErr(e.message) }
     finally { setLoginLoading(false) }
+  }
+
+  async function saSecLoad() {
+    try {
+      const [status, devs] = await Promise.all([
+        saApi('GET', '/2fa/status').catch(() => ({ enabled: false })),
+        saApi('GET', '/2fa/devices').catch(() => ({ devices: [] })),
+      ])
+      setSaSecEnabled(!!status.enabled)
+      setSaSecDevices(devs.devices || [])
+    } catch(e) { setSaSecErr(e.message) }
+  }
+
+  async function saSecStartSetup() {
+    setSaSecLoading(true); setSaSecErr('')
+    try {
+      const r = await saApi('POST', '/2fa/setup')
+      setSaSecSetup({ otpauth: r.otpauth, secret: r.secret })
+    } catch(e) { setSaSecErr(e.message) }
+    finally { setSaSecLoading(false) }
+  }
+
+  async function saSecConfirm() {
+    if (saSecCode.length < 6) { setSaSecErr('Ingresá el código de 6 dígitos'); return }
+    setSaSecLoading(true); setSaSecErr('')
+    try {
+      const r = await saApi('POST', '/2fa/confirm', { code: saSecCode })
+      setSaSecEnabled(true); setSaSecSetup(null); setSaSecCode(''); setSaSecBackup(r.backup_codes || [])
+    } catch(e) { setSaSecErr(e.message) }
+    finally { setSaSecLoading(false) }
+  }
+
+  async function saSecDisable() {
+    if (!window.confirm('¿Deshabilitar la autenticación en dos pasos del superadmin?')) return
+    setSaSecLoading(true); setSaSecErr('')
+    try {
+      await saApi('POST', '/2fa/disable')
+      setSaSecEnabled(false); setSaSecBackup(null)
+    } catch(e) { setSaSecErr(e.message) }
+    finally { setSaSecLoading(false) }
+  }
+
+  async function saSecRevokeDevice(index) {
+    try { await saApi('POST', '/2fa/devices/revoke', { index }); const d = await saApi('GET', '/2fa/devices'); setSaSecDevices(d.devices || []) }
+    catch(e) { setSaSecErr(e.message) }
+  }
+
+  async function saSecRevokeAll() {
+    if (!window.confirm('¿Revocar todos los dispositivos confiables? Se pedirá 2FA en cada uno nuevamente.')) return
+    try { await saApi('POST', '/2fa/devices/revocar-todos'); setSaSecDevices([]) }
+    catch(e) { setSaSecErr(e.message) }
   }
 
   async function saLogout() { try { await saApi('POST', '/logout') } catch {} setLogged(false); setUser(null); setImpersonating(null) }
@@ -627,6 +701,8 @@ export default function Superadmin() {
   }
   useEffect(() => { if (tab === 'notificaciones' && !notifHistorial) loadNotifHistorial(); }, [tab, notifHistorial]);
 
+  useEffect(() => { if (logged && tab === 'seguridad') saSecLoad(); }, [tab, logged]);
+
   async function savePlan() {
     if (!planForm.codigo.trim() || !planForm.nombre.trim()) { alert('Código y nombre requeridos'); return }
     setPlanSaving(true)
@@ -753,7 +829,9 @@ export default function Superadmin() {
           {sa2faQr && (
             <div style={{ marginBottom: 12, textAlign: 'center', background: '#fff', borderRadius: 8, padding: 12 }}>
               <p style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 8 }}>Escaneá este código QR:</p>
-              <canvas ref={useRef()} id="sa-qr-canvas" style={{ display: 'none' }} />
+              <div style={{ display: 'inline-block', background: '#fff', padding: 12, borderRadius: 12 }}>
+                <SaQR otpauth={sa2faQr} />
+              </div>
               <div style={{ fontFamily: 'monospace', fontSize: 11, wordBreak: 'break-all', marginTop: 8, color: 'var(--mu)' }}>
                 Clave: {sa2faSecret}
               </div>
@@ -1225,6 +1303,102 @@ export default function Superadmin() {
                     </div>
                   )
                 })}
+              </div>
+            </div>
+          )}
+
+          {/* ═══════ SEGURIDAD ═══════ */}
+          {tab === 'seguridad' && (
+            <div style={{ maxWidth: 760 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 16 }}>🔒 Seguridad</h3>
+
+              <div className="card" style={{ marginBottom: 16, maxWidth: 540 }}>
+                <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>🔐 Autenticación en dos pasos (2FA)</div>
+                {saSecErr && (
+                  <div style={{ color: 'var(--bad)', fontSize: 12, marginBottom: 12, background: 'rgba(239,68,68,.06)', border: '1px solid rgba(239,68,68,.2)', borderRadius: 8, padding: '8px 12px' }}>⚠️ {saSecErr}</div>
+                )}
+                {saSecBackup && (
+                  <div style={{ background: 'var(--sf)', borderRadius: 8, padding: 12, marginBottom: 12, border: '1px solid var(--bd)' }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--mu)', marginBottom: 8 }}>Códigos de respaldo (10) — guardalos en un lugar seguro</div>
+                    <div style={{ fontFamily: 'monospace', fontSize: 13, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                      {saSecBackup.map((c, i) => (
+                        <div key={c + i} style={{ background: '#0f172a', color: '#e2e8f0', padding: '4px 8px', borderRadius: 6, textAlign: 'center' }}>
+                          {c.match(/.{1,4}/g).join('-')}
+                        </div>
+                      ))}
+                    </div>
+                    <button type="button" className="btn btn-sm btn-secondary" style={{ marginTop: 8 }}
+                      onClick={() => { navigator.clipboard?.writeText(saSecBackup.join('\n')) }}>📋 Copiar</button>
+                  </div>
+                )}
+                {saSecEnabled === null ? (
+                  <div style={{ fontSize: 12, color: 'var(--mu)' }}>Cargando...</div>
+                ) : saSecEnabled ? (
+                  <div>
+                    <div style={{ background: 'rgba(34,197,94,.08)', border: '1px solid rgba(34,197,94,.3)', borderRadius: 8, padding: '10px 14px', fontSize: 13, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span>✅</span>
+                      <span style={{ fontWeight: 600, color: 'var(--ok)' }}>2FA está activo</span>
+                    </div>
+                    <button type="button" className="btn btn-secondary" onClick={saSecDisable} disabled={saSecLoading} style={{ color: 'var(--bad)' }}>
+                      {saSecLoading ? '⏳' : 'Deshabilitar 2FA'}
+                    </button>
+                  </div>
+                ) : saSecSetup ? (
+                  <div>
+                    <p style={{ fontSize: 12, color: 'var(--mu)', marginBottom: 12 }}>Escaneá este código QR con tu app de autenticación (Google Authenticator, Authy, etc.)</p>
+                    <div style={{ textAlign: 'center', marginBottom: 12 }}>
+                      <div style={{ display: 'inline-block', background: '#fff', padding: 10, borderRadius: 12 }}>
+                        <SaQR otpauth={saSecSetup.otpauth} />
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 12 }}>
+                      O ingresá esta clave manualmente: <strong style={{ fontFamily: 'monospace' }}>{saSecSetup.secret}</strong>
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                      <input value={saSecCode} onChange={e => setSaSecCode(e.target.value)} placeholder="Código de 6 dígitos" maxLength={6} inputMode="numeric"
+                        style={{ width: '100%', textAlign: 'center', fontSize: 20, letterSpacing: 6, fontFamily: 'monospace' }} />
+                    </div>
+                    <button type="button" className="btn btn-primary" onClick={saSecConfirm} disabled={saSecLoading || saSecCode.length < 6} style={{ width: '100%' }}>
+                      {saSecLoading ? '⏳' : 'Verificar y activar'}
+                    </button>
+                    <button type="button" className="btn btn-secondary" style={{ width: '100%', marginTop: 8 }}
+                      onClick={() => { setSaSecSetup(null); setSaSecCode(''); setSaSecErr('') }}>← Cancelar</button>
+                  </div>
+                ) : (
+                  <div>
+                    <p style={{ fontSize: 12, color: 'var(--mu)', marginBottom: 12 }}>
+                      Al activar 2FA, además de tu contraseña necesitarás un código de 6 dígitos para ingresar al panel.
+                    </p>
+                    <button type="button" className="btn btn-primary" onClick={saSecStartSetup} disabled={saSecLoading}>
+                      {saSecLoading ? '⏳' : 'Configurar 2FA →'}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div className="card" style={{ maxWidth: 540 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>💻 Dispositivos confiables</div>
+                  {saSecDevices?.length > 0 && (
+                    <button type="button" className="btn btn-sm btn-secondary" onClick={saSecRevokeAll} style={{ fontSize: 11 }}>Revocar todos</button>
+                  )}
+                </div>
+                {saSecDevices === null ? (
+                  <div style={{ fontSize: 12, color: 'var(--mu)' }}>Cargando...</div>
+                ) : saSecDevices.length === 0 ? (
+                  <div style={{ fontSize: 12, color: 'var(--mu)' }}>Sin dispositivos confiables registrados.</div>
+                ) : saSecDevices.map((d, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--bd)', fontSize: 12 }}>
+                    <div style={{ flex: 1, marginRight: 12 }}>
+                      <div style={{ fontFamily: 'monospace', fontSize: 11 }}>{d.ip || '—'}</div>
+                      <div style={{ color: 'var(--mu)', fontSize: 10 }}>{d.ua || '—'} · {d.ultimo_uso ? 'último uso ' + new Date(d.ultimo_uso).toLocaleString('es-AR') : ''}</div>
+                    </div>
+                    <button type="button" className="btn btn-sm btn-secondary" style={{ fontSize: 10 }} onClick={() => saSecRevokeDevice(i)}>Revocar</button>
+                  </div>
+                ))}
+                <p style={{ fontSize: 11, color: 'var(--mu)', marginTop: 12 }}>
+                  Los dispositivos confiables omiten el 2FA durante 90 días. Al revocarlos, se volverá a pedir el código.
+                </p>
               </div>
             </div>
           )}
