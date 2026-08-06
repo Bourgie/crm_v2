@@ -271,6 +271,7 @@ router.post('/2fa/setup-forced', (req, res) => {
 // POST /api/superadmin/2fa/confirm-forced — confirma 2FA + completa login sin sesión
 router.post('/2fa/confirm-forced', validate(require('../middleware/validate').twofaConfirmSchema), (req, res) => {
   const { temp_token, code, confiar_dispositivo } = req.body;
+  if (!temp_token) return res.status(400).json({ error: 'Token temporal requerido' });
   let payload;
   try { payload = jwt.verify(temp_token, SA_SECRET); }
   catch (e) { return res.status(401).json({ error: 'Token temporal inválido o expirado' }); }

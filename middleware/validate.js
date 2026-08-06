@@ -53,6 +53,8 @@ const superadminLoginSchema = z.object({
 const twofaSetupSchema = z.object({}).optional();
 
 const twofaConfirmSchema = z.object({
+  temp_token: z.string().optional(),
+  confiar_dispositivo: z.boolean().optional(),
   code: z.string().min(6, 'Código de 6 dígitos').max(6, 'Código de 6 dígitos'),
 });
 
