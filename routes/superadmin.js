@@ -821,6 +821,9 @@ router.delete('/empresas/:id', superAuth, (req, res) => {
     // Purge tenant DB files (incluye -wal/-shm) y filas huerfanas en master
     purgeEmpresa(empresaId, empresaCodigo);
 
+    // Invalidate DB cache so stale references don't survive
+    try { const { _dbCache } = require('../db_sqlite'); delete _dbCache[empresaCodigo]; } catch(e) {}
+
     saAudit(req.sadmin.id, 'eliminar_empresa', empresaId, 'Eliminada: ' + empresaNombre + (backupFilename ? ' — Backup: '+backupFilename : ''));
     res.json({ ok: true, backup: backupFilename, mensaje: 'Empresa eliminada.' });
   } catch(err) {

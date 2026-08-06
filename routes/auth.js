@@ -174,6 +174,18 @@ const loginIpLimiter = rateLimit({
 router.post('/login', loginIpLimiter, validate(loginSchema), async (req, res) => {
   const { usuario, password, empresa } = req.body;
   const { getEmpresaDB } = require('../db_sqlite');
+
+  // Validate empresa exists in master before touching tenant DB
+  let empresaMeta = null;
+  try {
+    const { getEmpresa } = require('../db_master');
+    empresaMeta = getEmpresa(empresa);
+  } catch(e) {}
+  if (!empresaMeta || !empresaMeta.activo) {
+    await bcrypt.compare(password, '$2a$10$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX').catch(()=>{});
+    return res.status(401).json({ error: 'Usuario o contraseña incorrectos' });
+  }
+
   const userDB = getEmpresaDB(empresa);
   const lockKey = getLoginKey(empresa, usuario);
 
@@ -376,9 +388,11 @@ router.post('/login', loginIpLimiter, validate(loginSchema), async (req, res) =>
   });
 
   // Create session record
-  const sid = createSessionRecord(userDB, user.id, refreshHash, req);
-  // Re-issue token now with sid
-  const finalPayload = { id: user.id, rol: user.rol, empresa: empresa, sid };
+  let sid = null;
+  try { sid = createSessionRecord(userDB, user.id, refreshHash, req); } catch(e) { console.error('[Session] createSessionRecord failed:', e.message); }
+  // Re-issue token with sid if available
+  const finalPayload = { id: user.id, rol: user.rol, empresa: empresa };
+  if (sid) finalPayload.sid = sid;
   const finalAccessToken = jwt.sign(finalPayload, getSecret(), { expiresIn: ACCESS_TOKEN_EXPIRY });
 
   setRefreshCookie(res, refreshToken);

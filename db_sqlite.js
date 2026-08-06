@@ -636,6 +636,11 @@ sqlite.prepare("INSERT OR REPLACE INTO schema_version(version) VALUES(?)").run(C
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS consentimientos_empresa (id TEXT PRIMARY KEY, empresa_codigo TEXT NOT NULL, tipo TEXT NOT NULL, version TEXT NOT NULL, aceptado_por TEXT NOT NULL, ip TEXT, user_agent TEXT, creado TEXT NOT NULL)"); } catch(e) {}
 try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_consentimiento_empresa ON consentimientos_empresa(empresa_codigo, tipo)"); } catch(e) {}
 
+// Security tables — always ensure they exist on every DB (non-gated)
+try { sqlite.exec("CREATE TABLE IF NOT EXISTS user_2fa (user_id TEXT PRIMARY KEY, secret TEXT NOT NULL, enabled INTEGER DEFAULT 0, created_at TEXT)"); } catch(e) {}
+try { sqlite.exec("CREATE TABLE IF NOT EXISTS user_2fa_backup_codes (id TEXT PRIMARY KEY, user_id TEXT NOT NULL, code_hash TEXT NOT NULL, used INTEGER DEFAULT 0, created_at TEXT)"); } catch(e) {}
+try { sqlite.exec("CREATE TABLE IF NOT EXISTS user_sessions (id TEXT PRIMARY KEY, usuario_id TEXT NOT NULL, token_hash TEXT, ip TEXT, user_agent TEXT, creado TEXT, ultimo_acceso TEXT, activo INTEGER DEFAULT 1)"); } catch(e) {}
+
 // Comprobantes de transferencia bancaria (unicidad cross-sucursal)
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS comprobantes_transferencia (id TEXT PRIMARY KEY, nro TEXT NOT NULL, nro_normalizado TEXT NOT NULL, venta_id TEXT, ctacte_mov_id TEXT, cliente_id TEXT, suc_id TEXT, monto REAL, fecha TEXT, usuario TEXT, usuario_id TEXT, anulado INTEGER DEFAULT 0)"); } catch(e) {}
 try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_comp_transf ON comprobantes_transferencia(nro_normalizado) WHERE anulado = 0"); } catch(e) {}
