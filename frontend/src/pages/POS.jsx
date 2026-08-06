@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useApi } from '../hooks/useApi'
 import { useApp, useToast } from '../store'
+import { ScannerModal } from '../components/ScannerModal'
+import { findProductByCodigo, normalizarCodigo } from '../utils/codigo'
 
 const fmt = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })
 
@@ -57,6 +59,12 @@ function CartItem({ item, onQty, onRemove }) {
 const btnQty = { width: 26, height: 26, borderRadius: 6, border: '1.5px solid var(--bd)', background: 'var(--sf)', cursor: 'pointer', fontWeight: 700, fontSize: 15, className: 'pos-btn-qty' }
 const LISTA_LABELS = { 1: 'Lista 1', 2: 'Lista 2', 3: 'Lista 3' }
 
+function isMobileDevice() {
+  if (typeof navigator === 'undefined') return false
+  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '')) return true
+  return /MacIntel/i.test(navigator.platform || '') && navigator.maxTouchPoints > 1
+}
+
 export function POS() {
   const { api } = useApi()
   const { toast } = useToast()
@@ -73,8 +81,11 @@ export function POS() {
   const [envioDesc, setEnvioDesc] = useState('')
   const [obs, setObs] = useState('')
   const [procesando, setProcesando] = useState(false)
+  const [escaneando, setEscaneando] = useState(false)
 
   const searchRef = useRef(null)
+
+  const esMovil = isMobileDevice()
 
   useEffect(() => {
     if (!sucSesion) return
@@ -136,8 +147,27 @@ export function POS() {
 
   function handleSearch(val) {
     setSearch(val)
-    const exact = allProds.find((p) => p.sku && p.sku.toLowerCase() === val.toLowerCase() && p.activo !== false)
+    const exact = findProductByCodigo(allProds, val)
     if (exact) addToCart(exact)
+  }
+
+  // Lector USB / cámara: matchea código de barras o SKU exacto
+  function cargarPorCodigo(codigo) {
+    const prod = findProductByCodigo(allProds, codigo)
+    if (!prod) {
+      const q = normalizarCodigo(codigo)
+      if (q) toast(`Código "${q}" no encontrado`, 'err')
+      setSearch(''); searchRef.current?.focus()
+      return null
+    }
+    addToCart(prod)
+    return prod
+  }
+
+  function handleKeyDown(e) {
+    if (e.key !== 'Enter') return
+    e.preventDefault()
+    if (search) cargarPorCodigo(search)
   }
 
   const subtotal = cart.reduce((a, i) => a + i.precio * i.cantidad, 0)
@@ -178,9 +208,17 @@ export function POS() {
     <div className="pos-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 12, height: 'calc(100vh - 92px)' }}>
       {/* ── Izquierda: búsqueda + grilla ── */}
       <div className="pos-products" style={{ display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden' }}>
-        <div style={{ position: 'relative' }}>
-          <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--mu)' }}>🔍</span>
-          <input ref={searchRef} value={search} onChange={(e) => handleSearch(e.target.value)} placeholder="🔍 Buscar producto · 📷 Escanear código" autoComplete="off" className="pos-search" style={{ paddingLeft: 38, fontSize: 14, fontWeight: 500 }} />
+        <div style={{ display: 'flex', gap: 6 }}>
+          <div style={{ position: 'relative', flex: 1 }}>
+            <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--mu)' }}>🔍</span>
+            <input ref={searchRef} value={search} onChange={(e) => handleSearch(e.target.value)} onKeyDown={handleKeyDown} placeholder="🔍 Buscar producto · 📷 Escanear código" autoComplete="off" className="pos-search" style={{ paddingLeft: 38, fontSize: 14, fontWeight: 500, width: '100%' }} />
+          </div>
+          {esMovil && (
+            <button type="button" onClick={() => setEscaneando(true)} aria-label="Escanear con la cámara"
+              style={{ flexShrink: 0, padding: '0 14px', borderRadius: 10, border: '1.5px solid var(--ac)', background: 'transparent', color: 'var(--ac)', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              📷 Escanear
+            </button>
+          )}
         </div>
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {prodsFiltrados.length === 0 ? (
@@ -288,6 +326,8 @@ export function POS() {
       </div>
 
     </div>
+
+    <ScannerModal open={escaneando} onClose={() => setEscaneando(false)} onScan={cargarPorCodigo} />
     </>
   )
 }
