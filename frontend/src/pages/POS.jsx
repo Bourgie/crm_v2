@@ -100,13 +100,16 @@ export function POS() {
   const prodsFiltrados = allProds
     .filter((p) => {
       if (p.activo === false) return false
+      if (esMovil && p.favorito) return false
       if (!search) return true
       const q = search.toLowerCase()
       return (p.nombre + ' ' + (p.sku || '') + ' ' + (p.talle || '') + ' ' + (p.categoria || '')).toLowerCase().includes(q)
     })
     .sort((a, b) => {
-      if (a.favorito && !b.favorito) return -1
-      if (!a.favorito && b.favorito) return 1
+      if (!esMovil) {
+        if (a.favorito && !b.favorito) return -1
+        if (!a.favorito && b.favorito) return 1
+      }
       return (a.nombre || '').localeCompare(b.nombre || '')
     })
     .slice(0, 60)
@@ -232,7 +235,16 @@ export function POS() {
       </div>
 
       {/* ── Derecha: carrito ── */}
-      <div className="pos-cart" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden' }}>
+      {esMovil && cart.length === 0 ? (
+        <div style={{ order: 2, position: 'sticky', bottom: 0, zIndex: 20, background: 'var(--bg)', borderTop: '1px solid var(--bd)', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 13, color: 'var(--mu)' }}>🛒 Tocá un producto para agregar</span>
+          <button type="button" onClick={() => navigate('/app/caja')}
+            style={{ padding: '5px 12px', borderRadius: 8, border: '1.5px solid var(--bd)', background: 'transparent', color: 'var(--mu)', fontSize: 11, cursor: 'pointer' }}>
+            💰 Caja
+          </button>
+        </div>
+      ) : (
+        <div className="pos-cart" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden' }}>
         {/* Cliente */}
         <div className="pos-cart-header" style={{ padding: '10px 14px', borderBottom: '1px solid var(--bd)', background: 'var(--sf)', position: 'relative' }}>
           {cliente ? (
@@ -324,6 +336,7 @@ export function POS() {
           )}
         </div>
       </div>
+      )}
 
     </div>
 
