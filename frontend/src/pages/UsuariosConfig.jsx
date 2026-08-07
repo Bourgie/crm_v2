@@ -255,6 +255,7 @@ export function Config() {
     password_expira_dias:'0', password_historial_count:'5',
     '2fa_obligatorio':'0',
     login_ip_restriccion:'0', login_ips_autorizadas:'[]',
+    ticketera2_habilitada:'0', ticketera2_tipo:'control',
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -313,7 +314,7 @@ export function Config() {
 
   if (loading) return <Loader/>
 
-  const TABS = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['email','📧 Email'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['seguridad','🔒 Seguridad'],['webhooks','🔗 Webhooks'],['plan','📦 Plan'],['backups','💾 Backups'],['ayuda','🆘 Ayuda']]
+  const TABS = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['email','📧 Email'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['impresion','🖨️ Impresión'],['seguridad','🔒 Seguridad'],['webhooks','🔗 Webhooks'],['plan','📦 Plan'],['backups','💾 Backups'],['ayuda','🆘 Ayuda']]
 
   return (
     <div>
@@ -385,6 +386,35 @@ export function Config() {
               </div>
             )}
             <button type="button" className="btn btn-secondary" onClick={testEmail} disabled={emailTesting} style={{marginBottom:8}}>{emailTesting ? '⏳ Probando...' : '📨 Probar conexión'}</button>
+          </>
+        )}
+
+        {tab==='impresion' && (
+          <>
+            <div style={{background:'rgba(99,102,241,.06)',border:'1px solid rgba(99,102,241,.2)',borderRadius:8,padding:'10px 14px',fontSize:13,marginBottom:14}}>
+              🖨️ Configurá impresoras adicionales. La 2da ticketera imprime un ticket de control/preparación al cobrar cada venta.
+            </div>
+            <Field label="2da Ticketera (control / preparación)">
+              <select value={form.ticketera2_habilitada} onChange={set('ticketera2_habilitada')}>
+                <option value="0">Deshabilitada</option>
+                <option value="1">Habilitada</option>
+              </select>
+            </Field>
+            {form.ticketera2_habilitada === '1' && (
+              <>
+                <Field label="Tipo de ticket">
+                  <select value={form.ticketera2_tipo} onChange={set('ticketera2_tipo')}>
+                    <option value="control">Control / Preparación</option>
+                  </select>
+                </Field>
+                <div style={{fontSize:11,color:'var(--mu)',padding:'8px 12px',background:'var(--sf)',borderRadius:6}}>
+                  Al cobrar una venta en <strong>Caja</strong> se ofrecerá la opción de imprimir un ticket de control en la 2da impresora.
+                  El ticket incluye: nombre del cliente, número de pedido (Venta #) y el detalle de productos.
+                  Útil para cocina, depósito, taller o cualquier área de preparación.
+                  Conectá la 2da impresora desde la sección <strong>Caja</strong> (botón 🖨️ 2da Impresora).
+                </div>
+              </>
+            )}
           </>
         )}
 

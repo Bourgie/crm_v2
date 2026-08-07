@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useApi } from '../hooks/useApi'
 import { useApp, useToast } from '../store'
 import { Modal } from '../components/Modal'
+import { ScannerModal } from '../components/ScannerModal'
 import { SearchBar, PageHeader, Field, ConfirmDialog, EmptyRow, Loader, Pagination } from '../components/UI'
 import { exportExcel, importExcel, pickFile } from '../utils/excel'
 import { fetchWithCache } from '../hooks/useOfflineCache'
@@ -90,6 +91,8 @@ export function Productos() {
   const [variantModal, setVariantModal] = useState(null)
   const [varForm, setVarForm] = useState({nombre:'', sku:'', atributos:'{}', costo:'', precio_l1:'', precio_l2:'', precio_l3:''})
   const [varSaving, setVarSaving] = useState(false)
+  const [scanSkuOpen, setScanSkuOpen] = useState(false)
+  const [scanVarOpen, setScanVarOpen] = useState(false)
   const [varAttrKeys, setVarAttrKeys] = useState(['talle','color'])
 
   const [rubroAtributos, setRubroAtributos] = useState([])
@@ -508,7 +511,15 @@ export function Productos() {
           <>
             <div className="fr">
               <Field label="Nombre *"><input value={form.nombre} onChange={set('nombre')} placeholder="Nombre del producto" /></Field>
-              <Field label="SKU / Código"><input value={form.sku} onChange={set('sku')} placeholder="Código de barras o SKU" style={{ fontFamily: 'monospace' }} /></Field>
+              <Field label="SKU / Código">
+                <div style={{ display: 'flex', gap: 4 }}>
+                  <input value={form.sku} onChange={set('sku')} placeholder="Código de barras o SKU" style={{ fontFamily: 'monospace', flex: 1 }} />
+                  <button type="button" onClick={() => setScanSkuOpen(true)} aria-label="Escanear código de barras"
+                    style={{ flexShrink: 0, padding: '0 10px', borderRadius: 8, border: '1.5px solid var(--ac)', background: 'transparent', color: 'var(--ac)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+                    📷
+                  </button>
+                </div>
+              </Field>
             </div>
             <div className="fr">
               <Field label="Categoría">
@@ -728,7 +739,15 @@ export function Productos() {
         </>}
       >
         <Field label="Nombre de la variante"><input value={varForm.nombre} onChange={e => setVarForm(p=>({...p, nombre: e.target.value}))} placeholder="Ej: Body 0-3m Blanco" /></Field>
-        <Field label="SKU / Código"><input value={varForm.sku} onChange={e => setVarForm(p=>({...p, sku: e.target.value}))} placeholder="Código único" style={{fontFamily:'monospace'}} /></Field>
+        <Field label="SKU / Código">
+          <div style={{ display: 'flex', gap: 4 }}>
+            <input value={varForm.sku} onChange={e => setVarForm(p=>({...p, sku: e.target.value}))} placeholder="Código único" style={{fontFamily:'monospace', flex: 1}} />
+            <button type="button" onClick={() => setScanVarOpen(true)} aria-label="Escanear código de barras"
+              style={{ flexShrink: 0, padding: '0 10px', borderRadius: 8, border: '1.5px solid var(--ac)', background: 'transparent', color: 'var(--ac)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+              📷
+            </button>
+          </div>
+        </Field>
 
         <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--mu)', marginTop: 12, marginBottom: 8, textTransform: 'uppercase' }}>
           Atributos (talle, color, peso, etc.)
@@ -837,6 +856,9 @@ export function Productos() {
       <ConfirmDialog open={!!confirm} onClose={() => setConfirm(null)}
         onConfirm={async () => { try { await api('DELETE', '/productos/' + confirm); toast('Producto eliminado', 'ok'); load() } catch (e) { toast(e.message, 'err') } }}
         title="Eliminar producto" message="¿Eliminás este producto? Se eliminará de todos los listados." confirmLabel="Sí, eliminar" />
+
+      <ScannerModal open={scanSkuOpen} onClose={() => setScanSkuOpen(false)} onRawCodigo={(codigo) => setForm(f => ({...f, sku: codigo}))} />
+      <ScannerModal open={scanVarOpen} onClose={() => setScanVarOpen(false)} onRawCodigo={(codigo) => setVarForm(v => ({...v, sku: codigo}))} />
     </div>
   )
 }

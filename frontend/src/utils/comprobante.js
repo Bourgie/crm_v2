@@ -1,4 +1,4 @@
-import { imprimirTermica, isSupported, isConnected, connectPrinter, disconnectPrinter } from './escpos'
+import { imprimirTermica, isSupported, isConnected, connectPrinter, disconnectPrinter, buildControlText } from './escpos'
 
 const fmt = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })
 
@@ -61,6 +61,26 @@ export async function imprimirTicketTermica(venta, pagos, cfg = {}) {
 }
 
 export { isSupported, isConnected, connectPrinter, disconnectPrinter }
+
+// ── Control / preparación ticket ──
+export function buildControlHTML(venta, cfg = {}) {
+  const t = buildControlText(venta, cfg)
+  return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+    body{font-family:monospace;white-space:pre;font-size:12px;padding:20px;max-width:350px;margin:0 auto}
+    @media print{body{padding:0}}
+  </style></head><body>${t.replace(/&/g,'&amp;').replace(/</g,'&lt;')}</body></html>`
+}
+
+export function imprimirControl(venta, cfg = {}) {
+  const html = buildControlHTML(venta, cfg)
+  const w = window.open('', '_blank', 'width=400,height=600')
+  if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400) }
+}
+
+export async function imprimirControlTermica(venta, cfg = {}) {
+  const text = buildControlText(venta, cfg)
+  await imprimirTermica(text, cfg, 'secundaria')
+}
 
 export function descargarPDF(ventaId, api) {
   api('GET', '/ventas/' + ventaId + '/comprobante-pdf', null, { responseType: 'blob' }).then(blob => {

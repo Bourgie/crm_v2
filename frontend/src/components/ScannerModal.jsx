@@ -19,7 +19,7 @@ const stepper = {
   display: 'flex', alignItems: 'center', justifyContent: 'center',
 }
 
-export function ScannerModal({ open, onClose, onResolveProducto, onAgregar }) {
+export function ScannerModal({ open, onClose, onResolveProducto, onAgregar, onRawCodigo }) {
   const [fase, setFase] = useState('scan') // scan | producto | no-encontrado | error-camara
   const [errorMsg, setErrorMsg] = useState('')
   const [res, setRes] = useState(null)       // { prod, precio, stock }
@@ -71,13 +71,18 @@ export function ScannerModal({ open, onClose, onResolveProducto, onAgregar }) {
             stop()
             const q = String(decodedText || '').trim()
             setCodigo(q)
-            const r = onResolveProducto(q)
-            if (r) {
-              setRes(r)
-              setCantidad(1)
-              setFase('producto')
+            if (onRawCodigo) {
+              setRes(null)
+              setFase('raw-codigo')
             } else {
-              setFase('no-encontrado')
+              const r = onResolveProducto(q)
+              if (r) {
+                setRes(r)
+                setCantidad(1)
+                setFase('producto')
+              } else {
+                setFase('no-encontrado')
+              }
             }
           },
           () => {}
@@ -159,6 +164,28 @@ export function ScannerModal({ open, onClose, onResolveProducto, onAgregar }) {
             </div>
             <button type="button" onClick={onClose}
               style={{ width: '100%', marginTop: 6, padding: 8, borderRadius: 8, border: 'none', background: 'transparent', color: 'var(--mu)', fontSize: 12, cursor: 'pointer' }}>
+              Cerrar
+            </button>
+          </div>
+        )}
+
+        {fase === 'raw-codigo' && (
+          <div>
+            <div style={{ fontSize: 40, marginBottom: 8 }}>📷</div>
+            <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>Código leído</div>
+            <div style={{ fontFamily: 'monospace', fontSize: 18, fontWeight: 800, marginBottom: 14, wordBreak: 'break-all', background: 'var(--sf)', padding: '8px 14px', borderRadius: 8 }}>{codigo}</div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+              <button type="button" onClick={() => { onRawCodigo(codigo); onClose() }}
+                style={{ flex: 2, padding: 12, borderRadius: 10, border: 'none', background: 'var(--ok)', color: '#fff', fontWeight: 800, fontSize: 14, cursor: 'pointer' }}>
+                ✔ Usar
+              </button>
+              <button type="button" onClick={reintentar}
+                style={{ flex: 1, padding: 12, borderRadius: 10, border: '1.5px solid var(--bd)', background: 'var(--bg)', color: 'var(--tx)', fontWeight: 600, fontSize: 13, cursor: 'pointer' }}>
+                🔄 Otro
+              </button>
+            </div>
+            <button type="button" onClick={onClose}
+              style={{ width: '100%', padding: 8, borderRadius: 8, border: 'none', background: 'transparent', color: 'var(--mu)', fontSize: 12, cursor: 'pointer' }}>
               Cerrar
             </button>
           </div>

@@ -488,9 +488,11 @@ function ModalCorteParcial({ open, onClose, estado }) {
 }
 
 // ── Helper: imprimir ticket ──────────────────────────────────────
-import { imprimirTicket, imprimirTicketTermica, isSupported, isConnected, connectPrinter, disconnectPrinter } from '../utils/comprobante'
+import { imprimirTicket, imprimirTicketTermica, imprimirControl, imprimirControlTermica, isSupported, isConnected, connectPrinter, disconnectPrinter } from '../utils/comprobante'
 let _printerStatus = { connected: false, name: '' }
+let _printerSegundaStatus = { connected: false, name: '' }
 export function getPrinterStatus() { return _printerStatus }
+export function getPrinterSegundaStatus() { return _printerSegundaStatus }
 export async function conectarImpresora() {
   try {
     const r = await connectPrinter()
@@ -502,11 +504,35 @@ export async function conectarImpresora() {
   }
 }
 
+export async function conectarImpresoraSegunda() {
+  try {
+    const r = await connectPrinter('secundaria')
+    _printerSegundaStatus = { connected: true, name: r.name || 'Impresora 2da' }
+    return _printerSegundaStatus
+  } catch(e) {
+    _printerSegundaStatus = { connected: false, name: '' }
+    throw e
+  }
+}
+
+export async function desconectarImpresoraSegunda() {
+  await disconnectPrinter('secundaria')
+  _printerSegundaStatus = { connected: false, name: '' }
+}
+
 async function imprimir(venta, pagos, cfg) {
   if (isConnected()) {
     try { await imprimirTicketTermica(venta, pagos, cfg) } catch { imprimirTicket(venta, pagos, cfg) }
   } else {
     imprimirTicket(venta, pagos, cfg)
+  }
+}
+
+async function imprimirControlSegunda(venta, cfg) {
+  if (isConnected('secundaria')) {
+    try { await imprimirControlTermica(venta, cfg) } catch { imprimirControl(venta, cfg) }
+  } else {
+    imprimirControl(venta, cfg)
   }
 }
 // (imported from shared utility)
@@ -683,6 +709,7 @@ export function Caja() {
   const [dupConfirm, setDupConfirm] = useState(null)          // confirm duplicado comprobante
   const [modalComprobante, setModalComprobante] = useState(null)  // venta ctacte
   const [modalCompTipo, setModalCompTipo] = useState(null)      // tipo comprobante post-cobro
+  const [imprimirControl, setImprimirControl] = useState(false)  // checkbox ticket control
   // pendientes ya no se cobran en caja — pasan a cuenta corriente
   const [modalEditarVenta, setModalEditarVenta] = useState(null)
   const [modalCorteParcial, setModalCorteParcial] = useState(false)
@@ -820,6 +847,7 @@ export function Caja() {
     toast(`✅ Cobro registrado — Venta #${venta.numero}`, 'ok')
     load()
     setModalCompTipo({ venta, pagos })
+    setImprimirControl(cfg.ticketera2_habilitada === '1')
   }
 
   async function confirmarComprobante(/* tipo */) {
@@ -892,6 +920,21 @@ export function Caja() {
                   title={isConnected() ? 'Impresora conectada. Click para desconectar.' : 'Conectar impresora térmica USB'}
                 >
                   🖨️ {isConnected() ? 'Conectada' : 'Impresora'}
+                </button>
+              )}
+              {isSupported() && cfg.ticketera2_habilitada === '1' && (
+                <button type="button" className={`btn btn-sm ${isConnected('secundaria') ? 'btn-secondary' : 'btn-primary'}`}
+                  onClick={async () => {
+                    if (isConnected('secundaria')) { await desconectarImpresoraSegunda(); toast('Impresora 2da desconectada'); }
+                    else {
+                      try { const r = await conectarImpresoraSegunda(); toast('Conectado: ' + r.name, 'ok') }
+                      catch(e) { toast(e.message, 'err') }
+                    }
+                  }}
+                  style={{ fontSize: 11 }}
+                  title={isConnected('secundaria') ? 'Impresora 2da conectada. Click para desconectar.' : 'Conectar 2da impresora térmica USB'}
+                >
+                  🖨️ {isConnected('secundaria') ? 'Conectada' : '2da Impresora'}
                 </button>
               )}
           </div>
@@ -1134,6 +1177,12 @@ export function Caja() {
                 <div style={{ fontWeight: 700 }}>Venta #{modalCompTipo.venta?.numero}</div>
                 <div style={{ color: 'var(--mu)' }}>{modalCompTipo.venta?.cli_nombre || 'Consumidor final'} · {fmt(modalCompTipo.venta?.total)}</div>
               </div>
+              {cfg.ticketera2_habilitada === '1' && (
+                <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', padding: '8px 12px', background: 'rgba(99,102,241,.06)', borderRadius: 8, border: '1.5px solid rgba(99,102,241,.25)', marginBottom: 12 }}>
+                  <input type="checkbox" checked={imprimirControl} onChange={(e) => setImprimirControl(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--ac)' }} />
+                  🖨️ Imprimir control / preparación
+                </label>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {(() => {
                   const condFiscal = cfg.arca_condicion_fiscal || 'responsable_inscripto'
@@ -1150,6 +1199,7 @@ export function Caja() {
                     <button type="button" key={tipo} className="btn btn-secondary" style={{ justifyContent: 'flex-start', padding: '12px 16px', fontSize: 14 }}
                       onClick={async () => {
                         const ventaId = modalCompTipo.venta.id
+                        const shouldPrintControl = imprimirControl
                         setModalCompTipo(null)
                         let facturaInfo = null
                         if (tipo !== 'ticket') {
@@ -1164,6 +1214,7 @@ export function Caja() {
                         try {
                           const vtaFull = await api('GET', '/ventas/' + ventaId)
                           imprimir({ ...vtaFull, _comprobante: tipo, _cae: facturaInfo?.cae, _cae_vto: facturaInfo?.vencimiento }, modalCompTipo.pagos, cfg)
+                          if (shouldPrintControl) imprimirControlSegunda(vtaFull, cfg)
                         } catch { /* non-fatal */ }
                       }}>
                       {label}
@@ -1172,7 +1223,16 @@ export function Caja() {
                 })()}
               </div>
               <button type="button" className="btn btn-secondary btn-sm" style={{ width: '100%', justifyContent: 'center', marginTop: 10, color: 'var(--mu)' }}
-                onClick={() => setModalCompTipo(null)}>
+                onClick={async () => {
+                  const shouldPrintControl = imprimirControl
+                  setModalCompTipo(null)
+                  if (shouldPrintControl) {
+                    try {
+                      const vtaFull = await api('GET', '/ventas/' + modalCompTipo.venta.id)
+                      imprimirControlSegunda(vtaFull, cfg)
+                    } catch { /* non-fatal */ }
+                  }
+                }}>
                 Sin comprobante
               </button>
             </div>

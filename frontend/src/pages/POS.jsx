@@ -248,7 +248,7 @@ export function POS() {
       ) : (
         <div className={'pos-cart' + (esMovil && cart.length > 0 ? ' pos-cart-full' : '')} style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden' }}>
         {/* Cliente */}
-        <div className="pos-cart-header" style={{ padding: '10px 14px', borderBottom: '1px solid var(--bd)', background: 'var(--sf)', position: 'relative' }}>
+        <div className="pos-cart-header" style={{ padding: '10px 14px', borderBottom: '1px solid var(--bd)', background: 'var(--sf)', position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}>
           {cliente ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <div style={{ flex: 1 }}>
@@ -270,8 +270,12 @@ export function POS() {
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+          )}
+          <button type="button" onClick={() => setEscaneando(true)} aria-label="Escanear producto"
+            style={{ marginLeft: 'auto', flexShrink: 0, padding: '0 10px', borderRadius: 8, border: '1.5px solid var(--ac)', background: 'transparent', color: 'var(--ac)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+            📷
+          </button>
+        </div>
           )}
         </div>
 

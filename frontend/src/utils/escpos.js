@@ -34,7 +34,6 @@ function escPosLineSpacing(val) {
 }
 
 function escPosCut(feed) {
-  // Cut paper: ESC i (partial cut), feed N lines before cut
   if (feed) {
     return cmd(0x1D, 0x56, 66, feed); // GS V B n — feed + cut
   }
@@ -67,22 +66,37 @@ function escPosLR(left, right, width) {
   return encode(str + ' '.repeat(pad) + rstr + '\n');
 }
 
-// ── WebUSB Connection ──
-let device = null;
-let connected = false;
+// ── WebUSB Connection (multi-slot) ──
+const slots = {
+  principal:    { device: null, connected: false },
+  secundaria:   { device: null, connected: false },
+};
+
+function getSlot(slot) {
+  return slots[slot || 'principal'] || slots.principal;
+}
 
 function isSupported() {
   return typeof navigator !== 'undefined' && !!navigator.usb;
 }
 
-function isConnected() {
-  return connected && !!device;
+function isConnected(slot) {
+  const s = getSlot(slot);
+  return s.connected && !!s.device;
 }
 
-async function connectPrinter() {
+function disconnectAllConnected() {
+  for (const key of Object.keys(slots)) {
+    if (slots[key].connected) return true;
+  }
+  return false;
+}
+
+async function connectPrinter(slot) {
+  const s = getSlot(slot);
   if (!isSupported()) throw new Error('WebUSB no soportado en este navegador. Usá Chrome o Edge.');
   try {
-    device = await navigator.usb.requestDevice({
+    s.device = await navigator.usb.requestDevice({
       filters: [
         { vendorId: 0x0483 }, // STMicro (common in generic thermal printers)
         { vendorId: 0x04b8 }, // Epson TM series
@@ -91,36 +105,37 @@ async function connectPrinter() {
         { vendorId: 0x067b }, // Prolific (common adapter)
       ],
     });
-    await device.open();
-    if (device.configuration === null) await device.selectConfiguration(1);
-    await device.claimInterface(0);
-    connected = true;
-    return { ok: true, name: device.productName || 'Impresora térmica' };
+    await s.device.open();
+    if (s.device.configuration === null) await s.device.selectConfiguration(1);
+    await s.device.claimInterface(0);
+    s.connected = true;
+    return { ok: true, name: s.device.productName || 'Impresora térmica' };
   } catch (e) {
     if (e.message?.includes('No device')) throw new Error('No se seleccionó ninguna impresora.');
     throw e;
   }
 }
 
-async function disconnectPrinter() {
-  if (device) {
-    try { await device.close(); } catch {}
-    device = null;
-    connected = false;
+async function disconnectPrinter(slot) {
+  const s = getSlot(slot);
+  if (s.device) {
+    try { await s.device.close(); } catch {}
+    s.device = null;
+    s.connected = false;
   }
 }
 
-async function sendToPrinter(data) {
-  if (!device || !connected) throw new Error('Impresora no conectada. Conectala primero.');
-  // Find OUT endpoint
-  const config = device.configuration;
+async function sendToPrinter(data, slot) {
+  const s = getSlot(slot);
+  if (!s.device || !s.connected) throw new Error('Impresora no conectada. Conectala primero.');
+  const config = s.device.configuration;
   if (!config) throw new Error('Configuración no disponible');
   const iface = config.interfaces[0];
   if (!iface) throw new Error('Interfaz no disponible');
   const alt = iface.alternate;
   const ep = alt.endpoints.find(e => e.direction === 'out');
   if (!ep) throw new Error('No se encontró endpoint de salida. Probá con otra impresora.');
-  await device.transferOut(ep.endpointNumber, data);
+  await s.device.transferOut(ep.endpointNumber, data);
 }
 
 // ── Build ticket as ESC/POS commands ──
@@ -155,14 +170,12 @@ function buildTickerData(ticketText, cfg = {}) {
       push(encode('\n'));
       continue;
     }
-    // Check for centered lines (start with spaces for centering)
     const trimmed = line.trim();
     if (line.startsWith('  ') && !line.startsWith('   ')) {
       push(escPosCenter(trimmed, w));
     } else if (line.includes('  ') && !trimmed.startsWith('-') && (
       trimmed.includes('$') || trimmed.includes('x ') || trimmed.match(/\d\s{2,}\d/)
     )) {
-      // LR format: detect price alignment
       const parts = trimmed.split(/\s{2,}/);
       if (parts.length >= 2) {
         push(escPosLR(parts[0].trim(), parts[parts.length - 1].trim(), w));
@@ -204,12 +217,12 @@ function buildTickerData(ticketText, cfg = {}) {
 }
 
 // ── High-level: print ticket to thermal printer ──
-async function imprimirTermica(ticketText, cfg = {}) {
-  if (!isConnected()) {
-    await connectPrinter();
+async function imprimirTermica(ticketText, cfg = {}, slot) {
+  if (!isConnected(slot)) {
+    await connectPrinter(slot);
   }
   const data = buildTickerData(ticketText, cfg);
-  await sendToPrinter(data);
+  await sendToPrinter(data, slot);
 }
 
 // ── Build ticket text from venta data (same format as buildTicketHTML) ──
@@ -252,6 +265,34 @@ function buildTicketText(venta, pagos, cfg = {}) {
   return t;
 }
 
+// ── Build control / preparación ticket ──
+function buildControlText(venta, cfg = {}) {
+  const NL = '\n';
+  const w = 32;
+  const sep = '-'.repeat(w);
+  const center = (s) => { const p = Math.floor((w - s.length) / 2); return ' '.repeat(Math.max(0, p)) + s; };
+  const lr = (l, r) => { const g = w - l.length - r.length; return l + ' '.repeat(Math.max(1, g)) + r; };
+
+  let t = '';
+  t += center(cfg.nombre || 'FlexCRM') + NL;
+  if (cfg.ticket_cabecera) t += center(cfg.ticket_cabecera) + NL;
+  t += sep + NL;
+  t += center('CONTROL / PREPARACIÓN') + NL;
+  t += sep + NL;
+  t += lr('Pedido:', 'Venta #' + (venta.numero || '—')) + NL;
+  t += lr('Fecha:', new Date(venta.fecha).toLocaleDateString('es-AR') + ' ' + new Date(venta.fecha).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })) + NL;
+  if (venta.cli_nombre) t += lr('Cliente:', venta.cli_nombre) + NL;
+  t += sep + NL;
+  (venta.items || []).forEach((it) => {
+    t += it.nombre + (it.talle ? ' T:' + it.talle : '') + NL;
+    t += lr('  ' + it.cantidad + ' x ' + fmt(it.precio), fmt(it.precio * it.cantidad)) + NL;
+  });
+  t += sep + NL;
+  if (cfg.ticket_pie) t += NL + center(cfg.ticket_pie) + NL;
+  t += NL + center('— Control —') + NL;
+  return t;
+}
+
 const fmt = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 });
 
-export { isSupported, isConnected, connectPrinter, disconnectPrinter, imprimirTermica, buildTicketText, buildTickerData };
+export { isSupported, isConnected, connectPrinter, disconnectPrinter, imprimirTermica, buildTicketText, buildTickerData, buildControlText };
