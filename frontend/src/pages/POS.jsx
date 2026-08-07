@@ -210,6 +210,7 @@ export function POS() {
     <>
     <div className="pos-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 12, height: 'calc(100vh - 92px)' }}>
       {/* ── Izquierda: búsqueda + grilla ── */}
+      {!(esMovil && cart.length > 0) && (
       <div className="pos-products" style={{ display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden' }}>
         <div style={{ display: 'flex', gap: 6 }}>
           <div style={{ position: 'relative', flex: 1 }}>
@@ -233,6 +234,7 @@ export function POS() {
           )}
         </div>
       </div>
+      )}
 
       {/* ── Derecha: carrito ── */}
       {esMovil && cart.length === 0 ? (
@@ -244,7 +246,7 @@ export function POS() {
           </button>
         </div>
       ) : (
-        <div className="pos-cart" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden' }}>
+        <div className={'pos-cart' + (esMovil && cart.length > 0 ? ' pos-cart-full' : '')} style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden' }}>
         {/* Cliente */}
         <div className="pos-cart-header" style={{ padding: '10px 14px', borderBottom: '1px solid var(--bd)', background: 'var(--sf)', position: 'relative' }}>
           {cliente ? (
