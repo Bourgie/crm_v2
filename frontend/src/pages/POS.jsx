@@ -210,7 +210,6 @@ export function POS() {
     <>
     <div className="pos-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 12, height: 'calc(100vh - 92px)' }}>
       {/* ── Izquierda: búsqueda + grilla ── */}
-      {!(esMovil && cart.length > 0) && (
       <div className="pos-products" style={{ display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden' }}>
         <div style={{ display: 'flex', gap: 6 }}>
           <div style={{ position: 'relative', flex: 1 }}>
@@ -224,6 +223,7 @@ export function POS() {
             </button>
           )}
         </div>
+        {!(esMovil && cart.length > 0) && (
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {prodsFiltrados.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}><div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div><div>{search ? `Sin resultados para "${search}"` : 'Sin productos cargados'}</div></div>
@@ -233,20 +233,16 @@ export function POS() {
             </div>
           )}
         </div>
+        )}
       </div>
-      )}
 
       {/* ── Derecha: carrito ── */}
       {esMovil && cart.length === 0 ? (
-        <div style={{ order: 2, position: 'sticky', bottom: 0, zIndex: 20, background: 'var(--bg)', borderTop: '1px solid var(--bd)', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ order: 2, position: 'sticky', bottom: 0, zIndex: 20, background: 'var(--bg)', borderTop: '1px solid var(--bd)', padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ fontSize: 13, color: 'var(--mu)' }}>🛒 Tocá un producto para agregar</span>
-          <button type="button" onClick={() => navigate('/app/caja')}
-            style={{ padding: '5px 12px', borderRadius: 8, border: '1.5px solid var(--bd)', background: 'transparent', color: 'var(--mu)', fontSize: 11, cursor: 'pointer' }}>
-            💰 Caja
-          </button>
         </div>
       ) : (
-        <div className={'pos-cart' + (esMovil && cart.length > 0 ? ' pos-cart-full' : '')} style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden' }}>
+        <div className="pos-cart" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden' }}>
         {/* Cliente */}
         <div className="pos-cart-header" style={{ padding: '10px 14px', borderBottom: '1px solid var(--bd)', background: 'var(--sf)', position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}>
           {cliente ? (
@@ -327,12 +323,6 @@ export function POS() {
               📒 Cargar en cuenta corriente
             </button>
           )}
-
-          {/* Ir a caja */}
-          <button type="button" onClick={() => navigate('/app/caja')}
-            style={{ width: '100%', padding: '7px', borderRadius: 8, border: '1.5px solid var(--bd)', background: 'transparent', color: 'var(--mu)', fontSize: 12, cursor: 'pointer', marginBottom: 4 }}>
-            💰 Ir a Caja
-          </button>
 
           {/* Limpiar */}
           {cart.length > 0 && (

@@ -425,16 +425,6 @@ tbody tr:last-child td { border-bottom: none; }
 @media (max-width: 400px) {
   .pos-product-grid { grid-template-columns: 1fr 1fr !important; }
 }
-@media (max-width: 768px) {
-  .pos-cart-full {
-    max-height: none !important;
-    position: relative !important;
-    bottom: auto !important;
-  }
-  .pos-cart-full .pos-cart-items {
-    max-height: none !important;
-  }
-}
 
 /* ================================================
    SUPERADMIN RESPONSIVE
