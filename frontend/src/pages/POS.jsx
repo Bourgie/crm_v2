@@ -209,8 +209,36 @@ export function POS() {
   return (
     <>
     <div className="pos-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 12, height: 'calc(100vh - 92px)' }}>
-      {/* ── Izquierda: búsqueda + grilla ── */}
+      {/* ── Izquierda: cliente + búsqueda + grilla ── */}
       <div className="pos-products" style={{ display: 'flex', flexDirection: 'column', gap: 10, overflow: 'hidden' }}>
+        {/* Cliente */}
+        <div style={{ display: 'flex', gap: 6 }}>
+          {cliente ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, background: 'var(--sf)', borderRadius: 8, padding: '6px 10px', border: '1px solid var(--bd)' }}>
+              <span style={{ fontSize: 13, fontWeight: 700 }}>👤 {cliente.nombre} {cliente.apellido || ''}</span>
+              {cliente.lista > 1 && <span style={{ fontSize: 11, color: 'var(--mu)' }}>{LISTA_LABELS[cliente.lista]}</span>}
+              {cliente.tel && <span style={{ fontSize: 11, color: 'var(--mu)' }}>{cliente.tel}</span>}
+              <button type="button" onClick={() => { setCliente(null); setBuscadorCli('') }} style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mu)', fontSize: 16 }}>✕</button>
+            </div>
+          ) : (
+            <div style={{ position: 'relative', flex: 1 }}>
+              <input value={buscadorCli} onChange={(e) => { setBuscadorCli(e.target.value); setShowCliResults(true) }} onFocus={() => setShowCliResults(true)} placeholder="👤 Buscar cliente..." style={{ fontSize: 13 }} />
+              {showCliResults && cliResults.length > 0 && (
+                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,.1)', zIndex: 50, maxHeight: 200, overflowY: 'auto' }}>
+                  {cliResults.map((c) => (
+                    <div key={c.id} onClick={() => { setCliente(c); setBuscadorCli(''); setShowCliResults(false) }} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--bd)', fontSize: 12 }}
+                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--sf)'} onMouseLeave={(e) => e.currentTarget.style.background = ''}>
+                      <div style={{ fontWeight: 700 }}>{c.nombre} {c.apellido || ''}</div>
+                      <div style={{ fontSize: 10, color: 'var(--mu)' }}>{c.tel || ''}{c.lista > 1 ? ` · ${LISTA_LABELS[c.lista]}` : ''}{c.es_ctacte ? ' · 📒' : ''}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Búsqueda producto */}
         <div style={{ display: 'flex', gap: 6 }}>
           <div style={{ position: 'relative', flex: 1 }}>
             <span style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--mu)' }}>🔍</span>
@@ -223,7 +251,9 @@ export function POS() {
             </button>
           )}
         </div>
-        {!(esMovil && cart.length > 0) && (
+
+        {/* Grilla — se oculta en móvil con items, pero reaparece al escribir */}
+        {!(esMovil && cart.length > 0 && !search) && (
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {prodsFiltrados.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}><div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div><div>{search ? `Sin resultados para "${search}"` : 'Sin productos cargados'}</div></div>
@@ -242,41 +272,25 @@ export function POS() {
           <span style={{ fontSize: 13, color: 'var(--mu)' }}>🛒 Tocá un producto para agregar</span>
         </div>
       ) : (
-        <div className="pos-cart" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden' }}>
+        <div className="pos-cart" style={{ display: 'flex', flexDirection: 'column', background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 12, overflow: 'hidden', ...(esMovil && cart.length > 0 ? { maxHeight: 'none', position: 'relative', bottom: 'auto', flex: 1 } : {}) }}>
         {/* Cliente */}
-        <div className="pos-cart-header" style={{ padding: '10px 14px', borderBottom: '1px solid var(--bd)', background: 'var(--sf)', position: 'relative', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div className="pos-cart-header" style={{ padding: '10px 14px', borderBottom: '1px solid var(--bd)', background: 'var(--sf)', display: 'flex', alignItems: 'center', gap: 8 }}>
           {cliente ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontWeight: 700, fontSize: 13 }}>{cliente.nombre} {cliente.apellido || ''}</div>
-                <div style={{ fontSize: 11, color: 'var(--mu)' }}>{cliente.tel || ''}{cliente.lista > 1 ? ` · ${LISTA_LABELS[cliente.lista]}` : ''}{cliente.es_ctacte ? ' · 📒 Cta. Cte.' : ''}{cliente.saldo_ctacte > 0 ? ` · Debe ${fmt(cliente.saldo_ctacte)}` : ''}</div>
-              </div>
-              <button type="button" onClick={() => { setCliente(null); setBuscadorCli('') }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--mu)', fontSize: 18 }}>✕</button>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: 13 }}>{cliente.nombre} {cliente.apellido || ''}</div>
+              <div style={{ fontSize: 11, color: 'var(--mu)' }}>{cliente.tel || ''}{cliente.lista > 1 ? ` · ${LISTA_LABELS[cliente.lista]}` : ''}{cliente.es_ctacte ? ' · 📒 Cta. Cte.' : ''}{cliente.saldo_ctacte > 0 ? ` · Debe ${fmt(cliente.saldo_ctacte)}` : ''}</div>
             </div>
           ) : (
-            <div style={{ position: 'relative' }}>
-              <input value={buscadorCli} onChange={(e) => { setBuscadorCli(e.target.value); setShowCliResults(true) }} onFocus={() => setShowCliResults(true)} placeholder="👤 Buscar cliente (opcional)..." style={{ fontSize: 12 }} />
-              {showCliResults && cliResults.length > 0 && (
-                <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg)', border: '1px solid var(--bd)', borderRadius: 8, boxShadow: '0 4px 16px rgba(0,0,0,.1)', zIndex: 50, maxHeight: 200, overflowY: 'auto' }}>
-                  {cliResults.map((c) => (
-                    <div key={c.id} onClick={() => { setCliente(c); setBuscadorCli(''); setShowCliResults(false) }} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--bd)', fontSize: 12 }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'var(--sf)'} onMouseLeave={(e) => e.currentTarget.style.background = ''}>
-                      <div style={{ fontWeight: 700 }}>{c.nombre} {c.apellido || ''}</div>
-                      <div style={{ fontSize: 10, color: 'var(--mu)' }}>{c.tel || ''}{c.lista > 1 ? ` · ${LISTA_LABELS[c.lista]}` : ''}{c.es_ctacte ? ' · 📒' : ''}</div>
-                    </div>
-                  ))}
-                </div>
+            <span style={{ flex: 1, fontSize: 12, color: 'var(--mu)' }}>👤 Sin cliente asignado</span>
           )}
           <button type="button" onClick={() => setEscaneando(true)} aria-label="Escanear producto"
-            style={{ marginLeft: 'auto', flexShrink: 0, padding: '0 10px', borderRadius: 8, border: '1.5px solid var(--ac)', background: 'transparent', color: 'var(--ac)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+            style={{ flexShrink: 0, padding: '0 10px', borderRadius: 8, border: '1.5px solid var(--ac)', background: 'transparent', color: 'var(--ac)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
             📷
           </button>
         </div>
-          )}
-        </div>
 
         {/* Items */}
-          <div className="pos-cart-items" style={{ flex: 1, overflowY: 'auto', padding: '0 14px' }}>
+          <div className="pos-cart-items" style={{ flex: 1, overflowY: 'auto', padding: '0 14px', ...(esMovil && cart.length > 0 ? { maxHeight: 'none' } : {}) }}>
           {cart.length === 0 ? (
             <div style={{ textAlign: 'center', padding: 28, color: 'var(--mu)', fontSize: 13 }}><div style={{ fontSize: 26, marginBottom: 6 }}>🛒</div>Tocá un producto para agregar</div>
           ) : cart.map((item) => <CartItem key={item.prod_id + item.talle} item={item} onQty={updateQty} onRemove={removeItem} />)}
