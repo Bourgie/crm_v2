@@ -8,6 +8,12 @@ import QRCode from 'qrcode'
 
 const fmt = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })
 const fmtTime = (ts) => ts ? new Date(ts).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' }) : '—'
+
+function isMobileDevice() {
+  if (typeof navigator === 'undefined') return false
+  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent || '')) return true
+  return /MacIntel/i.test(navigator.platform || '') && navigator.maxTouchPoints > 1
+}
 const fmtDate = (ts) => ts ? new Date(ts).toLocaleDateString('es-AR') : '—'
 
 const PAGOS_DEF = [
@@ -719,6 +725,7 @@ export function Caja() {
   const [loadingReporte, setLoadingReporte] = useState(false)
 
   const suc = allSucs.find((s) => s.id === sucSesion)
+  const esMovil = isMobileDevice()
 
   const load = useCallback(async () => {
     if (!sucSesion) return
@@ -942,7 +949,7 @@ export function Caja() {
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 12, borderBottom: '2px solid var(--bd)', paddingBottom: 8 }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 12, borderBottom: '2px solid var(--bd)', paddingBottom: 8, flexWrap: 'wrap' }}>
         {[
           ['pendientes', `🧾 Por cobrar${ventasPendientes.length > 0 ? ` (${ventasPendientes.length})` : ''}`],
           ['hoy', '📋 Movimientos'],
@@ -963,7 +970,7 @@ export function Caja() {
               {/* Ventas normales por cobrar */}
               {ventasNormales.map((v) => (
                 <div key={v.id} style={{ background: 'var(--bg)', border: '1.5px solid var(--bd)', borderRadius: 12, padding: '14px 16px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, flexDirection: esMovil ? 'column' : 'row', gap: esMovil ? 6 : 0 }}>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                         <span className="badge badge-yellow" style={{ fontSize: 9 }}>VENTA</span>
@@ -974,13 +981,15 @@ export function Caja() {
                     </div>
                     <div style={{ fontWeight: 900, fontSize: 20, color: 'var(--ok)' }}>{fmt(v.total)}</div>
                   </div>
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6, flexDirection: esMovil ? 'column' : 'row' }}>
                     {abierta && <button type="button" className="btn btn-primary" style={{ flex: 1, justifyContent: 'center' }} onClick={() => setModalCobro(v)}>💰 Cobrar</button>}
-                    <button type="button" className="btn btn-secondary btn-sm" title="Editar venta" onClick={() => setModalEditarVenta(v)}>✏️</button>
-                    <button type="button" className="btn btn-icon btn-sm" title="Cancelar venta" onClick={async () => {
-                      if (!window.confirm('¿Cancelar esta venta?')) return
-                      try { await api('DELETE', '/ventas/' + v.id); toast('Venta cancelada', 'ok'); load() } catch (e) { toast(e.message, 'err') }
-                    }}>✕</button>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button type="button" className="btn btn-secondary btn-sm" title="Editar venta" onClick={() => setModalEditarVenta(v)} style={{ flex: esMovil ? 1 : undefined }}>✏️</button>
+                      <button type="button" className="btn btn-icon btn-sm" title="Cancelar venta" onClick={async () => {
+                        if (!window.confirm('¿Cancelar esta venta?')) return
+                        try { await api('POST', '/ventas/' + v.id + '/anular', { motivo: 'Cancelado desde caja' }); toast('Venta cancelada', 'ok'); load() } catch (e) { toast(e.message, 'err') }
+                      }}>✕</button>
+                    </div>
                   </div>
                   {!abierta && <div style={{ marginTop: 8, fontSize: 11, color: 'var(--warn)' }}>⚠️ Abrí la caja para cobrar</div>}
                 </div>
