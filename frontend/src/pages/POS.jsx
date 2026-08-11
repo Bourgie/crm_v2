@@ -283,10 +283,6 @@ export function POS() {
           ) : (
             <span style={{ flex: 1, fontSize: 12, color: 'var(--mu)' }}>👤 Sin cliente asignado</span>
           )}
-          <button type="button" onClick={() => setEscaneando(true)} aria-label="Escanear producto"
-            style={{ flexShrink: 0, padding: '0 10px', borderRadius: 8, border: '1.5px solid var(--ac)', background: 'transparent', color: 'var(--ac)', fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
-            📷
-          </button>
         </div>
 
         {/* Items */}
