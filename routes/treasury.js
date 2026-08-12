@@ -4,31 +4,12 @@ const { uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || require('../db_sqlite').db;
 const { authMiddleware, requireRol, requirePermiso } = require('../middleware/auth');
 const { requireModule } = require('../middleware/tenant');
+const { calcSaldo, sincSaldo, movTes } = require('../lib/treasury');
 
 router.use(authMiddleware);
 router.use(requireModule('tesoreria'));
 
 // ── Helpers ──────────────────────────────────────────────────
-// Saldo real de una cuenta: saldo_inicial + transacciones + transferencias
-function calcSaldo(db, cuentaId) {
-  const acc = db.findOne('treasury_accounts', cuentaId);
-  if (!acc) return 0;
-  let saldo = parseFloat(acc.saldo_inicial) || 0;
-  const txs = db.raw.prepare("SELECT tipo, monto FROM treasury_transactions WHERE cuenta_id=? AND anulado=0").all(cuentaId);
-  for (const t of txs) saldo += t.tipo === 'income' ? (parseFloat(t.monto) || 0) : -(parseFloat(t.monto) || 0);
-  const trs = db.raw.prepare("SELECT cuenta_origen, cuenta_destino, monto FROM treasury_transfers WHERE anulado=0 AND (cuenta_origen=? OR cuenta_destino=?)").all(cuentaId, cuentaId);
-  for (const t of trs) {
-    if (t.cuenta_destino === cuentaId) saldo += parseFloat(t.monto) || 0;
-    if (t.cuenta_origen === cuentaId) saldo -= parseFloat(t.monto) || 0;
-  }
-  return Math.round(saldo * 100) / 100;
-}
-
-function sincSaldo(db, cuentaId) {
-  const saldo = calcSaldo(db, cuentaId);
-  db.update('treasury_accounts', cuentaId, { saldo_actual: saldo });
-  return saldo;
-}
 
 // Cuenta de empresa (suc_id = null) requiere permiso cross-sucursal
 function puedeVerCuenta(req, cuenta) {
@@ -151,27 +132,21 @@ router.post('/transacciones', requireRol('admin', 'tesorero'), (req, res) => {
   if (m <= 0) return res.status(400).json({ error: 'Monto debe ser mayor a 0' });
   if (!concepto) return res.status(400).json({ error: 'Concepto requerido' });
 
-  // Anti-duplicado: una misma referencia solo una vez
-  if (ref_tipo && ref_id) {
-    const dup = db.raw.prepare("SELECT id FROM treasury_transactions WHERE ref_tipo=? AND ref_id=? AND anulado=0").get(ref_tipo, String(ref_id));
-    if (dup) return res.status(409).json({ error: 'Este movimiento ya fue registrado', id: dup.id });
-  }
-
-  const id = 'tt_' + uid();
-  const tx = db.insert('treasury_transactions', {
-    id, cuenta_id, tipo, monto: m,
-    fecha: fecha || new Date().toISOString(),
-    concepto: concepto || '',
-    categoria: categoria || '',
-    metodo_pago: metodo_pago || '',
-    medio: medio || '',
-    ref_tipo: ref_tipo || null, ref_id: ref_id ? String(ref_id) : null,
+  const r = movTes(db, {
+    cuenta_id, tipo, concepto, monto: m, categoria: categoria || '',
+    metodo_pago: metodo_pago || '', medio: medio || '',
     suc_id: cuenta.suc_id || suc_id || null,
-    usuario: req.user.nombre, usuario_id: req.user.id,
-    anulado: 0,
+    usuario: req.user,
+    ref_tipo: ref_tipo || null, ref_id: ref_id || null,
   });
+  if (!r.ok) {
+    if (r.dup) return res.status(409).json({ error: r.error, id: r.id });
+    return res.status(400).json({ error: r.error });
+  }
+  const tx = db.findOne('treasury_transactions', r.id);
+  if (fecha) db.update('treasury_transactions', r.id, { fecha });
   const saldo = sincSaldo(db, cuenta_id);
-  db.audit(req.user, tx.suc_id || null, 'tesoreria', tipo === 'income' ? 'ingreso' : 'egreso', `${concepto} — $${m}`, id);
+  db.audit(req.user, tx.suc_id || null, 'tesoreria', tipo === 'income' ? 'ingreso' : 'egreso', `${concepto} — $${m}`, r.id);
   res.json({ ...tx, saldo_cuenta: saldo });
 });
 
@@ -202,7 +177,11 @@ router.get('/transferencias', requireRol('admin', 'tesorero'), (req, res) => {
   if (limit) rows = rows.slice(0, parseInt(limit) || 100);
   const nombre = {};
   cuentas.forEach(c => { nombre[c.id] = c.nombre; });
-  res.json(rows.map(t => ({ ...t, origen_nombre: nombre[t.cuenta_origen] || t.cuenta_origen, destino_nombre: nombre[t.cuenta_destino] || t.cuenta_destino })));
+  res.json(rows.map(t => ({
+    ...t,
+    origen_nombre: t.cuenta_origen ? (nombre[t.cuenta_origen] || t.cuenta_origen) : 'Depósito externo',
+    destino_nombre: nombre[t.cuenta_destino] || t.cuenta_destino,
+  })));
 });
 
 router.post('/transferencias', requireRol('admin', 'tesorero'), (req, res) => {
