@@ -101,12 +101,13 @@ router.post('/cerrar', requireRol('admin', 'supervisor', 'cajero'), (req, res) =
   if (!caja) return res.status(404).json({ error: 'No hay caja abierta' });
   const est = getCajaEstado(suc_id, empDB);
   const saldo_esperado_efectivo = est.saldo_efectivo;
-  const diferencia = parseFloat(saldo_real) - saldo_esperado_efectivo;
+  const saldoReal = parseFloat(saldo_real) || 0;
+  const diferencia = saldoReal - saldo_esperado_efectivo;
   empDB.update('cajas', caja.id, {
     estado: 'cerrada',
     cierre: new Date().toISOString(),
     saldo_esperado: saldo_esperado_efectivo,
-    saldo_real: parseFloat(saldo_real) || 0,
+    saldo_real: saldoReal,
     diferencia,
     ingresos_totales: est.ingresos,
     por_pago: JSON.stringify(est.por_pago),
@@ -114,7 +115,32 @@ router.post('/cerrar', requireRol('admin', 'supervisor', 'cajero'), (req, res) =
     usuario_cierre_id: req.user.id
   });
   empDB.audit(req.user, caja.suc_id, 'caja', 'cerrar', 'Cierre caja — Saldo: $'+saldo_esperado_efectivo, caja.id);
-  res.json({ ok: true, saldo_esperado: saldo_esperado_efectivo, diferencia });
+
+  // Depósito automático del saldo real a la bóveda CASH de tesorería
+  let depositoTes = null;
+  if (saldoReal > 0) {
+    try {
+      const boveda = empDB.where('treasury_accounts', a => a.tipo === 'cash' && a.suc_id === suc_id && a.activo)[0];
+      if (boveda) {
+        const ya = empDB.where('treasury_transfers', t => t.tipo === 'cierre_caja' && t.caja_id === caja.id && !t.anulado)[0];
+        if (!ya) {
+          const tid = 'tf_' + uid();
+          empDB.insert('treasury_transfers', {
+            id: tid, cuenta_origen: null, cuenta_destino: boveda.id,
+            monto: saldoReal, fecha: new Date().toISOString(),
+            concepto: 'Depósito cierre de caja', tipo: 'cierre_caja',
+            caja_id: caja.id, suc_id,
+            usuario: req.user.nombre, usuario_id: req.user.id, anulado: 0
+          });
+          empDB.update('treasury_accounts', boveda.id, { saldo_actual: Math.round(((parseFloat(boveda.saldo_actual) || 0) + saldoReal) * 100) / 100 });
+          empDB.audit(req.user, suc_id, 'tesoreria', 'deposito_cierre', `Cierre de caja → ${boveda.nombre} — $${saldoReal}`, tid);
+          depositoTes = { transferencia_id: tid, boveda: boveda.nombre, monto: saldoReal };
+        }
+      }
+    } catch(e) { console.error('[Caja] Error depósito tesorería:', e.message); }
+  }
+
+  res.json({ ok: true, saldo_esperado: saldo_esperado_efectivo, diferencia, deposito_tesoreria: depositoTes });
 });
 
 // Cierre forzado

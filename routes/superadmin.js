@@ -1102,7 +1102,7 @@ router.get('/tesoreria/:codigo', superAuth, (req, res) => {
       movimientos: txs.map(t => ({ ...t, cuenta_nombre: nombreCuenta[t.cuenta_id] || t.cuenta_id })),
       transferencias: trs.map(t => ({
         ...t,
-        origen_nombre: nombreCuenta[t.cuenta_origen] || t.cuenta_origen,
+        origen_nombre: t.cuenta_origen ? (nombreCuenta[t.cuenta_origen] || t.cuenta_origen) : 'Depósito externo',
         destino_nombre: nombreCuenta[t.cuenta_destino] || t.cuenta_destino,
       })),
     });
