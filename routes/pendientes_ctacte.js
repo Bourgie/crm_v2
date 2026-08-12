@@ -36,17 +36,35 @@ pendRouter.get('/:id',(req,res)=>{
 
 pendRouter.post('/',(req,res)=>{
   const db = _getDB(req);
-  const {suc_id,vend_id,cliente_id,items,total,notas,concepto,venta_id,fecha_entrega_estimada,vend_nombre_fallback,estado_inicial,suc_entrega,suc_cobro,restaurar_stock,sena:seña}=req.body;
+  const {suc_id,vend_id,cliente_id,items,total,notas,concepto,venta_id,fecha_entrega_estimada,vend_nombre_fallback,estado_inicial,suc_entrega,suc_cobro,restaurar_stock,sena}=req.body;
   if(!items?.length||!suc_id) return res.status(400).json({error:'Datos incompletos'});
   const pends=db.all('pendientes');
   const numero=(pends.length?Math.max(...pends.map(p=>p.numero||0)):0)+1;
   const id='pend'+uid(); const fecha=new Date().toISOString();
   const cfg=db.getConfig();
   const vto=new Date(fecha); vto.setDate(vto.getDate()+(parseInt(cfg.pendiente_dias_max)||30));
-  seña = parseFloat(seña) || 0;
+  const seña = parseFloat(sena) || 0;
   const saldo = Math.max(0, (parseFloat(total) || 0) - seña);
   db.insert('pendientes',{id,numero,fecha,fecha_entrega_estimada:fecha_entrega_estimada||null,vend_nombre_fallback:vend_nombre_fallback||'',estado:estado_inicial||'pendiente',suc_entrega:suc_entrega||suc_id,suc_cobro:suc_cobro||suc_id,concepto:concepto||'Pedido #'+numero,fecha_vto:vto.toISOString().substr(0,10),suc_id,vend_id:vend_id||null,cliente_id:cliente_id||null,total:parseFloat(total),seña,saldo,notas:notas||'',activo_stock:true,venta_id:venta_id||null});
   items.forEach(it=>db.insert('pendiente_items',{id:uid(),pendiente_id:id,prod_id:it.prod_id,variante_id:it.variante_id||null,nombre:it.nombre,talle:it.talle||'',precio:parseFloat(it.precio),cantidad:parseInt(it.cantidad),subtotal:parseFloat(it.subtotal),entregado:0}));
+
+  // ── Seña → ingreso en el cajón del día ──
+  if (seña > 0) {
+    const { movCajon } = require('../lib/treasury');
+    const r = movCajon(db, {
+      suc_id: suc_cobro || suc_id,
+      tipo: 'ingreso',
+      concepto: 'Seña Pedido #' + numero,
+      monto: seña,
+      pago_metodo: 'efectivo',
+      usuario: req.user,
+      auto: true,
+      pendiente_id: id,
+    });
+    if (!r.ok) {
+      db.audit(req.user, suc_id, 'pendientes', 'seña_sin_caja', 'Seña #' + numero + ' no registrada: ' + r.error, id);
+    }
+  }
 
   // ── Restaurar stock a la sucursal que vendió ──
   // Al crear el pendiente, el producto vuelve al inventario disponible
