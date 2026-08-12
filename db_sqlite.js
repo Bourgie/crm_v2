@@ -22,9 +22,9 @@ const sqlite = new DatabaseSync(DB_PATH);
 sqlite.exec("PRAGMA journal_mode=WAL");
 sqlite.exec("PRAGMA foreign_keys=ON");
 
-const CURRENT_SCHEMA_VERSION = 3;
+const CURRENT_SCHEMA_VERSION = 4;
 sqlite.exec("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER)");
-const sv = sqlite.prepare("SELECT version FROM schema_version").get();
+const sv = sqlite.prepare("SELECT version FROM schema_version ORDER BY rowid DESC LIMIT 1").get();
 const dbVersion = sv ? sv.version : 0;
 
 function ensureVersion(v) { return dbVersion < v; }
@@ -630,7 +630,8 @@ try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_usuarios_email ON usuari
 try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_clientes_dni ON clientes(dni)"); } catch(e) {}
 try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_clientes_email ON clientes(email)"); } catch(e) {}
 try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_clientes_tel ON clientes(tel)"); } catch(e) {}
-sqlite.prepare("INSERT OR REPLACE INTO schema_version(version) VALUES(?)").run(CURRENT_SCHEMA_VERSION);
+sqlite.prepare("DELETE FROM schema_version").run();
+sqlite.prepare("INSERT INTO schema_version(version) VALUES(?)").run(CURRENT_SCHEMA_VERSION);
 
 // Legal consent table — creada siempre (no version-gated) para DBs existentes
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS consentimientos_empresa (id TEXT PRIMARY KEY, empresa_codigo TEXT NOT NULL, tipo TEXT NOT NULL, version TEXT NOT NULL, aceptado_por TEXT NOT NULL, ip TEXT, user_agent TEXT, creado TEXT NOT NULL)"); } catch(e) {}
@@ -644,6 +645,80 @@ try { sqlite.exec("CREATE TABLE IF NOT EXISTS user_sessions (id TEXT PRIMARY KEY
 // Comprobantes de transferencia bancaria (unicidad cross-sucursal)
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS comprobantes_transferencia (id TEXT PRIMARY KEY, nro TEXT NOT NULL, nro_normalizado TEXT NOT NULL, venta_id TEXT, ctacte_mov_id TEXT, cliente_id TEXT, suc_id TEXT, monto REAL, fecha TEXT, usuario TEXT, usuario_id TEXT, anulado INTEGER DEFAULT 0)"); } catch(e) {}
 try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_comp_transf ON comprobantes_transferencia(nro_normalizado) WHERE anulado = 0"); } catch(e) {}
+
+// ─── TESORERÍA ────────────────────────────────────────────────
+// Cuentas de tesorería: bóveda CASH (suc_id = sucursal) o banco/billetera (suc_id = NULL → empresa)
+try { sqlite.exec(`CREATE TABLE IF NOT EXISTS treasury_accounts (
+  id TEXT PRIMARY KEY, nombre TEXT, tipo TEXT DEFAULT 'banco',
+  suc_id TEXT, moneda TEXT DEFAULT 'ARS',
+  saldo_inicial REAL DEFAULT 0, saldo_actual REAL DEFAULT 0,
+  activo INTEGER DEFAULT 1, creado TEXT, notas TEXT,
+  data TEXT DEFAULT '{}'
+)`); } catch(e) {}
+try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_treas_acc_suc ON treasury_accounts(suc_id)"); } catch(e) {}
+// Movimientos de dinero (ingresos/egresos) — UN registro por hecho económico
+try { sqlite.exec(`CREATE TABLE IF NOT EXISTS treasury_transactions (
+  id TEXT PRIMARY KEY, cuenta_id TEXT, tipo TEXT,
+  monto REAL, fecha TEXT, concepto TEXT,
+  categoria TEXT, metodo_pago TEXT, medio TEXT,
+  ref_tipo TEXT, ref_id TEXT,
+  suc_id TEXT, usuario TEXT, usuario_id TEXT,
+  anulado INTEGER DEFAULT 0,
+  data TEXT DEFAULT '{}'
+)`); } catch(e) {}
+try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_treas_tx_cuenta ON treasury_transactions(cuenta_id)"); } catch(e) {}
+try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_treas_tx_fecha ON treasury_transactions(fecha)"); } catch(e) {}
+try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_treas_tx_ref ON treasury_transactions(ref_tipo, ref_id) WHERE anulado = 0 AND ref_tipo IS NOT NULL AND ref_id IS NOT NULL"); } catch(e) {}
+// Transferencias entre cuentas (manuales o automáticas, ej. cierre de caja → bóveda)
+try { sqlite.exec(`CREATE TABLE IF NOT EXISTS treasury_transfers (
+  id TEXT PRIMARY KEY, cuenta_origen TEXT, cuenta_destino TEXT,
+  monto REAL, fecha TEXT, concepto TEXT,
+  tipo TEXT DEFAULT 'manual', caja_id TEXT, suc_id TEXT,
+  usuario TEXT, usuario_id TEXT, anulado INTEGER DEFAULT 0,
+  data TEXT DEFAULT '{}'
+)`); } catch(e) {}
+try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_treas_transf_fecha ON treasury_transfers(fecha)"); } catch(e) {}
+
+// Asegurar bóveda CASH por sucursal (siempre, idempotente — cubre DBs existentes)
+try {
+  const sucs = sqlite.prepare("SELECT id, nombre FROM sucursales WHERE activo IS NULL OR activo = 1").all();
+  const insBoveda = sqlite.prepare("INSERT INTO treasury_accounts (id, nombre, tipo, suc_id, moneda, saldo_inicial, saldo_actual, activo, creado, notas, data) VALUES (?,?,?,?,?,?,?,1,?,'','{}')");
+  const existing = sqlite.prepare("SELECT id FROM treasury_accounts WHERE tipo = 'cash'").all().map(r => r.id);
+  for (const s of sucs) {
+    const bovedaId = 'boveda_' + s.id;
+    if (existing.includes(bovedaId)) continue;
+    insBoveda.run(bovedaId, 'Bóveda ' + (s.nombre || s.id), 'cash', s.id, 'ARS', 0, 0, new Date().toISOString());
+    existing.push(bovedaId);
+  }
+} catch(e) { console.error('[Treasury] Error asegurando bóvedas:', e.message); }
+
+// Asegurar migración de métodos de pago de Gastos/Proveedores a config.tipos_pago (campo medio)
+try {
+  const rowTp = sqlite.prepare("SELECT value FROM config WHERE key = 'tipos_pago'").get();
+  let parsed = null;
+  if (rowTp && rowTp.value) { try { parsed = JSON.parse(rowTp.value); } catch(e) { parsed = null; } }
+  const MEDIOS_DEF = [
+    { id: 'efectivo', nombre: 'Efectivo', icono: '💵', recargo: 0, activo: true, medio: 'efectivo' },
+    { id: 'debito', nombre: 'Débito', icono: '💳', recargo: 0, activo: true, medio: 'tarjeta_debito' },
+    { id: 'credito', nombre: 'Crédito', icono: '💳', recargo: 10, activo: true, medio: 'tarjeta_credito' },
+    { id: 'transferencia', nombre: 'Transferencia', icono: '🏦', recargo: 0, activo: true, medio: 'transferencia' },
+    { id: 'qr', nombre: 'QR / MP', icono: '📱', recargo: 0, activo: true, medio: 'billetera' },
+    { id: 'ctacte', nombre: 'Cuenta Corriente', icono: '📒', recargo: 0, activo: true, medio: 'ctacte' },
+    { id: 'cheque', nombre: 'Cheque', icono: '🧾', recargo: 0, activo: true, medio: 'cheque' },
+    { id: 'debito_cuenta', nombre: 'Débito en cuenta', icono: '🏦', recargo: 0, activo: true, medio: 'transferencia' },
+    { id: 'tarjeta_corp', nombre: 'Tarjeta corporativa', icono: '💳', recargo: 0, activo: true, medio: 'tarjeta_credito' },
+  ];
+  const lista = Array.isArray(parsed) ? parsed : [];
+  let cambia = false;
+  for (const def of MEDIOS_DEF) {
+    const idx = lista.findIndex(p => p && p.id === def.id);
+    if (idx === -1) { lista.push(def); cambia = true; }
+    else if (lista[idx].medio === undefined) { lista[idx].medio = def.medio; cambia = true; }
+  }
+  if (cambia) {
+    sqlite.prepare("INSERT OR REPLACE INTO config(key, value) VALUES ('tipos_pago', ?)").run(JSON.stringify(lista));
+  }
+} catch(e) { console.error('[Treasury] Error migrando tipos_pago:', e.message); }
 
 // ─── SEED ────────────────────────────────────────────────────
 function buildSeed() {
@@ -924,6 +999,9 @@ const COLS = {
   asistencias:['id','empleado_id','tipo','fecha_hora','suc_id','notas','creado'],
   historial_salarios:['id','empleado_id','salario_anterior','salario_nuevo','fecha','motivo','modificado_por'],
   comprobantes_transferencia:['id','nro','nro_normalizado','venta_id','ctacte_mov_id','cliente_id','suc_id','monto','fecha','usuario','usuario_id','anulado'],
+  treasury_accounts:['id','nombre','tipo','suc_id','moneda','saldo_inicial','saldo_actual','activo','creado','notas'],
+  treasury_transactions:['id','cuenta_id','tipo','monto','fecha','concepto','categoria','metodo_pago','medio','ref_tipo','ref_id','suc_id','usuario','usuario_id','anulado'],
+  treasury_transfers:['id','cuenta_origen','cuenta_destino','monto','fecha','concepto','tipo','caja_id','suc_id','usuario','usuario_id','anulado'],
   consentimientos_empresa:['id','empresa_codigo','tipo','version','aceptado_por','ip','user_agent','creado'],
   company_integrations:['id','provider','external_account_id','external_user_id','seller_id','access_token','refresh_token','expires_at','config_json','status','last_sync','last_error','last_health_check','health_status','created_at','updated_at'],
   integration_logs:['id','provider','tipo','status','mensaje','usuario_id','usuario_nombre','ip','respuesta_ms','created_at'],

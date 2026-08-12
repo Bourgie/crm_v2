@@ -358,6 +358,7 @@ if(modCount === 0) {
     {id:'mod_tienda',   codigo:'tienda',       nombre:'Sincronizar Tienda', icono:'🛒', categoria:'integracion', premium:0, orden:18},
     {id:'mod_webhooks', codigo:'webhooks',     nombre:'Webhooks',            icono:'🔗', categoria:'integracion', premium:0, orden:19},
     {id:'mod_rrhh',     codigo:'rrhh',         nombre:'RRHH',                icono:'👥', categoria:'admin',        premium:0, orden:20},
+    {id:'mod_tes',      codigo:'tesoreria',    nombre:'Tesorería',           icono:'💵', categoria:'finanzas',    premium:1, orden:21},
   ];
   const stmtMod = master.prepare("INSERT OR IGNORE INTO modulos (id,codigo,nombre,icono,categoria,premium,orden) VALUES (?,?,?,?,?,?,?)");
   MODS_DEFAULT.forEach(m => stmtMod.run(m.id,m.codigo,m.nombre,m.icono,m.categoria,m.premium,m.orden));
@@ -381,6 +382,9 @@ master.prepare("INSERT OR IGNORE INTO modulos (id,codigo,nombre,icono,categoria,
 // Always ensure rrhh module exists
 master.prepare("INSERT OR IGNORE INTO modulos (id,codigo,nombre,icono,categoria,premium,orden) VALUES (?,?,?,?,?,?,?)")
   .run('mod_rrhh','rrhh','RRHH','👥','admin',0,20);
+// Always ensure tesoreria module exists (premium)
+master.prepare("INSERT OR IGNORE INTO modulos (id,codigo,nombre,icono,categoria,premium,orden) VALUES (?,?,?,?,?,?,?)")
+  .run('mod_tes','tesoreria','Tesorería','💵','finanzas',1,21);
 
 // Seed default plans
 var planCount = master.prepare("SELECT COUNT(*) as n FROM planes").get().n;
@@ -400,13 +404,13 @@ if(planCount === 0) {
     },
     {
       id:'plan_pro', codigo:'pro', nombre:'Pro', precio:40, orden:2,
-      modulos:JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda']),
+      modulos:JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda','tesoreria']),
       limites:JSON.stringify({usuarios_max:10, sucursales_max:3}),
       integraciones:JSON.stringify(['arca','mercadolibre','tiendanube'])
     },
     {
       id:'plan_enterprise', codigo:'enterprise', nombre:'Enterprise', precio:90, orden:3,
-      modulos:JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','listabebe','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda']),
+      modulos:JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','listabebe','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda','tesoreria']),
       limites:JSON.stringify({usuarios_max:999, sucursales_max:999}),
       integraciones:JSON.stringify(['arca','mercadolibre','tiendanube'])
     },
@@ -427,12 +431,29 @@ master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,periodo,mo
     JSON.stringify({usuarios_max:3, sucursales_max:1}), JSON.stringify([]), 10);
 master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,periodo,modulos,limites,integraciones,orden) VALUES (?,?,?,?,?,?,?,?,?)")
   .run('plan_pro_anual','pro_anual','Pro Anual',400,'anual',
-    JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda']),
+    JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda','tesoreria']),
     JSON.stringify({usuarios_max:10, sucursales_max:3}), JSON.stringify(['arca','mercadolibre','tiendanube']), 20);
 master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,periodo,modulos,limites,integraciones,orden) VALUES (?,?,?,?,?,?,?,?,?)")
   .run('plan_enterprise_anual','enterprise_anual','Enterprise Anual',900,'anual',
-    JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','listabebe','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda']),
+    JSON.stringify(['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','listabebe','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda','tesoreria']),
     JSON.stringify({usuarios_max:999, sucursales_max:999}), JSON.stringify(['arca','mercadolibre','tiendanube']), 30);
+
+// Migración idempotente: agregar tesoreria a planes Pro/Enterprise existentes
+try {
+  const updPlanes = master.prepare("SELECT id, modulos FROM planes");
+  const allPlanes = updPlanes.all();
+  const updStmt = master.prepare("UPDATE planes SET modulos=? WHERE id=?");
+  for (const p of allPlanes) {
+    if (!/pro|enterprise/.test(p.id)) continue;
+    let mods = [];
+    try { mods = JSON.parse(p.modulos || '[]'); } catch(e) { mods = []; }
+    if (!Array.isArray(mods)) mods = [];
+    if (!mods.includes('tesoreria')) {
+      mods.push('tesoreria');
+      updStmt.run(JSON.stringify(mods), p.id);
+    }
+  }
+} catch(e) { console.error('[Master] Error migrando planes tesoreria:', e.message); }
 
 // Seed default modules
 var modCount = master.prepare("SELECT COUNT(*) as n FROM modulos").get().n;
@@ -452,6 +473,7 @@ if(modCount === 0) {
     ['mod_gastos','gastos','Gastos','💸','finanzas',0,12],
     ['mod_rep','reportes','Reportes','📈','analisis',0,13],
     ['mod_audit','auditoria','Auditoría','🔍','admin',1,14],
+    ['mod_tes','tesoreria','Tesorería','💵','finanzas',1,21],
   ];
   var sm = master.prepare("INSERT OR IGNORE INTO modulos (id,codigo,nombre,icono,categoria,premium,orden,activo) VALUES (?,?,?,?,?,?,?,1)");
   MODS.forEach(m=>sm.run(...m));
