@@ -95,20 +95,18 @@ router.post('/', requireRol('admin','supervisor','cajero'), validate(gastoSchema
 
   // Si genera egreso en caja, registrarlo
   if (genera_egreso_caja && suc_id) {
-    const hoy = fechaGasto;
-    const caja = db.where('cajas', c =>
-      c.suc_id === suc_id && c.fecha && c.fecha.substr(0,10) === hoy && c.estado === 'abierta'
-    )[0];
-    if (caja) {
-      const movId = 'm'+uid();
-      db.insert('movimientos_caja', {
-        id: movId, caja_id: caja.id, suc_id, fecha: new Date().toISOString(),
-        tipo: 'egreso', concepto: nombre + (cat?' ('+cat.nombre+')':''),
-        monto: parseFloat(monto), usuario: req.user.nombre,
-        auto: false, anulado: false
-      });
-      db.update('gastos', id, {caja_movimiento_id: movId});
-    }
+    const { movCajon } = require('../lib/treasury');
+    const r = movCajon(db, {
+      suc_id,
+      tipo: 'egreso',
+      concepto: nombre + (cat ? ' (' + cat.nombre + ')' : ''),
+      monto: parseFloat(monto),
+      pago_metodo: metodo_pago || 'efectivo',
+      usuario: req.user,
+      auto: true,
+      gasto_id: id,
+    });
+    if (r.ok) db.update('gastos', id, { caja_movimiento_id: r.id });
   }
   db.audit(req.user, suc_id||null, 'gastos', 'crear', nombre+' — $'+parseFloat(monto), id);
   res.json({id, ok:true});
