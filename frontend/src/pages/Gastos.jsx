@@ -7,8 +7,6 @@ import { exportExcel } from '../utils/excel'
 
 const PER_PAGE = 30
 const EMPTY_GASTO = { nombre: '', monto: '', fecha: new Date().toISOString().substr(0, 10), categoria_id: '', estado: 'pagado', metodo_pago: 'efectivo', notas: '' }
-const METODOS = ['efectivo', 'transferencia', 'debito_cuenta', 'tarjeta_corp', 'cheque', 'otro']
-const METODO_LABELS = { efectivo: 'Efectivo', transferencia: 'Transferencia', debito_cuenta: 'Débito', tarjeta_corp: 'Tarjeta corp.', cheque: 'Cheque', otro: 'Otro' }
 
 const ESTADO_BADGE_MAP = { pagado: 'badge-green', pendiente: 'badge-yellow', vencido: 'badge-red' }
 const fmtGasto = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })
@@ -24,6 +22,7 @@ export function Gastos() {
 
   const [gastos, setGastos] = useState([])
   const [cats, setCats] = useState([])
+  const [metodos, setMetodos] = useState([])
   const [resumen, setResumen] = useState(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -52,14 +51,21 @@ export function Gastos() {
     setLoading(true)
     try {
       const qs = `?suc_id=${sucSesion || ''}&desde=${mes}-01&hasta=${mes}-31`
-      const [g, c, r] = await Promise.all([
+      const [g, c, r, cfg] = await Promise.all([
         api('GET', '/gastos' + qs),
         api('GET', '/gastos/categorias').catch(() => []),
         api('GET', `/gastos/resumen?mes=${mes}${sucSesion ? '&suc_id=' + sucSesion : ''}`).catch(() => null),
+        api('GET', '/config').catch(() => ({})),
       ])
       setGastos(Array.isArray(g) ? g : [])
       setCats(Array.isArray(c) ? c : [])
       setResumen(r)
+      if (cfg?.tipos_pago) {
+        try {
+          const tp = typeof cfg.tipos_pago === 'string' ? JSON.parse(cfg.tipos_pago) : cfg.tipos_pago
+          setMetodos(Array.isArray(tp) ? tp.filter((p) => p.activo !== false) : [])
+        } catch { setMetodos([]) }
+      }
     } catch { toast('Error cargando gastos', 'err') }
     finally { setLoading(false) }
   }, [mes, sucSesion])
@@ -183,7 +189,7 @@ export function Gastos() {
                       {g.pagado_por && <div style={{ fontSize: 12, color: 'var(--mu)' }}>Pagó: {g.pagado_por}</div>}
                     </td>
                     <td data-label="Categoría" style={{ fontSize: 12 }}>{g.categoria_nombre || '—'}</td>
-                    <td data-label="Método" style={{ fontSize: 12 }}>{METODO_LABELS[g.metodo_pago] || g.metodo_pago || '—'}</td>
+                    <td data-label="Método" style={{ fontSize: 12 }}>{metodos.find((m) => m.id === g.metodo_pago)?.nombre || g.metodo_pago || '—'}</td>
                     <td data-label="Estado"><EstadoBadge estado={g.estado} /></td>
                     <td data-label="Monto" style={{ textAlign: 'right', fontWeight: 700, color: 'var(--bad)' }}>{fmt(g.monto)}</td>
                     <td data-label="" onClick={(e) => e.stopPropagation()}>
@@ -231,7 +237,7 @@ export function Gastos() {
           </Field>
           <Field label="Método de pago">
             <select value={form.metodo_pago} onChange={set('metodo_pago')}>
-              {METODOS.map((m) => <option key={m} value={m}>{METODO_LABELS[m]}</option>)}
+              {metodos.map((m) => <option key={m.id} value={m.id}>{m.icono} {m.nombre}</option>)}
             </select>
           </Field>
         </div>

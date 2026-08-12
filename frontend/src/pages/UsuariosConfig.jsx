@@ -11,10 +11,11 @@ const ROLES_ALL = [
   {id:'vendedor', label:'Vendedor', color:'badge-gray'},
   {id:'cajero',   label:'Cajero',   color:'badge-yellow'},
   {id:'supervisor',label:'Supervisor',color:'badge-blue'},
+  {id:'tesorero', label:'Tesorero', color:'badge-green'},
   {id:'admin',    label:'Admin',    color:'badge-red'},
   {id:'readonly', label:'Solo lectura', color:'badge-gray'},
 ]
-const ROLE_COLORS = { admin:'badge-red', supervisor:'badge-blue', cajero:'badge-yellow', vendedor:'badge-gray', readonly:'badge-gray' }
+const ROLE_COLORS = { admin:'badge-red', supervisor:'badge-blue', cajero:'badge-yellow', vendedor:'badge-gray', tesorero:'badge-green', readonly:'badge-gray' }
 const EMPTY_USR = { nombre:'', usuario:'', email:'', password:'', roles:['vendedor'], suc_sesiones_permitidas:[] }
 
 export function Usuarios() {
@@ -234,6 +235,8 @@ export function Config() {
   const { toast } = useToast()
   const { cfg, setCfg, setTheme, theme, allSucs } = useApp()
   const { me } = useAuth()
+  const configUserRoles = Array.isArray(me?.roles) && me.roles.length ? me.roles : [me?.rol]
+  const configIsAdmin = configUserRoles.includes('admin')
 
   const [form, setForm] = useState({
     nombre:'', cuit:'', dir:'', tel:'', email:'', slogan:'',
@@ -259,7 +262,7 @@ export function Config() {
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [tab, setTab] = useState('general')
+  const [tab, setTab] = useState(configIsAdmin ? 'general' : 'metodospago')
   const [soporteForm, setSoporteForm] = useState({ asunto: '', descripcion: '' })
   const [soporteSending, setSoporteSending] = useState(false)
   const [soporteSent, setSoporteSent] = useState(false)
@@ -314,7 +317,8 @@ export function Config() {
 
   if (loading) return <Loader/>
 
-  const TABS = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['email','📧 Email'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['impresion','🖨️ Impresión'],['seguridad','🔒 Seguridad'],['webhooks','🔗 Webhooks'],['plan','📦 Plan'],['backups','💾 Backups'],['ayuda','🆘 Ayuda']]
+  const TABS_ALL = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['email','📧 Email'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['impresion','🖨️ Impresión'],['seguridad','🔒 Seguridad'],['webhooks','🔗 Webhooks'],['plan','📦 Plan'],['backups','💾 Backups'],['ayuda','🆘 Ayuda']]
+  const TABS = configIsAdmin ? TABS_ALL : TABS_ALL.filter(([k]) => k === 'metodospago')
 
   return (
     <div>
@@ -804,7 +808,7 @@ export function Config() {
           </div>
         )}
 
-        {tab!=='micuenta' && tab!=='backups' && tab!=='ayuda' && (
+        {tab!=='micuenta' && tab!=='backups' && tab!=='ayuda' && configIsAdmin && (
           <div style={{marginTop:20,paddingTop:16,borderTop:'1px solid var(--bd)'}}>
             <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>
               {saving?<><span className="spinner" style={{width:14,height:14}}/> Guardando...</>:'💾 Guardar configuración'}
@@ -818,13 +822,14 @@ export function Config() {
 
 
 const PAGOS_DEF = [
-  {id:'efectivo', nombre:'Efectivo', icono:'💵', recargo:0, activo:true},
-  {id:'debito', nombre:'Débito', icono:'💳', recargo:0, activo:true},
-  {id:'credito', nombre:'Crédito', icono:'💳', recargo:10, activo:true},
-  {id:'transferencia', nombre:'Transferencia', icono:'🏦', recargo:0, activo:true},
-  {id:'qr', nombre:'QR / MP', icono:'📱', recargo:0, activo:true},
-  {id:'ctacte', nombre:'Cuenta Corriente', icono:'📒', recargo:0, activo:true},
+  {id:'efectivo', nombre:'Efectivo', icono:'💵', recargo:0, activo:true, medio:'efectivo'},
+  {id:'debito', nombre:'Débito', icono:'💳', recargo:0, activo:true, medio:'tarjeta_debito'},
+  {id:'credito', nombre:'Crédito', icono:'💳', recargo:10, activo:true, medio:'tarjeta_credito'},
+  {id:'transferencia', nombre:'Transferencia', icono:'🏦', recargo:0, activo:true, medio:'transferencia'},
+  {id:'qr', nombre:'QR / MP', icono:'📱', recargo:0, activo:true, medio:'billetera'},
+  {id:'ctacte', nombre:'Cuenta Corriente', icono:'📒', recargo:0, activo:true, medio:'ctacte'},
 ]
+const PAGO_MEDIO_LABELS = { efectivo:'Efectivo', transferencia:'Transferencia', tarjeta_debito:'Débito', tarjeta_credito:'Crédito', ctacte:'Cta. Corriente', billetera:'Billetera', cheque:'Cheque', otro:'Otro' }
 
 function PagosTab({ cfg, api, toast, onReload }) {
   const [pagos, setPagos] = useState([])
@@ -873,7 +878,7 @@ function PagosTab({ cfg, api, toast, onReload }) {
     <div>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:12}}>
         <div style={{fontSize:12,color:'var(--mu)'}}>Métodos disponibles en Caja y POS</div>
-        <button type="button" className="btn btn-primary btn-sm" onClick={()=>{setFPago({id:'',nombre:'',icono:'💵',recargo:'0',activo:true});setModal('new')}}>+ Nuevo método</button>
+        <button type="button" className="btn btn-primary btn-sm" onClick={()=>{setFPago({id:'',nombre:'',icono:'💵',recargo:'0',activo:true,medio:'efectivo'});setModal('new')}}>+ Nuevo método</button>
       </div>
       <div style={{display:'flex',flexDirection:'column',gap:8}}>
         {pagos.map((p) => (
@@ -881,9 +886,9 @@ function PagosTab({ cfg, api, toast, onReload }) {
             <span style={{fontSize:20}}>{p.icono}</span>
             <div style={{flex:1}}>
               <div style={{fontWeight:700,fontSize:13}}>{p.nombre}</div>
-              <div style={{fontSize:11,color:'var(--mu)'}}>Recargo: {p.recargo||0}% · <span className={`badge ${p.activo!==false?'badge-green':'badge-gray'}`}>{p.activo!==false?'Activo':'Inactivo'}</span></div>
+              <div style={{fontSize:11,color:'var(--mu)'}}>Recargo: {p.recargo||0}% · Medio: {PAGO_MEDIO_LABELS[p.medio]||p.medio||'efectivo'} · <span className={`badge ${p.activo!==false?'badge-green':'badge-gray'}`}>{p.activo!==false?'Activo':'Inactivo'}</span></div>
             </div>
-            <button type="button" className="btn btn-icon btn-sm" onClick={()=>{setFPago({...p,recargo:String(p.recargo||0)});setModal(p.id)}}>✏️</button>
+            <button type="button" className="btn btn-icon btn-sm" onClick={()=>{setFPago({...p,recargo:String(p.recargo||0),medio:p.medio||'efectivo'});setModal(p.id)}}>✏️</button>
             <button type="button" className="btn btn-icon btn-sm" onClick={()=>toggleActivo(p.id)}>{p.activo!==false?'🚫':'✅'}</button>
           </div>
         ))}
@@ -898,7 +903,14 @@ function PagosTab({ cfg, api, toast, onReload }) {
                 <div className="fg"><label>Icono</label><input value={fPago.icono} onChange={sp('icono')} style={{fontSize:20,textAlign:'center'}} maxLength={2}/></div>
                 <div className="fg"><label>Nombre *</label><input value={fPago.nombre} onChange={sp('nombre')} placeholder="Ej: Efectivo"/></div>
               </div>
-              <div className="fg"><label>Recargo %</label><input type="number" value={fPago.recargo} onChange={sp('recargo')} min="0" step="0.1" placeholder="0"/></div>
+              <div className="fr">
+                <div className="fg"><label>Recargo %</label><input type="number" value={fPago.recargo} onChange={sp('recargo')} min="0" step="0.1" placeholder="0"/></div>
+                <div className="fg"><label>Medio en tesorería</label>
+                  <select value={fPago.medio||'efectivo'} onChange={sp('medio')}>
+                    {Object.entries(PAGO_MEDIO_LABELS).map(([k,l])=><option key={k} value={k}>{l}</option>)}
+                  </select>
+                </div>
+              </div>
               <label style={{display:'flex',alignItems:'center',gap:8,fontSize:13,cursor:'pointer',padding:'8px 12px',background:'var(--sf)',borderRadius:8,border:'1px solid var(--bd)'}}>
                 <input type="checkbox" checked={!!fPago.activo} onChange={(e)=>setFPago(p=>({...p,activo:e.target.checked}))} style={{width:16,height:16}}/>
                 Activo

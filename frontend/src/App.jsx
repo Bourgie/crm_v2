@@ -35,6 +35,7 @@ const Setup2FA = lazy(() => import('./pages/Setup2FA').then(m => ({ default: m.S
 const MiCuenta = lazy(() => import('./pages/MiCuenta').then(m => ({ default: m.MiCuenta })))
 const Sucursales = lazy(() => import('./pages/Sucursales').then(m => ({ default: m.Sucursales })))
 const RRHH = lazy(() => import('./pages/RRHH'))
+const Tesoreria = lazy(() => import('./pages/Tesoreria').then(m => ({ default: m.Tesoreria })))
 const Superadmin = lazy(() => import('./pages/Superadmin'))
 
 // App ecosystem
@@ -88,6 +89,7 @@ export default function App() {
         <Route path="integraciones"  element={<L><IntegrationCenter /></L>} />
         <Route path="2fa"            element={<L><Setup2FA /></L>} />
         <Route path="proveedores"    element={<L><Proveedores /></L>} />
+        <Route path="tesoreria"      element={<L><Tesoreria /></L>} />
         <Route path="rrhh"           element={<L><RRHH /></L>} />
         {/* App ecosystem routes */}
         <Route path="apps/:slug"     element={<L><AppShell /></L>} />

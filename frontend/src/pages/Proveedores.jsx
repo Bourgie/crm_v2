@@ -7,7 +7,6 @@ import { SearchBar, PageHeader, Field, EmptyRow, Loader, Pagination, ConfirmDial
 const PER = 25
 const fmt = (n) => '$' + (Number(n)||0).toLocaleString('es-AR', { maximumFractionDigits: 0 })
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('es-AR') : '—'
-const METODOS = ['efectivo','transferencia','cheque','tarjeta','otro']
 const EMPTY_PROV = { nombre:'', cuit:'', tel:'', email:'', dir:'', contacto:'', notas:'' }
 const PROV_TABS = [['proveedores','📦 Proveedores'],['deudas','💰 Deudas']]
 
@@ -20,6 +19,7 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
   const [modalPago, setModalPago] = useState(false)
   const [fCompra, setFC] = useState({ concepto:'', monto:'', nro_factura:'', fecha:new Date().toISOString().substr(0,10), vto:'', notas:'', pagado_al_recibir:'', forma_pago_inicial:'pendiente' })
   const [fPago, setFP] = useState({ monto:'', metodo:'efectivo', concepto:'Pago proveedor', fecha:new Date().toISOString().substr(0,10), nro_comprobante:'' })
+  const [metodos, setMetodos] = useState([])
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
@@ -29,7 +29,17 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
     finally { setLoading(false) }
   }, [prov.id])
 
-  useEffect(() => { load() }, [load])
+  const loadMetodos = useCallback(async () => {
+    try {
+      const cfg = await api('GET', '/config').catch(() => ({}))
+      if (cfg?.tipos_pago) {
+        const tp = typeof cfg.tipos_pago === 'string' ? JSON.parse(cfg.tipos_pago) : cfg.tipos_pago
+        setMetodos(Array.isArray(tp) ? tp.filter((p) => p.activo !== false) : [])
+      }
+    } catch { setMetodos([]) }
+  }, [])
+
+  useEffect(() => { load(); loadMetodos() }, [load, loadMetodos])
 
   const setC = (f) => (e) => setFC((p) => ({...p,[f]:e.target.value}))
   const setP = (f) => (e) => setFP((p) => ({...p,[f]:e.target.value}))
@@ -124,7 +134,7 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
                   <tr key={p.id}>
                     <td data-label="Fecha" style={{fontSize:12}}>{fmtDate(p.fecha)}</td>
                     <td data-label="Concepto">{p.concepto||'Pago'}</td>
-                    <td data-label="Método" style={{fontSize:12}}>{p.metodo||'—'}</td>
+                    <td data-label="Método" style={{fontSize:12}}>{metodos.find((m) => m.id === p.metodo)?.nombre || p.metodo || '—'}</td>
                     <td data-label="N° Comp." style={{fontSize:12,color:'var(--mu)'}}>{p.nro_comprobante||'—'}</td>
                     <td data-label="Monto" style={{textAlign:'right',fontWeight:700,color:'var(--ok)'}}>{fmt(p.monto)}</td>
                   </tr>
@@ -166,7 +176,7 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
         {saldo>0 && <div style={{textAlign:'center',marginBottom:16,padding:'10px 14px',background:'rgba(239,68,68,.08)',borderRadius:8}}><div style={{fontSize:12,color:'var(--mu)'}}>Deuda actual</div><div style={{fontSize:22,fontWeight:800,color:'var(--bad)'}}>{fmt(saldo)}</div></div>}
         <Field label="Monto *"><input type="number" value={fPago.monto} onChange={setP('monto')} min="0" step="0.01" style={{fontSize:18,fontWeight:700,textAlign:'center'}}/></Field>
         <div className="fr">
-          <Field label="Método"><select value={fPago.metodo} onChange={setP('metodo')}>{METODOS.map((m)=><option key={m} value={m}>{m.charAt(0).toUpperCase()+m.slice(1)}</option>)}</select></Field>
+          <Field label="Método"><select value={fPago.metodo} onChange={setP('metodo')}>{metodos.map((m)=><option key={m.id} value={m.id}>{m.icono} {m.nombre}</option>)}</select></Field>
           <Field label="Fecha"><input type="date" value={fPago.fecha} onChange={setP('fecha')}/></Field>
         </div>
         <div className="fr">

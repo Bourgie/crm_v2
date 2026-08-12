@@ -180,9 +180,17 @@ router.get('/', authMiddleware, (req, res) => {
   res.json(cfg);
 });
 
-router.put('/', authMiddleware, requireRol('admin'), (req, res) => {
+router.put('/', authMiddleware, requireRol('admin','tesorero'), (req, res) => {
   const db = _getDB(req);
   const { jwt_secret, ...safe } = req.body;
+
+  // El rol tesorero solo puede editar métodos de pago (tipos_pago)
+  const userRoles = Array.isArray(req.user.roles) ? req.user.roles : [req.user.rol];
+  if (!userRoles.includes('admin') && req.user.rol !== 'admin') {
+    const permitidos = { tipos_pago: safe.tipos_pago };
+    if (safe.tipos_pago !== undefined) db.setConfig(permitidos);
+    return res.json({ ok: true });
+  }
 
   // Handle objetivo_mes / objetivo_suc → persist into objetivos_mensuales map
   if (safe.objetivo_mes !== undefined && safe.objetivo_mes !== '') {

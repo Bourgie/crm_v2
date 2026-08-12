@@ -371,6 +371,7 @@ app.use('/api/sync-tienda',         require('./routes/sync-tienda'));
 app.use('/api/pendientes',    pendRouter);
 app.use('/api/ctacte',        ctacteRouter);
 app.use('/api/gastos',        gastosRouter);
+app.use('/api/tesoreria',     require('./routes/treasury'));
 app.use('/api/transferencias', transfRouter);
 app.use('/api/auditoria',     auditoriaRouter);
 app.use('/api/lista-bebe',    listaBebeRouter);

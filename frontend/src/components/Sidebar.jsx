@@ -16,6 +16,7 @@ const NAV = [
   { section: 'Finanzas' },
   { to: '/app/ctacte',    icon: '📒', label: 'Cta. Corriente', mod: 'ctacte' },
   { to: '/app/gastos',    icon: '💸', label: 'Gastos', mod: 'gastos', roles: ['admin','supervisor'] },
+  { to: '/app/tesoreria', icon: '💵', label: 'Tesorería', mod: 'tesoreria', roles: ['admin','tesorero'] },
   { section: 'Operaciones' },
   { to: '/app/transferencias', icon: '🔄', label: 'Transferencias', mod: 'transferencias', roles: ['admin','supervisor'] },
   { to: '/app/proveedores', icon: '📦', label: 'Proveedores', mod: 'proveedores' },
@@ -29,7 +30,7 @@ const NAV = [
   { to: '/app/usuarios',  icon: '👤', label: 'Usuarios', mod: null, adminOnly: true },
   { to: '/app/sucursales', icon: '🏪', label: 'Sucursales', mod: null, adminOnly: true },
   { to: '/app/micuenta',  icon: '👤', label: 'Mi Cuenta', mod: null },
-  { to: '/app/config',    icon: '⚙️', label: 'Configuración', mod: null, adminOnly: true },
+  { to: '/app/config',    icon: '⚙️', label: 'Configuración', mod: null, roles: ['admin','tesorero'] },
   { to: '/app/integraciones', icon: '🔌', label: 'Integraciones', mod: null, roles: ['admin'] },
 ]
 
@@ -65,11 +66,13 @@ export function Sidebar({ mobile, onClose }) {
   }
 
   const { installed: installedApps } = useApps()
-  
+
+  const userRoles = Array.isArray(me?.roles) && me.roles.length ? me.roles : (me?.rol ? [me.rol] : [])
+
   const items = NAV.filter((item) => {
     if (item.section) return true
-    if (item.adminOnly && me?.rol !== 'admin') return false
-    if (item.roles && !item.roles.includes(me?.rol)) return false
+    if (item.adminOnly && !userRoles.includes('admin')) return false
+    if (item.roles && !item.roles.some((r) => userRoles.includes(r))) return false
     if (item.mod && !hasModule(item.mod)) return false
     return true
   })
@@ -118,7 +121,7 @@ export function Sidebar({ mobile, onClose }) {
   }
 
   // Agregar link a la Tienda (solo admin)
-  if (me?.rol === 'admin') {
+  if (userRoles.includes('admin')) {
     finalItems.push({ to: '/app/marketplace', icon: '🛍️', label: 'Tienda de Apps', mod: null })
   }
 

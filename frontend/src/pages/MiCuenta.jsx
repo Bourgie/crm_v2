@@ -4,7 +4,7 @@ import { useApi } from '../hooks/useApi'
 import { useAuth, useToast } from '../store'
 import { PageHeader, Field, Loader } from '../components/UI'
 
-const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', cajero: 'Cajero', vendedor: 'Vendedor', readonly: 'Solo lectura' }
+const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', cajero: 'Cajero', vendedor: 'Vendedor', tesorero: 'Tesorero', readonly: 'Solo lectura' }
 
 export function MiCuenta() {
   const { api } = useApi()

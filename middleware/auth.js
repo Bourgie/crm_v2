@@ -15,6 +15,7 @@ const PERMISOS = {
   vendedor:   ['dashboard_basic','pos','clientes_read','productos_read','presupuestos','pendientes_read'],
   cajero:     ['dashboard_basic','pos','caja','clientes_read','productos_read','pendientes'],
   readonly:   ['dashboard_basic','ventas_read','clientes_read','productos_read','reportes'],
+  tesorero:   ['dashboard_basic','tesoreria','tesoreria_view_all_sucursales','caja','clientes_read','productos_read','ventas_read','reportes','config_read'],
 };
 
 function authMiddleware(req, res, next) {
@@ -62,7 +63,15 @@ function authMiddleware(req, res, next) {
       } catch(e) { /* ignore config read errors */ }
     }
     req.user = { ...user, empresa: payload.empresa || 'default' };
-    req.userPermisos = PERMISOS[user.rol] || [];
+    // Merge permisos de todos los roles del usuario (multi-rol)
+    const allRoles = Array.isArray(user.roles) && user.roles.length ? user.roles : [user.rol];
+    const merged = new Set();
+    for (const r of allRoles) {
+      const p = PERMISOS[r] || [];
+      if (p.includes('*')) { merged.clear(); merged.add('*'); break; }
+      p.forEach(x => merged.add(x));
+    }
+    req.userPermisos = [...merged];
     next();
   } catch(e) {
     return res.status(401).json({ error: 'Token inválido o expirado' });
@@ -91,4 +100,14 @@ function permiteSucursal(user, suc_id) {
   return user.suc_id && String(user.suc_id) === String(suc_id);
 }
 
-module.exports = { authMiddleware, requireRol, getSecret, PERMISOS, permiteSucursal };
+// Verifica que el usuario tenga un permiso granular (requerido por tesorería)
+function requirePermiso(permiso) {
+  return (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'No autenticado' });
+    const perms = req.userPermisos || PERMISOS[req.user.rol] || [];
+    if (perms.includes('*') || perms.includes(permiso)) return next();
+    return res.status(403).json({ error: 'Sin permisos para esta acción' });
+  };
+}
+
+module.exports = { authMiddleware, requireRol, requirePermiso, getSecret, PERMISOS, permiteSucursal };
