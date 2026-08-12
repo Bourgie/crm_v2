@@ -77,7 +77,7 @@ describe('Treasury DB Layer', () => {
 // ══════════════════════════════════════════════════════════════
 describe('Treasury HTTP API', () => {
   let server, baseUrl, cookies, adminUser, cajeroUser
-  const creados = { cuentas: [], txs: [], transfers: [] }
+  const creados = { cuentas: [], txs: [], transfers: [], cajas: [], proveedores: [], provPagos: [], empleados: [], sueldoPagos: [], gastos: [], pendientes: [] }
   const CSRF_TOKEN = 'csrf-treasury-test-token'
   const csrfHdr = { 'x-csrf-token': CSRF_TOKEN }
 
@@ -150,6 +150,39 @@ describe('Treasury HTTP API', () => {
     const empDB = getEmpresaDB('default')
     for (const id of creados.transfers) { try { empDB.delete('treasury_transfers', id) } catch {} }
     for (const id of creados.txs) { try { empDB.delete('treasury_transactions', id) } catch {} }
+    for (const id of creados.pendientes) {
+      try {
+        for (const m of empDB.where('movimientos_caja', m => m.pendiente_id === id)) empDB.delete('movimientos_caja', m.id)
+        for (const i of empDB.where('pendiente_items', i => i.pendiente_id === id)) empDB.delete('pendiente_items', i.id)
+        empDB.delete('pendientes', id)
+        try { empDB.raw.prepare("DELETE FROM stock_suc WHERE prod_id='prod_test_seña'").run() } catch {}
+        try { empDB.raw.prepare("DELETE FROM stock_movimientos WHERE prod_id='prod_test_seña'").run() } catch {}
+      } catch {}
+    }
+    for (const id of creados.sueldoPagos) {
+      try {
+        const sp = empDB.findOne('sueldo_pagos', id)
+        if (sp) {
+          empDB.delete('sueldo_pagos', id)
+          empDB.raw.prepare("DELETE FROM treasury_transactions WHERE ref_tipo='sueldo_pago' AND ref_id=?").run(String(id))
+        }
+      } catch {}
+    }
+    for (const id of creados.gastos) { try { empDB.delete('gastos', id) } catch {} }
+    for (const id of creados.empleados) { try { empDB.delete('empleados', id) } catch {} }
+    for (const id of creados.provPagos) {
+      try {
+        empDB.delete('prov_pagos', id)
+        empDB.raw.prepare("DELETE FROM treasury_transactions WHERE ref_tipo='prov_pago' AND ref_id=?").run(String(id))
+      } catch {}
+    }
+    for (const id of creados.proveedores) { try { empDB.delete('proveedores', id) } catch {} }
+    for (const id of creados.cajas) {
+      try {
+        for (const m of empDB.where('movimientos_caja', m => m.caja_id === id)) empDB.delete('movimientos_caja', m.id)
+        empDB.delete('cajas', id)
+      } catch {}
+    }
     for (const id of creados.cuentas) { try { empDB.delete('treasury_accounts', id) } catch {} }
     for (const u of [adminUser, cajeroUser]) { try { empDB.delete('usuarios', u.id) } catch {} }
     if (server) server.close()
@@ -219,5 +252,87 @@ describe('Treasury HTTP API', () => {
     const token = jwt.sign({ id: cajeroUser.id, rol: 'cajero', empresa: 'default' }, process.env.JWT_SECRET)
     const r = await request('GET', '/api/tesoreria/cuentas', { headers: { Cookie: `access-token=${token}` } })
     assert.strictEqual(r.status, 403)
+  })
+
+  it('cierre de caja deposita el saldo real a la bóveda CASH', async () => {
+    const empDB = getEmpresaDB('default')
+    const suc = empDB.find('sucursales', { activo: true })[0]
+    assert.ok(suc, 'necesita una sucursal activa')
+
+    const abrir = await request('POST', '/api/caja/abrir', { headers: csrfHdr, body: { suc_id: suc.id, fondo_inicial: 0 } })
+    if (abrir.status !== 200) return // ya había caja abierta hoy — saltar sin tocar datos reales
+
+    creados.cajas.push(abrir.body.id)
+    const cerrar = await request('POST', '/api/caja/cerrar', { headers: csrfHdr, body: { suc_id: suc.id, saldo_real: 1500 } })
+    assert.strictEqual(cerrar.status, 200, cerrar.raw)
+    assert.ok(cerrar.body.deposito_tesoreria, 'debería depositar en tesorería')
+    assert.strictEqual(cerrar.body.deposito_tesoreria.monto, 1500)
+    creados.transfers.push(cerrar.body.deposito_tesoreria.transferencia_id)
+
+    const boveda = empDB.where('treasury_accounts', a => a.tipo === 'cash' && a.suc_id === suc.id)[0]
+    const { calcSaldo } = require('../lib/treasury')
+    assert.ok(boveda && calcSaldo(empDB, boveda.id) >= 1500, 'la bóveda debería tener el depósito')
+  })
+
+  it('pago a proveedor desde tesorería mueve dinero real', async () => {
+    const empDB = getEmpresaDB('default')
+    const prov = empDB.insert('proveedores', { id: 'prov_test_tes', nombre: 'Prov Test Tesorería', activo: true })
+    creados.proveedores.push(prov.id)
+
+    const cuenta = await request('POST', '/api/tesoreria/cuentas', { headers: csrfHdr, body: { nombre: 'TEST_PROV_CTA_' + Date.now(), tipo: 'banco', suc_id: '', saldo_inicial: 10000 } })
+    assert.strictEqual(cuenta.status, 200, cuenta.raw)
+    creados.cuentas.push(cuenta.body.id)
+
+    const pago = await request('POST', `/api/proveedores/${prov.id}/pagos`, { headers: csrfHdr, body: { monto: 2500, concepto: 'Pago test', metodo: 'transferencia', fuente: 'tesoreria', cuenta_id: cuenta.body.id } })
+    assert.strictEqual(pago.status, 200, pago.raw)
+    creados.provPagos.push(pago.body.id)
+
+    const tx = empDB.raw.prepare("SELECT * FROM treasury_transactions WHERE ref_tipo='prov_pago' AND ref_id=? AND anulado=0").get(String(pago.body.id))
+    assert.ok(tx, 'debe existir movimiento de tesorería con ref prov_pago')
+    assert.strictEqual(tx.tipo, 'expense')
+    assert.strictEqual(tx.monto, 2500)
+
+    const { calcSaldo } = require('../lib/treasury')
+    assert.strictEqual(calcSaldo(empDB, cuenta.body.id), 7500)
+  })
+
+  it('pago de sueldo crea gasto Sueldos y mueve dinero', async () => {
+    const empDB = getEmpresaDB('default')
+    const emp = empDB.insert('empleados', { id: 'emp_test_tes', nombre: 'Test', apellido: 'Empleado', salario: 80000, activo: true })
+    creados.empleados.push(emp.id)
+
+    const cuenta = await request('POST', '/api/tesoreria/cuentas', { headers: csrfHdr, body: { nombre: 'TEST_SUELDO_CTA_' + Date.now(), tipo: 'banco', suc_id: '', saldo_inicial: 100000 } })
+    assert.strictEqual(cuenta.status, 200, cuenta.raw)
+    creados.cuentas.push(cuenta.body.id)
+
+    const pago = await request('POST', '/api/rrhh/sueldos/pagar', { headers: csrfHdr, body: { empleado_id: emp.id, monto: 80000, fuente: 'tesoreria', cuenta_id: cuenta.body.id, metodo: 'transferencia' } })
+    assert.strictEqual(pago.status, 200, pago.raw)
+    creados.sueldoPagos.push(pago.body.id)
+    creados.gastos.push(pago.body.gasto_id)
+
+    const gasto = empDB.findOne('gastos', pago.body.gasto_id)
+    assert.ok(gasto, 'debe existir el gasto')
+    assert.strictEqual(gasto.categoria_nombre, 'Sueldos')
+
+    const tx = empDB.raw.prepare("SELECT * FROM treasury_transactions WHERE ref_tipo='sueldo_pago' AND ref_id=?").get(String(pago.body.id))
+    assert.ok(tx && tx.tipo === 'expense', 'debe existir egreso con ref sueldo_pago')
+  })
+
+  it('seña de pendiente se registra como ingreso en caja', async () => {
+    const empDB = getEmpresaDB('default')
+    const suc = empDB.find('sucursales', { activo: true })[0]
+
+    const abrir = await request('POST', '/api/caja/abrir', { headers: csrfHdr, body: { suc_id: suc.id, fondo_inicial: 0 } })
+    if (abrir.status !== 200) return // ya había caja abierta hoy — saltar
+    creados.cajas.push(abrir.body.id)
+
+    const pend = await request('POST', '/api/pendientes', { headers: csrfHdr, body: { suc_id: suc.id, suc_cobro: suc.id, items: [{ prod_id: 'prod_test_seña', nombre: 'Producto test seña', cantidad: 1, precio: 1000, subtotal: 1000 }], total: 1000, sena: 300, cliente_id: null } })
+    assert.strictEqual(pend.status, 200, pend.raw)
+    creados.pendientes.push(pend.body.id)
+
+    const mov = empDB.where('movimientos_caja', m => m.pendiente_id === pend.body.id && !m.anulado)[0]
+    assert.ok(mov, 'debe existir ingreso en caja por la seña')
+    assert.strictEqual(mov.tipo, 'ingreso')
+    assert.strictEqual(mov.monto, 300)
   })
 })
