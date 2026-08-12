@@ -4,6 +4,8 @@ const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
 const { authMiddleware, requireRol } = require('../middleware/auth');
 
+const MEDIO_FALLBACK = { efectivo:'efectivo', transferencia:'transferencia', cheque:'cheque', tarjeta:'tarjeta_credito', debito_cuenta:'transferencia', tarjeta_corp:'tarjeta_credito', debito:'tarjeta_debito', credito:'tarjeta_credito', qr:'billetera', ctacte:'ctacte' };
+
 const sucRouter = express.Router();
 sucRouter.use(authMiddleware);
 sucRouter.get('/', (req,res) => { const db = _getDB(req); res.json(db.find('sucursales',{activo:true})); });
@@ -142,10 +144,28 @@ provRouter.post('/:id/ordenes', authMiddleware, requireRol('admin','supervisor')
 
 provRouter.post('/:id/pagos', authMiddleware, requireRol('admin','supervisor','cajero'), (req,res) => {
   const db = _getDB(req);
-  const {monto, concepto, metodo, fecha, nro_comprobante} = req.body;
+  const {monto, concepto, metodo, fecha, nro_comprobante, fuente, cuenta_id, suc_id, medio, categoria} = req.body;
   if(!monto) return res.status(400).json({error:'Monto requerido'});
+  const m = parseFloat(monto);
   const id = require('../db_sqlite').uid();
-  db.insert('prov_pagos',{id,prov_id:req.params.id,monto:parseFloat(monto),concepto:concepto||'Pago proveedor',metodo:metodo||'efectivo',fecha:fecha||new Date().toISOString(),nro_comprobante:nro_comprobante||'',registrado_por:req.user.nombre});
+
+  // Registro de dinero: una sola vez, en la fuente elegida
+  if (fuente === 'cajon' || fuente === 'tesoreria') {
+    const { pagar } = require('../lib/treasury');
+    const r = pagar(db, {
+      monto: m,
+      concepto: concepto || 'Pago proveedor',
+      categoria: categoria || 'Proveedores',
+      metodo_pago: metodo || 'efectivo',
+      medio: medio || MEDIO_FALLBACK[metodo] || 'otro',
+      suc_id, cuenta_id, usuario: req.user,
+      ref_tipo: 'prov_pago', ref_id: id,
+      fuente,
+    });
+    if (!r.ok) return res.status(400).json({ error: r.error });
+  }
+
+  db.insert('prov_pagos',{id,prov_id:req.params.id,monto:m,concepto:concepto||'Pago proveedor',metodo:metodo||'efectivo',fecha:fecha||new Date().toISOString(),nro_comprobante:nro_comprobante||'',registrado_por:req.user.nombre});
   // Mark oldest unpaid ordenes as cancelled if fully covered
   const ordenes = db.where('prov_ordenes',o=>o.prov_id===req.params.id&&!o.cancelada&&!o.eliminada);
   const pagos = db.where('prov_pagos',p=>p.prov_id===req.params.id);
@@ -197,10 +217,27 @@ provRouter.post('/:id/pago-libre', authMiddleware, (req,res) => {
   const db = _getDB(req);
   const prov = db.findOne('proveedores', req.params.id);
   if(!prov) return res.status(404).json({error:'Proveedor no encontrado'});
-  const {monto,fecha,metodo,nro_comprobante,concepto,registrado_por} = req.body;
+  const {monto,fecha,metodo,nro_comprobante,concepto,registrado_por,fuente,cuenta_id,suc_id,medio,categoria} = req.body;
   const m = parseFloat(monto)||0;
   if(m<=0) return res.status(400).json({error:'Monto inválido'});
-  db.insert('prov_pagos_fact',{id:uid(),fact_id:null,prov_id:req.params.id,monto:m,
+  const id = uid();
+
+  if (fuente === 'cajon' || fuente === 'tesoreria') {
+    const { pagar } = require('../lib/treasury');
+    const r = pagar(db, {
+      monto: m,
+      concepto: concepto || 'Pago proveedor',
+      categoria: categoria || 'Proveedores',
+      metodo_pago: metodo || 'efectivo',
+      medio: medio || MEDIO_FALLBACK[metodo] || 'otro',
+      suc_id, cuenta_id, usuario: req.user,
+      ref_tipo: 'prov_pago_libre', ref_id: id,
+      fuente,
+    });
+    if (!r.ok) return res.status(400).json({ error: r.error });
+  }
+
+  db.insert('prov_pagos_fact',{id,fact_id:null,prov_id:req.params.id,monto:m,
     fecha:fecha||new Date().toISOString().substr(0,10),
     metodo,nro_comprobante,concepto,registrado_por});
   res.json({ok:true});
@@ -294,9 +331,27 @@ factProvRouter.post('/:id/pagos', (req,res) => {
   const db = _getDB(req);
   const fact = db.findOne('prov_facturas',req.params.id);
   if(!fact) return res.status(404).json({error:'No encontrado'});
-  const {monto,fecha,metodo,nro_comprobante,concepto,registrado_por} = req.body;
+  const {monto,fecha,metodo,nro_comprobante,concepto,registrado_por,fuente,cuenta_id,suc_id,medio,categoria} = req.body;
   const m = parseFloat(monto)||0;
-  db.insert('prov_pagos_fact',{id:uid(),fact_id:req.params.id,prov_id:fact.prov_id,monto:m,fecha:fecha||new Date().toISOString().substr(0,10),metodo,nro_comprobante,concepto,registrado_por});
+  if(m<=0) return res.status(400).json({error:'Monto inválido'});
+  const id = uid();
+
+  if (fuente === 'cajon' || fuente === 'tesoreria') {
+    const { pagar } = require('../lib/treasury');
+    const r = pagar(db, {
+      monto: m,
+      concepto: concepto || `Pago factura ${fact.nro_factura || ''}`,
+      categoria: categoria || 'Proveedores',
+      metodo_pago: metodo || 'efectivo',
+      medio: medio || MEDIO_FALLBACK[metodo] || 'otro',
+      suc_id, cuenta_id, usuario: req.user,
+      ref_tipo: 'prov_fact_pago', ref_id: id,
+      fuente,
+    });
+    if (!r.ok) return res.status(400).json({ error: r.error });
+  }
+
+  db.insert('prov_pagos_fact',{id,fact_id:req.params.id,prov_id:fact.prov_id,monto:m,fecha:fecha||new Date().toISOString().substr(0,10),metodo,nro_comprobante,concepto,registrado_por});
   const nuevoSaldo = Math.max(0, (fact.saldo||0) - m);
   db.update('prov_facturas',req.params.id,{pagado:(fact.pagado||0)+m,saldo:nuevoSaldo});
   res.json({ok:true,saldo_nuevo:nuevoSaldo});

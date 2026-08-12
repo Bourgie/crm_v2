@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useApi } from '../hooks/useApi'
-import { useToast } from '../store'
+import { useApp, useToast } from '../store'
 import { Modal } from '../components/Modal'
 import { SearchBar, PageHeader, Field, EmptyRow, Loader, Pagination, ConfirmDialog } from '../components/UI'
 
@@ -17,8 +17,10 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
   const [tab, setTab] = useState('ordenes')
   const [modalCompra, setModalCompra] = useState(false)
   const [modalPago, setModalPago] = useState(false)
+  const { allSucs } = useApp()
+  const [cuentasTes, setCuentasTes] = useState([])
   const [fCompra, setFC] = useState({ concepto:'', monto:'', nro_factura:'', fecha:new Date().toISOString().substr(0,10), vto:'', notas:'', pagado_al_recibir:'', forma_pago_inicial:'pendiente' })
-  const [fPago, setFP] = useState({ monto:'', metodo:'efectivo', concepto:'Pago proveedor', fecha:new Date().toISOString().substr(0,10), nro_comprobante:'' })
+  const [fPago, setFP] = useState({ monto:'', metodo:'efectivo', concepto:'Pago proveedor', fecha:new Date().toISOString().substr(0,10), nro_comprobante:'', fuente:'tesoreria', cuenta_id:'', suc_id:'' })
   const [metodos, setMetodos] = useState([])
   const [saving, setSaving] = useState(false)
 
@@ -37,6 +39,8 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
         setMetodos(Array.isArray(tp) ? tp.filter((p) => p.activo !== false) : [])
       }
     } catch { setMetodos([]) }
+    try { setCuentasTes(await api('GET', '/tesoreria/cuentas')) }
+    catch { setCuentasTes([]) }
   }, [])
 
   useEffect(() => { load(); loadMetodos() }, [load, loadMetodos])
@@ -55,9 +59,12 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
 
   async function savePago() {
     if (!fPago.monto) { toast('Ingresá el monto','err'); return }
+    if (fPago.fuente === 'tesoreria' && !fPago.cuenta_id) { toast('Elegí la cuenta de tesorería','err'); return }
+    if (fPago.fuente === 'cajon' && !fPago.suc_id) { toast('Elegí la sucursal del cajón','err'); return }
     setSaving(true)
     try {
-      await api('POST', `/proveedores/${prov.id}/pagos`, { ...fPago, monto: parseFloat(fPago.monto) })
+      const mp = metodos.find((m) => m.id === fPago.metodo)
+      await api('POST', `/proveedores/${prov.id}/pagos`, { ...fPago, monto: parseFloat(fPago.monto), medio: mp?.medio || '', categoria: 'Proveedores' })
       toast('Pago registrado','ok'); setModalPago(false); load()
     } catch(e) { toast(e.message,'err') } finally { setSaving(false) }
   }
@@ -93,7 +100,7 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
       {/* Actions */}
       <div style={{display:'flex',gap:8,marginBottom:16}}>
         <button type="button" className="btn btn-primary" onClick={()=>{setFC({concepto:'',monto:'',nro_factura:'',fecha:new Date().toISOString().substr(0,10),vto:'',notas:'',pagado_al_recibir:'',forma_pago_inicial:'pendiente'});setModalCompra(true)}}>📦 Nueva compra</button>
-        <button type="button" className="btn" style={{background:'#dcfce7',color:'#15803d',border:'none'}} onClick={()=>{setFP({monto:String(Math.max(0,saldo)),metodo:'efectivo',concepto:'Pago proveedor',fecha:new Date().toISOString().substr(0,10),nro_comprobante:''});setModalPago(true)}}>💵 Registrar pago</button>
+        <button type="button" className="btn" style={{background:'#dcfce7',color:'#15803d',border:'none'}} onClick={()=>{setFP({monto:String(Math.max(0,saldo)),metodo:'efectivo',concepto:'Pago proveedor',fecha:new Date().toISOString().substr(0,10),nro_comprobante:'',fuente:'tesoreria',cuenta_id:'',suc_id:''});setModalPago(true)}}>💵 Registrar pago</button>
       </div>
 
       {/* Tabs */}
@@ -178,6 +185,28 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
         <div className="fr">
           <Field label="Método"><select value={fPago.metodo} onChange={setP('metodo')}>{metodos.map((m)=><option key={m.id} value={m.id}>{m.icono} {m.nombre}</option>)}</select></Field>
           <Field label="Fecha"><input type="date" value={fPago.fecha} onChange={setP('fecha')}/></Field>
+        </div>
+        <div className="fr">
+          <Field label="Fuente del dinero">
+            <select value={fPago.fuente || 'tesoreria'} onChange={setP('fuente')}>
+              <option value="tesoreria">🏦 Tesorería</option>
+              <option value="cajon">💰 Cajón del día</option>
+            </select>
+          </Field>
+          {fPago.fuente === 'cajon' ? (
+            <Field label="Sucursal">
+              <select value={fPago.suc_id || ''} onChange={setP('suc_id')}>
+                {allSucs.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              </select>
+            </Field>
+          ) : (
+            <Field label="Cuenta de tesorería">
+              <select value={fPago.cuenta_id || ''} onChange={setP('cuenta_id')}>
+                <option value="">Elegir cuenta...</option>
+                {cuentasTes.map((c) => <option key={c.id} value={c.id}>{c.nombre} ({fmt(c.saldo)})</option>)}
+              </select>
+            </Field>
+          )}
         </div>
         <div className="fr">
           <Field label="N° Comprobante"><input value={fPago.nro_comprobante} onChange={setP('nro_comprobante')} placeholder="Opcional" style={{fontFamily:'monospace'}}/></Field>
