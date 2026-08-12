@@ -175,4 +175,78 @@ router.get('/asistencias', authMiddleware, requireRol('admin','supervisor','caje
   res.json(list);
 });
 
+// ── Sueldos: pago dentro del framework de dinero ────────────
+// Crea un gasto (categoría "Sueldos") y registra el egreso en la fuente elegida
+router.get('/sueldos/pagos', authMiddleware, requireRol('admin','supervisor'), (req, res) => {
+  const db = _getDB(req);
+  const pagos = db.all('sueldo_pagos').filter(p => !p.anulado).sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+  const emps = db.all('empleados');
+  res.json(pagos.map(p => ({ ...p, emp_nombre: (emps.find(e => e.id === p.empleado_id) || {}).nombre || '—' })));
+});
+
+router.post('/sueldos/pagar', authMiddleware, requireRol('admin','supervisor'), (req, res) => {
+  const db = _getDB(req);
+  const { empleado_id, monto, fecha, fuente, cuenta_id, suc_id, metodo, medio, concepto } = req.body;
+  const emp = db.findOne('empleados', empleado_id);
+  if (!emp) return res.status(404).json({ error: 'Empleado no encontrado' });
+  const m = Math.round((parseFloat(monto) || 0) * 100) / 100;
+  if (m <= 0) return res.status(400).json({ error: 'Monto inválido' });
+  if (fuente === 'cajon' && !suc_id) return res.status(400).json({ error: 'suc_id requerido para pagar desde caja' });
+  if (fuente === 'tesoreria' && !cuenta_id) return res.status(400).json({ error: 'cuenta_id requerido para pagar desde tesorería' });
+
+  // Categoría "Sueldos" (se crea si no existe)
+  let cat = db.where('gastos_categorias', c => c.nombre && c.nombre.toLowerCase() === 'sueldos')[0];
+  if (!cat) {
+    cat = db.insert('gastos_categorias', { id: 'gc' + uid(), nombre: 'Sueldos', icono: '👥', activo: true });
+  }
+
+  const idGasto = 'g' + uid();
+  const idPago = 'sp_' + uid();
+  const { pagar } = require('../lib/treasury');
+  const r = pagar(db, {
+    monto: m,
+    concepto: concepto || `Sueldo ${emp.nombre} ${emp.apellido || ''}`.trim(),
+    categoria: 'Sueldos',
+    metodo_pago: metodo || 'transferencia',
+    medio: medio || 'transferencia',
+    suc_id: suc_id || null,
+    cuenta_id,
+    usuario: req.user,
+    ref_tipo: 'sueldo_pago', ref_id: idPago,
+    fuente: fuente || 'tesoreria',
+  });
+  if (!r.ok) return res.status(400).json({ error: r.error });
+
+  db.insert('gastos', {
+    id: idGasto,
+    nombre: `Sueldo ${emp.nombre} ${emp.apellido || ''}`.trim(),
+    categoria_id: cat.id,
+    categoria_nombre: 'Sueldos',
+    monto: m,
+    fecha: fecha || new Date().toISOString().substr(0, 10),
+    fecha_vencimiento: null,
+    estado: 'pagado',
+    metodo_pago: metodo || 'transferencia',
+    suc_id: suc_id || null,
+    recurrente_id: null,
+    nro_comprobante: '',
+    notas: 'Pago de sueldo — RRHH',
+    registrado_por: req.user.nombre,
+    pagado_por: req.user.nombre,
+    genera_egreso_caja: fuente === 'cajon' ? 1 : 0,
+    caja_movimiento_id: fuente === 'cajon' ? r.id : null,
+  });
+  db.insert('sueldo_pagos', {
+    id: idPago, empleado_id, monto: m,
+    fecha: new Date().toISOString(),
+    concepto: concepto || 'Pago de sueldo',
+    gasto_id: idGasto,
+    fuente: fuente || 'tesoreria',
+    creado_por: req.user.nombre,
+    anulado: 0,
+  });
+  db.audit(req.user, suc_id || null, 'rrhh', 'pagar_sueldo', `Sueldo ${emp.nombre} — $${m}`, idPago);
+  res.json({ id: idPago, gasto_id: idGasto, ok: true });
+});
+
 module.exports = router;

@@ -646,8 +646,15 @@ try { sqlite.exec("CREATE TABLE IF NOT EXISTS user_sessions (id TEXT PRIMARY KEY
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS comprobantes_transferencia (id TEXT PRIMARY KEY, nro TEXT NOT NULL, nro_normalizado TEXT NOT NULL, venta_id TEXT, ctacte_mov_id TEXT, cliente_id TEXT, suc_id TEXT, monto REAL, fecha TEXT, usuario TEXT, usuario_id TEXT, anulado INTEGER DEFAULT 0)"); } catch(e) {}
 try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_comp_transf ON comprobantes_transferencia(nro_normalizado) WHERE anulado = 0"); } catch(e) {}
 
-// ─── TESORERÍA ────────────────────────────────────────────────
-// Cuentas de tesorería: bóveda CASH (suc_id = sucursal) o banco/billetera (suc_id = NULL → empresa)
+// Pagos de sueldos (RRHH → gasto categoría Sueldos dentro del framework)
+try { sqlite.exec(`CREATE TABLE IF NOT EXISTS sueldo_pagos (
+  id TEXT PRIMARY KEY, empleado_id TEXT, monto REAL,
+  fecha TEXT, concepto TEXT, gasto_id TEXT,
+  fuente TEXT, creado_por TEXT, anulado INTEGER DEFAULT 0,
+  data TEXT DEFAULT '{}'
+)`); } catch(e) {}
+
+// ─── TESORERÍA ────────────────────────────────────────────────// Cuentas de tesorería: bóveda CASH (suc_id = sucursal) o banco/billetera (suc_id = NULL → empresa)
 try { sqlite.exec(`CREATE TABLE IF NOT EXISTS treasury_accounts (
   id TEXT PRIMARY KEY, nombre TEXT, tipo TEXT DEFAULT 'banco',
   suc_id TEXT, moneda TEXT DEFAULT 'ARS',
@@ -1000,6 +1007,7 @@ const COLS = {
   historial_salarios:['id','empleado_id','salario_anterior','salario_nuevo','fecha','motivo','modificado_por'],
   comprobantes_transferencia:['id','nro','nro_normalizado','venta_id','ctacte_mov_id','cliente_id','suc_id','monto','fecha','usuario','usuario_id','anulado'],
   treasury_accounts:['id','nombre','tipo','suc_id','moneda','saldo_inicial','saldo_actual','activo','creado','notas'],
+  sueldo_pagos:['id','empleado_id','monto','fecha','concepto','gasto_id','fuente','creado_por','anulado'],
   treasury_transactions:['id','cuenta_id','tipo','monto','fecha','concepto','categoria','metodo_pago','medio','ref_tipo','ref_id','suc_id','usuario','usuario_id','anulado'],
   treasury_transfers:['id','cuenta_origen','cuenta_destino','monto','fecha','concepto','tipo','caja_id','suc_id','usuario','usuario_id','anulado'],
   consentimientos_empresa:['id','empresa_codigo','tipo','version','aceptado_por','ip','user_agent','creado'],

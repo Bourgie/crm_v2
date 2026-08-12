@@ -22,16 +22,22 @@ function EmpleadosTab({ api, toast, allSucs }) {
   const [form, setForm] = useState({ nombre: '', apellido: '', dni: '', cuil: '', tel: '', email: '', direccion: '', fecha_ingreso: '', puesto: '', salario: '', obra_social: '', suc_id: '', notas: '' })
   const [saving, setSaving] = useState(false)
   const [users, setUsers] = useState([])
+  const [sueldoModal, setSueldoModal] = useState(null)
+  const [sueldoForm, setSueldoForm] = useState({ monto: '', fecha: new Date().toISOString().substr(0, 10), fuente: 'tesoreria', cuenta_id: '', suc_id: '', metodo: 'transferencia' })
+  const [sueldoSaving, setSueldoSaving] = useState(false)
+  const [cuentasTes, setCuentasTes] = useState([])
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [emps, usrs] = await Promise.all([
+      const [emps, usrs, cuentas] = await Promise.all([
         api('GET', '/rrhh/empleados'),
         api('GET', '/auth/usuarios').catch(() => []),
+        api('GET', '/tesoreria/cuentas').catch(() => []),
       ])
       setList(Array.isArray(emps) ? emps : [])
       setUsers(Array.isArray(usrs) ? usrs : [])
+      setCuentasTes(Array.isArray(cuentas) ? cuentas : [])
     } catch { setList([]) }
     finally { setLoading(false) }
   }, [api])
@@ -76,6 +82,24 @@ function EmpleadosTab({ api, toast, allSucs }) {
     catch (e) { toast(e.message, 'err') }
   }
 
+  function openSueldo(e) {
+    setSueldoForm({ monto: String(e.salario || ''), fecha: new Date().toISOString().substr(0, 10), fuente: 'tesoreria', cuenta_id: '', suc_id: e.suc_id || '', metodo: 'transferencia' })
+    setSueldoModal(e)
+  }
+
+  async function saveSueldo() {
+    if (!sueldoForm.monto || parseFloat(sueldoForm.monto) <= 0) { toast('Monto inválido', 'err'); return }
+    if (sueldoForm.fuente === 'tesoreria' && !sueldoForm.cuenta_id) { toast('Elegí la cuenta de tesorería', 'err'); return }
+    if (sueldoForm.fuente === 'cajon' && !sueldoForm.suc_id) { toast('Elegí la sucursal del cajón', 'err'); return }
+    setSueldoSaving(true)
+    try {
+      await api('POST', '/rrhh/sueldos/pagar', { ...sueldoForm, empleado_id: sueldoModal.id, monto: parseFloat(sueldoForm.monto), medio: sueldoForm.metodo === 'efectivo' ? 'efectivo' : 'transferencia' })
+      toast('Sueldo pagado', 'ok')
+      setSueldoModal(null)
+    } catch (e) { toast(e.message, 'err') }
+    finally { setSueldoSaving(false) }
+  }
+
   if (loading) return <Loader />
 
   return (
@@ -99,6 +123,7 @@ function EmpleadosTab({ api, toast, allSucs }) {
                 </div>
               </div>
               <span className={`badge ${e.activo ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 10 }}>{e.activo ? 'Activo' : 'Inactivo'}</span>
+              <button type="button" className="btn btn-sm" title="Pagar sueldo" onClick={ev => { ev.stopPropagation(); openSueldo(e) }} style={{ padding: '3px 8px', fontSize: 11, background: '#dcfce7', color: '#15803d', border: 'none' }}>💵</button>
               <button type="button" className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); openEdit(e) }} style={{ padding: '3px 8px', fontSize: 11 }}>✏️</button>
               <button type="button" className="btn btn-secondary btn-sm" onClick={e => { e.stopPropagation(); toggleActivo(e) }} style={{ padding: '3px 8px', fontSize: 11 }}>{e.activo ? '🚫' : '✅'}</button>
             </div>
@@ -165,6 +190,58 @@ function EmpleadosTab({ api, toast, allSucs }) {
             <div className="modal-footer">
               <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
               <button type="button" className="btn btn-primary" onClick={save} disabled={saving}>{saving ? '⏳ Guardando...' : '💾 Guardar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal pagar sueldo */}
+      {sueldoModal && (
+        <div className="modal-overlay" onClick={() => setSueldoModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+            <div className="modal-header">
+              <h3>💵 Pagar sueldo — {sueldoModal.nombre} {sueldoModal.apellido || ''}</h3>
+              <button type="button" className="modal-close" onClick={() => setSueldoModal(null)}>✕</button>
+            </div>
+            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <Field label="Monto *"><input type="number" value={sueldoForm.monto} onChange={e => setSueldoForm(p => ({ ...p, monto: e.target.value }))} min="0" step="0.01" style={{ fontSize: 16, fontWeight: 700 }} /></Field>
+              <div className="fr">
+                <Field label="Fecha"><input type="date" value={sueldoForm.fecha} onChange={e => setSueldoForm(p => ({ ...p, fecha: e.target.value }))} /></Field>
+                <Field label="Método">
+                  <select value={sueldoForm.metodo} onChange={e => setSueldoForm(p => ({ ...p, metodo: e.target.value }))}>
+                    <option value="efectivo">💵 Efectivo</option>
+                    <option value="transferencia">🏦 Transferencia</option>
+                    <option value="cheque">🧾 Cheque</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="fr">
+                <Field label="Fuente del dinero">
+                  <select value={sueldoForm.fuente} onChange={e => setSueldoForm(p => ({ ...p, fuente: e.target.value }))}>
+                    <option value="tesoreria">🏦 Tesorería</option>
+                    <option value="cajon">💰 Cajón del día</option>
+                  </select>
+                </Field>
+                {sueldoForm.fuente === 'cajon' ? (
+                  <Field label="Sucursal">
+                    <select value={sueldoForm.suc_id || ''} onChange={e => setSueldoForm(p => ({ ...p, suc_id: e.target.value }))}>
+                      {allSucs.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                    </select>
+                  </Field>
+                ) : (
+                  <Field label="Cuenta de tesorería">
+                    <select value={sueldoForm.cuenta_id || ''} onChange={e => setSueldoForm(p => ({ ...p, cuenta_id: e.target.value }))}>
+                      <option value="">Elegir cuenta...</option>
+                      {cuentasTes.map(c => <option key={c.id} value={c.id}>{c.nombre} ({fmt(c.saldo)})</option>)}
+                    </select>
+                  </Field>
+                )}
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--mu)' }}>Se registrará como gasto de categoría "Sueldos" y el egreso quedará en la fuente elegida.</div>
+            </div>
+            <div className="modal-footer">
+              <button type="button" className="btn btn-secondary" onClick={() => setSueldoModal(null)}>Cancelar</button>
+              <button type="button" className="btn btn-primary" style={{ background: 'var(--ok)' }} onClick={saveSueldo} disabled={sueldoSaving}>{sueldoSaving ? '⏳ Pagando...' : '✅ Pagar sueldo'}</button>
             </div>
           </div>
         </div>
