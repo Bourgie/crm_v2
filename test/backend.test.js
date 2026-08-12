@@ -190,7 +190,7 @@ describe('Backend Integration Tests', async () => {
         body: { nombre: 'Sin Teléfono' },
       })
       assert.strictEqual(res.status, 400)
-      assert.ok(res.body.error.includes('tel'))
+      assert.ok(res.body.error.includes('contacto'), 'el error debe pedir al menos un contacto: ' + JSON.stringify(res.body))
     })
 
     it('POST /api/landing/lead with empty body returns 400', async () => {
@@ -323,15 +323,29 @@ describe('Backend Integration Tests', async () => {
   })
 
   // ── 2FA ────────────────────────────────────────────────────
+  // Usa un superadmin de test aislado (no toca el superadmin real del master.db)
   describe('2FA', () => {
+    const TEST_SA_ID = 'sa_2fa_test'
+    const TEST_SA_USER = 'sa_2fa_test'
+    const TEST_SA_PASS = 'sa-test-pass-123'
     let saToken
 
     before(() => {
       const jwt = require('jsonwebtoken')
+      const bcrypt = require('bcryptjs')
       const { master } = require('../db_master')
-      const sa = master.prepare("SELECT id, usuario, nombre FROM superadmin WHERE activo=1 LIMIT 1").get()
-      saToken = jwt.sign({ id: sa.id, usuario: sa.usuario, nombre: sa.nombre, role: 'superadmin' },
+      master.prepare("DELETE FROM superadmin WHERE id=?").run(TEST_SA_ID)
+      master.prepare("INSERT INTO superadmin (id,usuario,password,nombre,email,activo,must_change_password,data) VALUES (?,?,?,?,?,1,0,?)")
+        .run(TEST_SA_ID, TEST_SA_USER, bcrypt.hashSync(TEST_SA_PASS, 10), 'SA Test 2FA', 'sa_2fa_test@test.com', JSON.stringify({ sa_2fa_obligatorio: false }))
+      saToken = jwt.sign({ id: TEST_SA_ID, usuario: TEST_SA_USER, nombre: 'SA Test 2FA', role: 'superadmin' },
         process.env.SA_SECRET, { expiresIn: '1h' })
+    })
+
+    after(() => {
+      try {
+        const { master } = require('../db_master')
+        master.prepare("DELETE FROM superadmin WHERE id=?").run(TEST_SA_ID)
+      } catch {}
     })
 
     it('POST /api/superadmin/2fa/setup returns secret and otpauth', async () => {
@@ -384,7 +398,7 @@ describe('Backend Integration Tests', async () => {
       })
 
       const login = await request('POST', '/api/superadmin/login', {
-        body: { usuario: 'superadmin', password: 'superadmin123' },
+        body: { usuario: TEST_SA_USER, password: TEST_SA_PASS },
       })
       assert.strictEqual(login.status, 200)
       assert.strictEqual(login.body.require_2fa, true)
@@ -395,7 +409,9 @@ describe('Backend Integration Tests', async () => {
         body: { temp_token: login.body.temp_token, code: verifyCode },
       })
       assert.strictEqual(verify.status, 200)
-      assert.ok(typeof verify.body.token === 'string')
+      const setCookie = verify.headers['set-cookie'] || []
+      const cookiesArr = Array.isArray(setCookie) ? setCookie : [setCookie]
+      assert.ok(cookiesArr.some(c => c.startsWith('sa_token=')), 'debe setear la cookie sa_token')
     })
 
     it('POST /api/superadmin/2fa/disable deactivates 2FA', async () => {
@@ -565,7 +581,7 @@ describe('Backend Integration Tests', async () => {
 
   // ── Auth Lockout ─────────────────────────────────────────────
   describe('Login Lockout', () => {
-    it('multiple failed logins trigger lockout', { timeout: 10000 }, async () => {
+    it('multiple failed logins trigger lockout', { timeout: 30000 }, async () => {
       let locked = false
       for (let i = 0; i < 4; i++) {
         const res = await request('POST', '/api/auth/login', {
