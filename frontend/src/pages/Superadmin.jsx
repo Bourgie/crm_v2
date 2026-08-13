@@ -13,8 +13,8 @@ function saApi(method, path, body) {
 }
 
 const RUBROS = [{v:'ropa_infantil',l:'👶 Ropa infantil'},{v:'ropa',l:'👗 Ropa'},{v:'panaderia',l:'🍞 Panadería'},{v:'farmacia',l:'💊 Farmacia'},{v:'ferreteria',l:'🔧 Ferretería'},{v:'servicios',l:'💼 Servicios'},{v:'general',l:'🏪 General'}]
-const TODOS_MODS = ['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','listabebe','transferencias','proveedores','gastos','reportes','auditoria','chat','pipeline','arca','tienda','webhooks','rrhh','tesoreria']
-const MOD_LABELS = {pos:'🛒 POS',caja:'💰 Caja',clientes:'👥 Clientes',ventas:'📋 Ventas',productos:'👕 Productos',ctacte:'📒 Cta Cte',presupuestos:'📄 Presupuestos',pendientes:'🚚 Pendientes',listabebe:'🍼 Lista Bebé',transferencias:'🔄 Transferencias',proveedores:'📦 Proveedores',gastos:'💸 Gastos',reportes:'📈 Reportes',auditoria:'🔍 Auditoría',chat:'💬 Chat',pipeline:'📋 Pipeline',arca:'📄 ARCA',tienda:'🛒 Tienda',webhooks:'🔗 Webhooks',rrhh:'👥 RRHH',tesoreria:'💵 Tesorería'}
+const TODOS_MODS = ['pos','caja','clientes','ventas','productos','ctacte','presupuestos','pendientes','listabebe','transferencias','proveedores','reportes','auditoria','chat','pipeline','arca','tienda','webhooks','rrhh','tesoreria']
+const MOD_LABELS = {pos:'🛒 POS',caja:'💰 Caja',clientes:'👥 Clientes',ventas:'📋 Ventas',productos:'👕 Productos',ctacte:'📒 Cta Cte',presupuestos:'📄 Presupuestos',pendientes:'🚚 Pendientes',listabebe:'🍼 Lista Bebé',transferencias:'🔄 Transferencias',proveedores:'📦 Proveedores',reportes:'📈 Reportes',auditoria:'🔍 Auditoría',chat:'💬 Chat',pipeline:'📋 Pipeline',arca:'📄 ARCA',tienda:'🛒 Tienda',webhooks:'🔗 Webhooks',rrhh:'👥 RRHH',tesoreria:'💵 Tesorería'}
 const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', vendedor: 'Vendedor', cajero: 'Cajero', tesorero: 'Tesorero', readonly: 'Solo lectura' }
 const ROLE_COLORS = { admin:'#f59e0b', supervisor:'#3b82f6', vendedor:'#10b981', cajero:'#8b5cf6', tesorero:'#0ea5e9', readonly:'#6b7280' }
 const MOD_ROLES = {
@@ -212,11 +212,7 @@ export default function Superadmin() {
 
   const [notifForm, setNotifForm] = useState({ empresa: '', tipo: 'manual', titulo: '', mensaje: '' })
 
-  const [saTes, setSaTes] = useState(null)
-  const [saTesDetalle, setSaTesDetalle] = useState(null)
-  const [saTesEmpresa, setSaTesEmpresa] = useState('')
-  const [saTesLoading, setSaTesLoading] = useState(false)
-  const [saTesErr, setSaTesErr] = useState('')
+  const [tesSaving, setTesSaving] = useState('')
   const [notifEnviando, setNotifEnviando] = useState(false)
   const [notifMsg, setNotifMsg] = useState('')
   const [notifHistorial, setNotifHistorial] = useState(null)
@@ -375,7 +371,7 @@ export default function Superadmin() {
   }, [])
 
   function loadAll() {
-    loadDash(); loadEmpresas(); loadPlanes(); loadModulos(); loadSolicitudes(); loadSolicitudesEliminacion(); loadAudit(); loadProspectos(); loadLanding(); loadLandingStats(); loadTickets(); loadEmailConfig(); loadAtributos(); loadMantenimiento(); loadSaTes();
+    loadDash(); loadEmpresas(); loadPlanes(); loadModulos(); loadSolicitudes(); loadSolicitudesEliminacion(); loadAudit(); loadProspectos(); loadLanding(); loadLandingStats(); loadTickets(); loadEmailConfig(); loadAtributos(); loadMantenimiento();
     try { const imp = JSON.parse(sessionStorage.getItem('SA_IMP') || 'null'); if (imp) setImpersonating(imp) } catch {}
   }
 
@@ -394,20 +390,26 @@ export default function Superadmin() {
   async function loadAtributos() { try { const r = await saApi('GET', '/rubros-atributos'); setAtributos(r) } catch {} }
   async function loadMantenimiento() { try { const r = await saApi('GET', '/mantenimiento'); setMtItems(r) } catch {} }
 
-  async function loadSaTes() {
-    setSaTesLoading(true)
+  async function toggleTesEmpresa(e) {
+    let extra = []; try { extra = JSON.parse(e.modulos_extra || '[]') || [] } catch {}
+    let bloq = []; try { bloq = JSON.parse(e.modulos_bloqueados || '[]') || [] } catch {}
+    const plan = planes.find((p) => p.id === e.plan_id) || {}
+    let planMods = plan.modulos || []; if (typeof planMods === 'string') try { planMods = JSON.parse(planMods) || [] } catch { planMods = [] }
+    const enPlan = planMods.includes('tesoreria')
+    const habilitada = !bloq.includes('tesoreria') && (enPlan || extra.includes('tesoreria'))
+    if (habilitada) {
+      extra = extra.filter((m) => m !== 'tesoreria')
+      if (!bloq.includes('tesoreria')) bloq.push('tesoreria')
+    } else {
+      bloq = bloq.filter((m) => m !== 'tesoreria')
+      if (!enPlan && !extra.includes('tesoreria')) extra.push('tesoreria')
+    }
+    setTesSaving(e.id)
     try {
-      const r = await saApi('GET', '/tesoreria/resumen')
-      setSaTes(r)
-      if (r?.empresas?.length && !saTesEmpresa) setSaTesEmpresa(r.empresas[0].codigo)
-    } catch (e) { setSaTesErr(e.message) }
-    finally { setSaTesLoading(false) }
-  }
-  async function verTesEmpresa(codigo) {
-    setSaTesEmpresa(codigo); setSaTesDetalle(null)
-    if (!codigo) return
-    try { setSaTesDetalle(await saApi('GET', '/tesoreria/' + codigo)) }
-    catch (e) { setSaTesDetalle({ error: e.message }) }
+      await saApi('POST', '/empresas/' + e.id + '/modulos', { modulos_extra: extra, modulos_bloqueados: bloq })
+      loadEmpresas()
+    } catch (err) { alert(err.message) }
+    finally { setTesSaving('') }
   }
 
   async function saveMt() {
@@ -1287,116 +1289,45 @@ export default function Superadmin() {
             </div>
           )}
 
-          {/* ═══════ TESORERÍA (solo lectura) ═══════ */}
+          {/* TESORERIA: gestion de acceso por empresa */}
           {tab === 'tesoreria' && (
-            <div>
-              <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 16 }}>💵 Tesorería — todas las empresas</h3>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-                <button type="button" className="btn btn-secondary btn-sm" onClick={loadSaTes} disabled={saTesLoading}>🔄 Actualizar</button>
-                {saTesErr && <span style={{ fontSize: 12, color: 'var(--bad)', alignSelf: 'center' }}>{saTesErr}</span>}
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase' }}>💵 Tesorería — gestión de acceso</h3>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setTab('planes')}>✏️ Editar planes</button>
               </div>
-
-              {saTesLoading && !saTes ? <div style={{ padding: 30, textAlign: 'center' }}><div className="spinner" style={{ margin: '0 auto' }} /></div> : saTes && (
-                <>
-                  <div className="grid-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 16 }}>
-                    <div className="kpi-card"><div className="kpi-label">Saldo total</div><div className="kpi-value" style={{ color: 'var(--ok)' }}>${(saTes.totales?.saldo_total ?? 0).toLocaleString('es-AR')}</div><div className="kpi-sub">{saTes.totales?.cuentas ?? 0} cuentas</div></div>
-                    <div className="kpi-card"><div className="kpi-label">Ingresos mes</div><div className="kpi-value" style={{ fontSize: 18, color: 'var(--ok)' }}>${(saTes.totales?.ingresos_mes ?? 0).toLocaleString('es-AR')}</div></div>
-                    <div className="kpi-card"><div className="kpi-label">Egresos mes</div><div className="kpi-value" style={{ fontSize: 18, color: 'var(--bad)' }}>${(saTes.totales?.egresos_mes ?? 0).toLocaleString('es-AR')}</div></div>
-                    <div className="kpi-card"><div className="kpi-label">Transferencias mes</div><div className="kpi-value" style={{ fontSize: 18 }}>${(saTes.totales?.transferencias_mes ?? 0).toLocaleString('es-AR')}</div></div>
-                  </div>
-
-                  <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 16 }}>
-                    <div className="table-wrap">
-                      <table>
-                        <thead><tr><th>Empresa</th><th>Cuentas</th><th style={{ textAlign: 'right' }}>Saldo</th><th style={{ textAlign: 'right' }}>Ingresos mes</th><th style={{ textAlign: 'right' }}>Egresos mes</th><th></th></tr></thead>
-                        <tbody>
-                          {(saTes.empresas || []).length === 0
-                            ? <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--mu)' }}>Ninguna empresa tiene tesorería configurada.</td></tr>
-                            : (saTes.empresas || []).map((e) => (
-                              <tr key={e.codigo} style={{ cursor: 'pointer', background: saTesEmpresa === e.codigo ? 'var(--sf)' : undefined }} onClick={() => verTesEmpresa(e.codigo)}>
-                                <td><div style={{ fontWeight: 600 }}>{e.nombre}</div><div style={{ fontSize: 11, color: 'var(--mu)' }}>{e.codigo}</div></td>
-                                <td>{e.cuentas}</td>
-                                <td style={{ textAlign: 'right', fontWeight: 700, color: 'var(--ok)' }}>${e.total.toLocaleString('es-AR')}</td>
-                                <td style={{ textAlign: 'right', color: 'var(--ok)' }}>${e.ingresos_mes.toLocaleString('es-AR')}</td>
-                                <td style={{ textAlign: 'right', color: 'var(--bad)' }}>${e.egresos_mes.toLocaleString('es-AR')}</td>
-                                <td style={{ width: 90 }}>
-                                  <button type="button" className="btn btn-secondary btn-sm" onClick={(ev) => { ev.stopPropagation(); saApi('POST', '/empresas/' + e.codigo + '/login-as').then((r) => { sessionStorage.setItem('SA_IMP', JSON.stringify({ empresa: e.nombre, token: r.token })); setImpersonating({ empresa: e.nombre, token: r.token }); window.open(window.location.origin + '/app/login?token=' + r.token, '_blank') }).catch((err) => alert(err.message)) }}>Entrar</button>
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-
-                  {saTesEmpresa && (
-                    <div>
-                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-                        <select value={saTesEmpresa} onChange={(e) => verTesEmpresa(e.target.value)} style={{ padding: '8px 12px', borderRadius: 8, border: '1.5px solid var(--bd)', fontSize: 13 }}>
-                          {(saTes.empresas || []).map((e) => <option key={e.codigo} value={e.codigo}>{e.nombre} ({e.codigo})</option>)}
-                        </select>
-                      </div>
-
-                      {saTesDetalle?.error
-                        ? <div className="card" style={{ padding: 16, color: 'var(--bad)', fontSize: 13 }}>{saTesDetalle.error}</div>
-                        : saTesDetalle && (
-                          <>
-                            <div className="grid-auto" style={{ gap: 8, marginBottom: 16 }}>
-                              {(saTesDetalle.cuentas_detalle || []).map((c) => (
-                                <div key={c.id} className="card" style={{ padding: 12, fontSize: 12 }}>
-                                  <div style={{ fontWeight: 600 }}>{c.nombre}</div>
-                                  <div style={{ color: 'var(--mu)', fontSize: 11 }}>{c.tipo}</div>
-                                  <div style={{ fontWeight: 700, color: c.saldo < 0 ? 'var(--bad)' : 'var(--ok)', marginTop: 4 }}>${c.saldo.toLocaleString('es-AR')}</div>
-                                </div>
-                              ))}
-                            </div>
-                            <div className="fr" style={{ gap: 12 }}>
-                              <div className="card" style={{ flex: 2, padding: 0, overflow: 'hidden' }}>
-                                <div style={{ padding: '10px 14px', fontWeight: 700, fontSize: 13, borderBottom: '1px solid var(--bd)' }}>Últimos movimientos</div>
-                                <div className="table-wrap">
-                                  <table>
-                                    <thead><tr><th>Fecha</th><th>Concepto</th><th>Cuenta</th><th style={{ textAlign: 'right' }}>Monto</th></tr></thead>
-                                    <tbody>
-                                      {(saTesDetalle.movimientos || []).length === 0
-                                        ? <tr><td colSpan={4} style={{ textAlign: 'center', padding: 16, color: 'var(--mu)' }}>Sin movimientos</td></tr>
-                                        : saTesDetalle.movimientos.map((m) => (
-                                          <tr key={m.id}>
-                                            <td style={{ fontSize: 11, color: 'var(--mu)' }}>{(m.fecha || '').substr(0, 10)}</td>
-                                            <td style={{ fontSize: 12 }}>{m.concepto}</td>
-                                            <td style={{ fontSize: 11 }}>{m.cuenta_nombre}</td>
-                                            <td style={{ textAlign: 'right', fontSize: 12, fontWeight: 700, color: m.tipo === 'income' ? 'var(--ok)' : 'var(--bad)' }}>{m.tipo === 'income' ? '+' : '-'}${m.monto.toLocaleString('es-AR')}</td>
-                                          </tr>
-                                        ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                              <div className="card" style={{ flex: 1, padding: 0, overflow: 'hidden' }}>
-                                <div style={{ padding: '10px 14px', fontWeight: 700, fontSize: 13, borderBottom: '1px solid var(--bd)' }}>Últimas transferencias</div>
-                                <div className="table-wrap">
-                                  <table>
-                                    <thead><tr><th>Fecha</th><th>Origen → Destino</th><th style={{ textAlign: 'right' }}>Monto</th></tr></thead>
-                                    <tbody>
-                                      {(saTesDetalle.transferencias || []).length === 0
-                                        ? <tr><td colSpan={3} style={{ textAlign: 'center', padding: 16, color: 'var(--mu)' }}>Sin transferencias</td></tr>
-                                        : saTesDetalle.transferencias.map((t) => (
-                                          <tr key={t.id}>
-                                            <td style={{ fontSize: 11, color: 'var(--mu)' }}>{(t.fecha || '').substr(0, 10)}</td>
-                                            <td style={{ fontSize: 12 }}>{t.origen_nombre} → {t.destino_nombre}</td>
-                                            <td style={{ textAlign: 'right', fontSize: 12, fontWeight: 700 }}>${t.monto.toLocaleString('es-AR')}</td>
-                                          </tr>
-                                        ))}
-                                    </tbody>
-                                  </table>
-                                </div>
-                              </div>
-                            </div>
-                          </>
-                        )}
-                    </div>
-                  )}
-                </>
-              )}
+              <p style={{ fontSize: 12, color: 'var(--mu)', marginBottom: 16 }}>
+                Habilitá o deshabilitá el módulo para cada empresa. Para agregarlo o quitarlo de un plan, usá la pestaña <strong>Planes</strong>.
+              </p>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Empresa</th><th>Plan</th><th>Incluido en el plan</th><th>Estado</th><th style={{ width: 130 }}></th></tr></thead>
+                  <tbody>
+                    {(empresas || []).filter((e) => Number(e.activo) !== 0).map((e) => {
+                      let extra = []; try { extra = JSON.parse(e.modulos_extra || '[]') || [] } catch {}
+                      let bloq = []; try { bloq = JSON.parse(e.modulos_bloqueados || '[]') || [] } catch {}
+                      const plan = planes.find((p) => p.id === e.plan_id) || {}
+                      let planMods = plan.modulos || []; if (typeof planMods === 'string') try { planMods = JSON.parse(planMods) || [] } catch { planMods = [] }
+                      const enPlan = planMods.includes('tesoreria')
+                      const habilitada = !bloq.includes('tesoreria') && (enPlan || extra.includes('tesoreria'))
+                      return (
+                        <tr key={e.id || e.codigo}>
+                          <td><div style={{ fontWeight: 600 }}>{e.nombre}</div><div style={{ fontSize: 11, color: 'var(--mu)' }}>{e.codigo}</div></td>
+                          <td style={{ fontSize: 12 }}>{e.plan_nombre || e.plan_id || '—'}</td>
+                          <td>{enPlan ? <span className="badge badge-green">Sí</span> : <span className="badge badge-gray">No</span>}</td>
+                          <td>{habilitada ? <span className="badge badge-green">✅ Habilitada</span> : <span className="badge badge-gray">❌ Sin acceso</span>}</td>
+                          <td>
+                            <button type="button" className={`btn btn-sm ${habilitada ? 'btn-secondary' : 'btn-primary'}`} onClick={() => toggleTesEmpresa(e)} disabled={tesSaving === e.id}>
+                              {tesSaving === e.id ? <span className="spinner" style={{ width: 12, height: 12 }} /> : habilitada ? 'Deshabilitar' : 'Habilitar'}
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                    {(empresas || []).filter((e) => Number(e.activo) !== 0).length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--mu)' }}>Sin empresas</td></tr>}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
