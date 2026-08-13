@@ -22,7 +22,7 @@ const sqlite = new DatabaseSync(DB_PATH);
 sqlite.exec("PRAGMA journal_mode=WAL");
 sqlite.exec("PRAGMA foreign_keys=ON");
 
-const CURRENT_SCHEMA_VERSION = 4;
+const CURRENT_SCHEMA_VERSION = 5;
 sqlite.exec("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER)");
 const sv = sqlite.prepare("SELECT version FROM schema_version ORDER BY rowid DESC LIMIT 1").get();
 const dbVersion = sv ? sv.version : 0;
@@ -622,6 +622,13 @@ try { sqlite.exec("ALTER TABLE usuarios ADD COLUMN password_changed_at TEXT"); }
   // User sessions tracking
   try { sqlite.exec("CREATE TABLE IF NOT EXISTS user_sessions (id TEXT PRIMARY KEY, usuario_id TEXT NOT NULL, token_hash TEXT, ip TEXT, user_agent TEXT, creado TEXT, ultimo_acceso TEXT, activo INTEGER DEFAULT 1)"); } catch(e) {}
 }
+if (ensureVersion(5)) {
+  // Tesorería pro: conciliación + referencia de retiros de caja
+  try { sqlite.exec("ALTER TABLE treasury_transactions ADD COLUMN conciliado INTEGER DEFAULT 0"); } catch(e) {}
+  try { sqlite.exec("ALTER TABLE treasury_transactions ADD COLUMN conciliado_fecha TEXT"); } catch(e) {}
+  try { sqlite.exec("ALTER TABLE treasury_transactions ADD COLUMN conciliado_por TEXT"); } catch(e) {}
+  try { sqlite.exec("ALTER TABLE treasury_transfers ADD COLUMN movimiento_id TEXT"); } catch(e) {}
+}
 // ─── MIGRATIONS (always-run, idempotent) ──
 // Email verification (para DBs que se saltaron el gate v1)
 try { sqlite.exec("ALTER TABLE usuarios ADD COLUMN email_verificado INTEGER DEFAULT 1"); } catch(e) {}
@@ -671,6 +678,7 @@ try { sqlite.exec(`CREATE TABLE IF NOT EXISTS treasury_transactions (
   ref_tipo TEXT, ref_id TEXT,
   suc_id TEXT, usuario TEXT, usuario_id TEXT,
   anulado INTEGER DEFAULT 0,
+  conciliado INTEGER DEFAULT 0, conciliado_fecha TEXT, conciliado_por TEXT,
   data TEXT DEFAULT '{}'
 )`); } catch(e) {}
 try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_treas_tx_cuenta ON treasury_transactions(cuenta_id)"); } catch(e) {}
@@ -682,22 +690,37 @@ try { sqlite.exec(`CREATE TABLE IF NOT EXISTS treasury_transfers (
   monto REAL, fecha TEXT, concepto TEXT,
   tipo TEXT DEFAULT 'manual', caja_id TEXT, suc_id TEXT,
   usuario TEXT, usuario_id TEXT, anulado INTEGER DEFAULT 0,
+  movimiento_id TEXT,
   data TEXT DEFAULT '{}'
 )`); } catch(e) {}
 try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_treas_transf_fecha ON treasury_transfers(fecha)"); } catch(e) {}
 
-// Asegurar bóveda CASH por sucursal (siempre, idempotente — cubre DBs existentes)
+// Asegurar Bóveda Central UNICA de empresa (suc_id = null) — idempotente.
+// Consolida bóvedas viejas por sucursal (reapunta movimientos/transferencias y las desactiva).
 try {
-  const sucs = sqlite.prepare("SELECT id, nombre FROM sucursales WHERE activo IS NULL OR activo = 1").all();
-  const insBoveda = sqlite.prepare("INSERT INTO treasury_accounts (id, nombre, tipo, suc_id, moneda, saldo_inicial, saldo_actual, activo, creado, notas, data) VALUES (?,?,?,?,?,?,?,1,?,'','{}')");
-  const existing = sqlite.prepare("SELECT id FROM treasury_accounts WHERE tipo = 'cash'").all().map(r => r.id);
-  for (const s of sucs) {
-    const bovedaId = 'boveda_' + s.id;
-    if (existing.includes(bovedaId)) continue;
-    insBoveda.run(bovedaId, 'Bóveda ' + (s.nombre || s.id), 'cash', s.id, 'ARS', 0, 0, new Date().toISOString());
-    existing.push(bovedaId);
+  const bCentral = sqlite.prepare("SELECT id FROM treasury_accounts WHERE id='boveda_central'").get();
+  if (!bCentral) {
+    sqlite.prepare("INSERT INTO treasury_accounts (id, nombre, tipo, suc_id, moneda, saldo_inicial, saldo_actual, activo, creado, notas, data) VALUES ('boveda_central','Bóveda Central','cash',NULL,'ARS',0,0,1,?,'','{}')")
+      .run(new Date().toISOString());
   }
-} catch(e) { console.error('[Treasury] Error asegurando bóvedas:', e.message); }
+  const viejas = sqlite.prepare("SELECT id FROM treasury_accounts WHERE tipo='cash' AND id != 'boveda_central'").all().map(r => r.id);
+  for (const vid of viejas) {
+    sqlite.prepare("UPDATE treasury_transactions SET cuenta_id='boveda_central' WHERE cuenta_id=? AND anulado=0").run(vid);
+    sqlite.prepare("UPDATE treasury_transfers SET cuenta_destino='boveda_central' WHERE cuenta_destino=? AND anulado=0").run(vid);
+    sqlite.prepare("UPDATE treasury_accounts SET activo=0 WHERE id=?").run(vid);
+  }
+  if (viejas.length > 0) {
+    const txs = sqlite.prepare("SELECT tipo, monto FROM treasury_transactions WHERE cuenta_id='boveda_central' AND anulado=0").all();
+    const trs = sqlite.prepare("SELECT cuenta_origen, cuenta_destino, monto FROM treasury_transfers WHERE anulado=0 AND (cuenta_origen='boveda_central' OR cuenta_destino='boveda_central')").all();
+    let saldo = 0;
+    for (const t of txs) saldo += t.tipo === 'income' ? (parseFloat(t.monto) || 0) : -(parseFloat(t.monto) || 0);
+    for (const t of trs) {
+      if (t.cuenta_destino === 'boveda_central') saldo += parseFloat(t.monto) || 0;
+      if (t.cuenta_origen === 'boveda_central') saldo -= parseFloat(t.monto) || 0;
+    }
+    sqlite.prepare("UPDATE treasury_accounts SET saldo_actual=? WHERE id='boveda_central'").run(Math.round(saldo * 100) / 100);
+  }
+} catch(e) { console.error('[Treasury] Error asegurando bóveda central:', e.message); }
 
 // Asegurar migración de métodos de pago de Gastos/Proveedores a config.tipos_pago (campo medio)
 try {
@@ -826,7 +849,8 @@ function buildSeed() {
 }
 
 // Only seed the default empresa DB — new empresa DBs start clean
-if (DB_PATH.endsWith('crm.db')) {
+// No se siembran datos demo en producción
+if (DB_PATH.endsWith('crm.db') && process.env.NODE_ENV !== 'production') {
   buildSeed();
 }
 
@@ -1106,7 +1130,22 @@ const db = {
     const row = prepareRow(table, record);
     const keys = Object.keys(row).filter(k => row[k] !== undefined && row[k] !== null);
     const vals = keys.map(k => row[k]);
-    const sql = `INSERT OR REPLACE INTO \`${table}\`(${keys.map(k=>'`'+k+'`').join(',')}) VALUES(${keys.map(()=>'?').join(',')})`;
+    // ON CONFLICT DO UPDATE (en vez de INSERT OR REPLACE) preserva la PK y evita
+    // que un upsert por índice UNIQUE borre la fila vieja rompiendo referencias
+    const COMPOSITE_PK = {
+      stock_suc: ['prod_id', 'suc_id'],
+      variante_stock_suc: ['variante_id', 'suc_id'],
+    };
+    const pkCols = COMPOSITE_PK[table] || [db._pk(table)];
+    let sql;
+    if (keys.length && pkCols.every(c => keys.includes(c))) {
+      const updateCols = keys.filter(k => !pkCols.includes(k));
+      const conflict = `ON CONFLICT(${pkCols.map(c=>'`'+c+'`').join(',')}) DO ` +
+        (updateCols.length ? `UPDATE SET ${updateCols.map(k=>'`'+k+'`=excluded.`'+k+'`').join(',')}` : 'NOTHING');
+      sql = `INSERT INTO \`${table}\`(${keys.map(k=>'`'+k+'`').join(',')}) VALUES(${keys.map(()=>'?').join(',')}) ${conflict}`;
+    } else {
+      sql = `INSERT INTO \`${table}\`(${keys.map(k=>'`'+k+'`').join(',')}) VALUES(${keys.map(()=>'?').join(',')})`;
+    }
     try {
       sqlite.prepare(sql).run(...vals);
     } catch(e) {
@@ -1233,17 +1272,25 @@ const db = {
 
 // ── Cache per empresa ──
 const _dbCache = {};
-function getEmpresaDB(empresaCode) {
+const TENANT_DATA_DIR = process.env.TENANT_DATA_DIR || path.join(__dirname, 'data');
+const EMPRESA_CODE_RE = /^[a-z0-9_]+$/;
+function getEmpresaDB(empresaCode, opts = {}) {
   if(!empresaCode) empresaCode = 'default';
-  if(!_dbCache[empresaCode]) {
-    const dbPath = require('path').join(__dirname, 'data', 'empresa_' + empresaCode + '.db');
-    _dbCache[empresaCode] = createDB(dbPath);
+  const code = String(empresaCode);
+  if (!EMPRESA_CODE_RE.test(code)) {
+    // Defense-in-depth: un código malicioso no debe poder crear/abrir archivos arbitrarios
+    throw new Error('Código de empresa inválido: ' + code);
   }
-  return _dbCache[empresaCode];
+  const dbPath = path.join(TENANT_DATA_DIR, 'empresa_' + code + '.db');
+  if (opts.existingOnly && !fs.existsSync(dbPath)) return null;
+  if(!_dbCache[code]) {
+    _dbCache[code] = createDB(dbPath);
+  }
+  return _dbCache[code];
 }
 
 // ── Backward compat: default DB ──
-const db = createDB(require('path').join(__dirname, 'data', 'crm.db'));
+const db = createDB(path.join(TENANT_DATA_DIR, 'crm.db'));
 
 module.exports = db;
 module.exports.uid = uid;
@@ -1252,3 +1299,4 @@ module.exports.db = db;
 module.exports.createDB = createDB;
 module.exports.getEmpresaDB = getEmpresaDB;
 module.exports._dbCache = _dbCache;
+module.exports.TENANT_DATA_DIR = TENANT_DATA_DIR;

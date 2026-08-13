@@ -92,3 +92,28 @@ export function descargarPDF(ventaId, api) {
     URL.revokeObjectURL(url)
   }).catch(() => {})
 }
+
+// ── Comprobantes de tesorería (retiros, depósitos, transferencias, movimientos) ──
+export function imprimirComprobante({ titulo, lineas = [], monto, fecha, firma = '' }) {
+  const sanitize = (str) => String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+  const fmtM = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 2 })
+  const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${sanitize(titulo)}</title>
+  <style>body{font-family:Arial,sans-serif;max-width:500px;margin:40px auto;padding:30px;font-size:14px}
+  h1{text-align:center;font-size:20px;margin-bottom:4px}
+  .sub{text-align:center;color:#666;font-size:12px;margin-bottom:20px}
+  .box{border:2px solid #333;border-radius:8px;padding:16px 20px;text-align:center;margin:16px 0}
+  .val{font-size:32px;font-weight:900}
+  .row{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #ccc;font-size:13px}
+  .row span:first-child{color:#555}
+  .firma{margin-top:50px;display:flex;gap:40px;justify-content:center}
+  .fl{text-align:center;min-width:160px}.fl-line{border-top:1px solid #333;padding-top:8px;font-size:12px;color:#666;margin-top:50px}
+  @media print{body{margin:10px}}</style></head><body>
+  <h1>${sanitize(titulo)}</h1>
+  <div class="sub">${new Date(fecha || Date.now()).toLocaleString('es-AR')}</div>
+  ${lineas.map(([k, v]) => `<div class="row"><span>${sanitize(k)}</span><span>${sanitize(v)}</span></div>`).join('')}
+  <div class="box"><div style="font-size:12px;color:#666">MONTO</div><div class="val">${fmtM(monto)}</div></div>
+  ${firma ? `<div class="firma"><div class="fl"><div class="fl-line">${sanitize(firma)}</div></div></div>` : ''}
+  </body></html>`
+  const w = window.open('', '_blank', 'width=600,height=700')
+  if (w) { w.document.write(html); w.document.close(); setTimeout(() => w.print(), 400) }
+}

@@ -116,13 +116,12 @@ router.post('/cerrar', requireRol('admin', 'supervisor', 'cajero'), (req, res) =
   });
   empDB.audit(req.user, caja.suc_id, 'caja', 'cerrar', 'Cierre caja — Saldo: $'+saldo_esperado_efectivo, caja.id);
 
-  // Depósito automático del saldo real a la bóveda CASH de tesorería
+  // Depósito automático del saldo real a la Bóveda Central de tesorería (empresa)
   let depositoTes = null;
   if (saldoReal > 0) {
     try {
-      const { asegurarBovedas } = require('../lib/treasury');
-      asegurarBovedas(empDB);
-      const boveda = empDB.where('treasury_accounts', a => a.tipo === 'cash' && a.suc_id === suc_id && a.activo)[0];
+      const { asegurarBovedaCentral } = require('../lib/treasury');
+      const boveda = asegurarBovedaCentral(empDB);
       if (boveda) {
         const ya = empDB.where('treasury_transfers', t => t.tipo === 'cierre_caja' && t.caja_id === caja.id && !t.anulado)[0];
         if (!ya) {
@@ -134,7 +133,7 @@ router.post('/cerrar', requireRol('admin', 'supervisor', 'cajero'), (req, res) =
             caja_id: caja.id, suc_id,
             usuario: req.user.nombre, usuario_id: req.user.id, anulado: 0
           });
-          empDB.update('treasury_accounts', boveda.id, { saldo_actual: Math.round(((parseFloat(boveda.saldo_actual) || 0) + saldoReal) * 100) / 100 });
+          require('../lib/treasury').sincSaldo(empDB, boveda.id);
           empDB.audit(req.user, suc_id, 'tesoreria', 'deposito_cierre', `Cierre de caja → ${boveda.nombre} — $${saldoReal}`, tid);
           depositoTes = { transferencia_id: tid, boveda: boveda.nombre, monto: saldoReal };
         }
@@ -189,7 +188,26 @@ router.post('/movimiento', requireRol('admin', 'supervisor', 'cajero'), (req, re
     }
   }
 
-  empDB.insert('movimientos_caja', { id: uid(), caja_id: caja.id, suc_id, fecha: new Date().toISOString(), tipo, concepto, monto: parseFloat(monto), auto: false, pago_metodo: pago_metodo || 'efectivo', usuario: req.user.nombre, anulado: false });
+  const movId = 'm' + uid();
+  empDB.insert('movimientos_caja', { id: movId, caja_id: caja.id, suc_id, fecha: new Date().toISOString(), tipo, concepto, monto: parseFloat(monto), auto: false, pago_metodo: pago_metodo || 'efectivo', usuario: req.user.nombre, anulado: false });
+
+  // Los retiros de caja van a la Bóveda Central de tesorería (a nivel empresa)
+  if (tipo === 'egreso') {
+    try {
+      const { asegurarBovedaCentral, movTes } = require('../lib/treasury');
+      const central = asegurarBovedaCentral(empDB);
+      if (central) {
+        movTes(empDB, {
+          cuenta_id: central.id, tipo: 'income',
+          concepto: 'Retiro de caja — ' + concepto,
+          monto: parseFloat(monto),
+          metodo_pago: pago_metodo || 'efectivo', medio: 'efectivo',
+          suc_id, usuario: req.user,
+          ref_tipo: 'retiro_caja', ref_id: movId,
+        });
+      }
+    } catch(e) { /* empresa sin tesorería — el retiro queda solo en caja */ }
+  }
   res.json({ ok: true });
 });
 
@@ -201,6 +219,14 @@ router.delete('/movimiento/:id', requireRol('admin'), (req, res) => {
   if (!permiteSucursal(req.user, mov.suc_id)) return res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
   if (mov.auto) return res.status(400).json({ error: 'Los movimientos automáticos no se pueden anular aquí.' });
   empDB.update('movimientos_caja', req.params.id, { anulado: true, anulado_por: req.user.nombre, anulado_fecha: new Date().toISOString() });
+  // Si fue un retiro que fue a la Bóveda Central, anular ese ingreso
+  try {
+    const tx = empDB.raw.prepare("SELECT id, cuenta_id FROM treasury_transactions WHERE ref_tipo='retiro_caja' AND ref_id=? AND anulado=0").get(String(req.params.id));
+    if (tx) {
+      empDB.update('treasury_transactions', tx.id, { anulado: 1 });
+      require('../lib/treasury').sincSaldo(empDB, tx.cuenta_id);
+    }
+  } catch(e) {}
   res.json({ ok: true });
 });
 

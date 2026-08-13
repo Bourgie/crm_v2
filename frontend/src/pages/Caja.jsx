@@ -105,6 +105,9 @@ function imprimirRetiro(concepto, monto, firma) {
       <Field label="Concepto *"><input value={conc} onChange={(e) => setConc(e.target.value)} placeholder="Ej: Pago proveedor..." /></Field>
       <Field label="Monto *"><input type="number" value={monto} onChange={(e) => setMonto(e.target.value)} min="0" step="0.01" /></Field>
       {tipo === 'egreso' && (<>
+        <div style={{ fontSize: 12, color: 'var(--mu)', background: 'var(--sf)', borderRadius: 8, padding: '8px 10px', marginBottom: 8 }}>
+          🏦 El retiro se registra también en Tesorería (Bóveda Central de la empresa).
+        </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', padding: 10, background: 'var(--sf)', borderRadius: 8, border: '1px solid var(--bd)' }}>
           <input type="checkbox" checked={imprimir} onChange={(e) => setImprimir(e.target.checked)} style={{ width: 16, height: 16 }} />
           🖨️ Generar comprobante para firma

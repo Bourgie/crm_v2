@@ -8,6 +8,9 @@ const bcrypt = require('bcryptjs')
 
 process.env.NODE_ENV = 'test'
 process.env.JWT_SECRET = 'test-jwt-secret-for-integration-tests-only'
+const TEST_DATA_DIR = path.join(__dirname, '..', 'data', 'test')
+process.env.TENANT_DATA_DIR = TEST_DATA_DIR
+process.env.MASTER_PATH = path.join(TEST_DATA_DIR, 'master.db')
 
 const { createDB, getEmpresaDB } = require('../db_sqlite')
 
@@ -120,6 +123,13 @@ describe('Treasury HTTP API', () => {
   }
 
   before(async () => {
+    // Empresa 'default' en master de test (validateTenant exige que exista y esté activa)
+    try {
+      const { master } = require('../db_master')
+      master.prepare("INSERT OR IGNORE INTO empresas (id,codigo,nombre,rubro,activo,creado) VALUES ('emp_test_default','default','Test Default','general',1,?)")
+        .run(new Date().toISOString())
+    } catch {}
+
     await new Promise((resolve, reject) => {
       server = require('../server').listen(0, '127.0.0.1', () => {
         baseUrl = `http://127.0.0.1:${server.address().port}`
@@ -139,6 +149,18 @@ describe('Treasury HTTP API', () => {
       id: 'utest_cajero', nombre: 'Test Cajero', usuario: 'tesoreria_test_cajero', email: 'tesoreria_test_cajero@test.com',
       password: pass, rol: 'cajero', roles: ['cajero'], suc_sesiones_permitidas: [], activo: true,
       creado: now, must_change_password: 0, email_verificado: 1, password_changed_at: now,
+    })
+
+    empDB.insert('sucursales', { id: 'utest_suc_1', nombre: 'Suc Test 1', activo: true, creado: now })
+    // Bóveda vieja por sucursal (será consolidada por asegurarBovedaCentral)
+    empDB.insert('treasury_accounts', {
+      id: 'boveda_utest_suc_1', nombre: 'Bóveda Suc Test 1', tipo: 'cash', suc_id: 'utest_suc_1',
+      moneda: 'ARS', saldo_inicial: 0, saldo_actual: 0, activo: true, creado: now, notas: '',
+    })
+    empDB.insert('treasury_transactions', {
+      id: 'utest_tx_boveda_vieja', cuenta_id: 'boveda_utest_suc_1', tipo: 'income', monto: 500,
+      fecha: new Date().toISOString(), concepto: 'Viejo retiro', ref_tipo: 'retiro_caja', ref_id: 'utest_mov_viejo',
+      suc_id: 'utest_suc_1', usuario: 'Test', usuario_id: null, anulado: 0,
     })
 
     const jwt = require('jsonwebtoken')
@@ -184,32 +206,49 @@ describe('Treasury HTTP API', () => {
       } catch {}
     }
     for (const id of creados.cuentas) { try { empDB.delete('treasury_accounts', id) } catch {} }
+    try { empDB.delete('treasury_accounts', 'boveda_utest_suc_1') } catch {}
+    try { empDB.delete('treasury_transactions', 'utest_tx_boveda_vieja') } catch {}
+    try { empDB.delete('sucursales', 'utest_suc_1') } catch {}
     for (const u of [adminUser, cajeroUser]) { try { empDB.delete('usuarios', u.id) } catch {} }
     if (server) server.close()
   })
 
-  it('GET /tesoreria/cuentas lista cuentas incluyendo bóvedas', async () => {
+  it('GET /tesoreria/cuentas consolida en una sola Bóveda Central', async () => {
+    const empDB = getEmpresaDB('default')
     const r = await request('GET', '/api/tesoreria/cuentas')
     assert.strictEqual(r.status, 200)
     assert.ok(Array.isArray(r.body))
-    assert.ok(r.body.some(c => c.tipo === 'cash'), 'debería haber bóvedas CASH')
+    const cash = r.body.filter(c => c.tipo === 'cash')
+    assert.strictEqual(cash.length, 1, 'debe existir UNA sola cuenta cash activa')
+    assert.strictEqual(cash[0].nombre, 'Bóveda Central')
+    assert.strictEqual(cash[0].suc_id, null, 'la Bóveda Central es de empresa, no de sucursal')
     assert.ok(r.body.every(c => c.saldo !== undefined), 'todas con saldo')
+    // La bóveda vieja por sucursal quedó consolidada: su tx apunta a la central y quedó inactiva
+    const vieja = empDB.findOne('treasury_accounts', 'boveda_utest_suc_1')
+    assert.ok(!vieja || vieja.activo === false || vieja.activo === 0, 'la bóveda vieja quedó desactivada')
+    const txVieja = empDB.findOne('treasury_transactions', 'utest_tx_boveda_vieja')
+    assert.strictEqual(txVieja.cuenta_id, 'boveda_central', 'la tx vieja se reapuntó a la central')
   })
 
-  it('crear sucursal nueva genera su bóveda CASH y aparece en tesorería', async () => {
+  it('crear sucursal nueva NO crea bóvedas — sigue una sola central', async () => {
     const empDB = getEmpresaDB('default')
     const r = await request('POST', '/api/sucursales', { headers: csrfHdr, body: { nombre: 'TEST_SUC_BOVEDA_' + Date.now() } })
     assert.strictEqual(r.status, 200, r.raw)
     const sucId = r.body.id
 
-    const boveda = empDB.where('treasury_accounts', a => a.tipo === 'cash' && a.suc_id === sucId)[0]
-    assert.ok(boveda, 'debería existir bóveda para la sucursal recién creada')
+    const bovedas = empDB.where('treasury_accounts', a => a.tipo === 'cash' && a.activo !== false)
+    assert.strictEqual(bovedas.length, 1, 'no debe crearse bóveda para la sucursal nueva')
+    assert.strictEqual(bovedas[0].id, 'boveda_central')
 
-    const cuentas = await request('GET', '/api/tesoreria/cuentas')
-    assert.ok(cuentas.body.some(c => c.suc_id === sucId && c.tipo === 'cash'), 'la bóveda nueva aparece en el listado')
-
-    empDB.delete('treasury_accounts', boveda.id)
     empDB.softDel('sucursales', sucId)
+  })
+
+  it('la Bóveda Central no se puede eliminar ni crear otra cash', async () => {
+    const hdr = csrfHdr
+    const del = await request('DELETE', '/api/tesoreria/cuentas/boveda_central', { headers: hdr })
+    assert.strictEqual(del.status, 400, 'eliminar bóveda central debe dar 400')
+    const crea = await request('POST', '/api/tesoreria/cuentas', { headers: hdr, body: { nombre: 'Bóveda 2', tipo: 'cash', suc_id: '' } })
+    assert.strictEqual(crea.status, 400, 'crear otra bóveda cash debe dar 400')
   })
 
   it('crea cuenta, registra ingreso, valida duplicado, anula y desactiva', async () => {
@@ -270,7 +309,7 @@ describe('Treasury HTTP API', () => {
     assert.strictEqual(r.status, 403)
   })
 
-  it('cierre de caja deposita el saldo real a la bóveda CASH', async () => {
+  it('cierre de caja deposita el saldo real a la Bóveda Central', async () => {
     const empDB = getEmpresaDB('default')
     const suc = empDB.find('sucursales', { activo: true })[0]
     assert.ok(suc, 'necesita una sucursal activa')
@@ -285,9 +324,72 @@ describe('Treasury HTTP API', () => {
     assert.strictEqual(cerrar.body.deposito_tesoreria.monto, 1500)
     creados.transfers.push(cerrar.body.deposito_tesoreria.transferencia_id)
 
-    const boveda = empDB.where('treasury_accounts', a => a.tipo === 'cash' && a.suc_id === suc.id)[0]
     const { calcSaldo } = require('../lib/treasury')
-    assert.ok(boveda && calcSaldo(empDB, boveda.id) >= 1500, 'la bóveda debería tener el depósito')
+    const central = empDB.findOne('treasury_accounts', 'boveda_central')
+    assert.ok(central && calcSaldo(empDB, central.id) >= 1500, 'la Bóveda Central debería tener el depósito')
+  })
+
+  it('retiro de caja ingresa a la Bóveda Central y anular retiro lo revierte', async () => {
+    const empDB = getEmpresaDB('default')
+    const suc = empDB.find('sucursales', { activo: true })[0]
+
+    const abrir = await request('POST', '/api/caja/abrir', { headers: csrfHdr, body: { suc_id: suc.id, fondo_inicial: 10000 } })
+    if (abrir.status !== 200) return // caja ya abierta hoy — saltar
+    creados.cajas.push(abrir.body.id)
+
+    const ret = await request('POST', '/api/caja/movimiento', { headers: csrfHdr, body: { suc_id: suc.id, tipo: 'egreso', concepto: 'Retiro test', monto: 300, pago_metodo: 'efectivo' } })
+    assert.strictEqual(ret.status, 200, ret.raw)
+
+    const { calcSaldo } = require('../lib/treasury')
+    const central = empDB.findOne('treasury_accounts', 'boveda_central')
+    const tx = empDB.raw.prepare("SELECT * FROM treasury_transactions WHERE ref_tipo='retiro_caja' AND ref_id IN (SELECT id FROM movimientos_caja WHERE concepto='Retiro test' ORDER BY fecha DESC LIMIT 1)").get()
+    assert.ok(tx, 'debe existir ingreso en Bóveda Central por el retiro')
+    assert.strictEqual(tx.cuenta_id, 'boveda_central')
+    assert.strictEqual(tx.monto, 300)
+    assert.ok(calcSaldo(empDB, central.id) >= 300, 'la central recibió el retiro')
+
+    // Anular el movimiento de caja revierte el ingreso
+    const mov = empDB.where('movimientos_caja', m => m.concepto === 'Retiro test')[0]
+    const delMov = await request('DELETE', '/api/caja/movimiento/' + mov.id, { headers: csrfHdr })
+    assert.strictEqual(delMov.status, 200)
+    const txAnulada = empDB.findOne('treasury_transactions', tx.id)
+    assert.ok(txAnulada.anulado, 'la tx de retiro quedó anulada')
+  })
+
+  it('conciliar movimiento banco y validar en reporte', async () => {
+    const hdr = csrfHdr
+    const cuenta = await request('POST', '/api/tesoreria/cuentas', { headers: hdr, body: { nombre: 'TEST_CONC_' + Date.now(), tipo: 'banco', suc_id: '', saldo_inicial: 0 } })
+    assert.strictEqual(cuenta.status, 200, cuenta.raw)
+    creados.cuentas.push(cuenta.body.id)
+
+    const ing = await request('POST', '/api/tesoreria/transacciones', { headers: hdr, body: { cuenta_id: cuenta.body.id, tipo: 'income', monto: 900, concepto: 'Ingreso a conciliar' } })
+    assert.strictEqual(ing.status, 200, ing.raw)
+    creados.txs.push(ing.body.id)
+
+    const conc = await request('POST', `/api/tesoreria/transacciones/${ing.body.id}/conciliar`, { headers: hdr, body: { conciliado: true } })
+    assert.strictEqual(conc.status, 200, conc.raw)
+    assert.strictEqual(conc.body.conciliado, 1)
+
+    const noConcBoveda = await request('POST', '/api/tesoreria/transacciones', { headers: hdr, body: { cuenta_id: 'boveda_central', tipo: 'income', monto: 10, concepto: 'No conciliable' } })
+    if (noConcBoveda.status === 200) {
+      creados.txs.push(noConcBoveda.body.id)
+      const cB = await request('POST', `/api/tesoreria/transacciones/${noConcBoveda.body.id}/conciliar`, { headers: hdr, body: { conciliado: true } })
+      assert.strictEqual(cB.status, 400, 'movimientos de la bóveda no se concilian')
+    }
+
+    const hoy = new Date().toISOString().substr(0, 10)
+    const rep = await request('GET', `/api/tesoreria/reporte?desde=${hoy}&hasta=${hoy}`, { headers: hdr })
+    assert.strictEqual(rep.status, 200, rep.raw)
+    assert.ok(Array.isArray(rep.body.filas))
+    assert.ok(rep.body.filas.some(f => f.concepto === 'Ingreso a conciliar' && f.conciliado), 'el reporte marca el conciliado')
+  })
+
+  it('resumen incluye por_sucursal y retiros del mes', async () => {
+    const r = await request('GET', '/api/tesoreria/resumen')
+    assert.strictEqual(r.status, 200)
+    assert.ok(Array.isArray(r.body.por_sucursal), 'por_sucursal presente')
+    assert.ok(typeof r.body.retiros_mes === 'number', 'retiros_mes presente')
+    assert.ok(r.body.egresos_mes_anterior >= 0, 'egresos_mes_anterior presente')
   })
 
   it('pago a proveedor desde tesorería mueve dinero real', async () => {
