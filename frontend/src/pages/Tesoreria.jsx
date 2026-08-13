@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
+import { Navigate } from 'react-router-dom'
 import { useApi } from '../hooks/useApi'
 import { useApp, useToast, useAuth } from '../store'
 import { Modal } from '../components/Modal'
@@ -12,7 +13,7 @@ const MEDIO_LABEL = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarj
 export function Tesoreria() {
   const { api } = useApi()
   const { toast } = useToast()
-  const { sucSesion, allSucs } = useApp()
+  const { sucSesion, allSucs, hasModule } = useApp()
   const { me } = useAuth()
 
   const [tab, setTab] = useState('cuentas')
@@ -32,6 +33,13 @@ export function Tesoreria() {
     const roles = Array.isArray(me?.roles) && me.roles.length ? me.roles : [me?.rol]
     return roles.includes('admin') || roles.includes('tesorero') || me?.rol === 'admin'
   }, [me])
+
+  // Guard: módulo habilitado en el plan + rol con acceso (evita requests 403 que desloguean)
+  const puedeEntrar = useMemo(() => {
+    if (!hasModule('tesoreria')) return false
+    const roles = Array.isArray(me?.roles) && me.roles.length ? me.roles : [me?.rol]
+    return roles.includes('admin') || roles.includes('tesorero')
+  }, [hasModule, me])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -57,7 +65,7 @@ export function Tesoreria() {
     finally { setLoading(false) }
   }, [])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => { if (puedeEntrar) load() }, [load, puedeEntrar])
 
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }))
 
@@ -131,6 +139,7 @@ export function Tesoreria() {
     catch (e) { toast(e.message, 'err') }
   }
 
+  if (!puedeEntrar) return <Navigate to="/app/dashboard" replace />
   if (loading) return <Loader />
 
   const cuentasElegibles = cuentas.filter((c) => c.activo !== false)

@@ -439,15 +439,17 @@ master.prepare("INSERT OR IGNORE INTO planes (id,codigo,nombre,precio,periodo,mo
     JSON.stringify({usuarios_max:999, sucursales_max:999}), JSON.stringify(['arca','mercadolibre','tiendanube']), 30);
 
 // Migración idempotente: agregar tesoreria a planes Pro/Enterprise existentes
+// y a planes custom con perfil pro+ (tienen auditoria o pipeline)
 try {
   const updPlanes = master.prepare("SELECT id, modulos FROM planes");
   const allPlanes = updPlanes.all();
   const updStmt = master.prepare("UPDATE planes SET modulos=? WHERE id=?");
   for (const p of allPlanes) {
-    if (!/pro|enterprise/.test(p.id)) continue;
     let mods = [];
     try { mods = JSON.parse(p.modulos || '[]'); } catch(e) { mods = []; }
     if (!Array.isArray(mods)) mods = [];
+    const esProLike = /pro|enterprise/.test(p.id) || mods.includes('auditoria') || mods.includes('pipeline');
+    if (!esProLike) continue;
     if (!mods.includes('tesoreria')) {
       mods.push('tesoreria');
       updStmt.run(JSON.stringify(mods), p.id);
@@ -1018,6 +1020,35 @@ try {
     empresasSinInteg.forEach(e => { try { syncEmpresaIntegracionesDesdePlan(e.id, e.plan_id); } catch(_) {} });
     console.log('✓ Backfill integraciones: ' + empresasSinInteg.length + ' empresas sincronizadas desde su plan');
   }
+} catch(_) {}
+
+// Backfill: empresas cuyo plan incluye 'tesoreria' → habilitar en modulos_habilitados
+try {
+  const { getEmpresaDB } = require('./db_sqlite');
+  const planesMods = {};
+  getPlanes().forEach(p => { planesMods[p.id] = Array.isArray(p.modulos) ? p.modulos : []; });
+  const empresas = master.prepare("SELECT codigo, plan_id, modulos_extra, modulos_bloqueados FROM empresas WHERE activo=1").all();
+  let n = 0;
+  for (const e of empresas) {
+    const planMods = planesMods[e.plan_id] || [];
+    let extra = []; try { extra = JSON.parse(e.modulos_extra || '[]') || []; } catch {}
+    let bloqueados = []; try { bloqueados = JSON.parse(e.modulos_bloqueados || '[]') || []; } catch {}
+    if (!planMods.includes('tesoreria') && !extra.includes('tesoreria')) continue;
+    if (bloqueados.includes('tesoreria')) continue;
+    try {
+      const empDB = getEmpresaDB(e.codigo);
+      const cfg = empDB.getConfig();
+      let mods = cfg.modulos_habilitados;
+      if (typeof mods === 'string') { try { mods = JSON.parse(mods); } catch { mods = null; } }
+      if (!Array.isArray(mods)) continue;
+      if (!mods.includes('tesoreria')) {
+        mods.push('tesoreria');
+        empDB.setConfig({ modulos_habilitados: JSON.stringify(mods) });
+        n++;
+      }
+    } catch(err) { /* empresa sin DB o error — saltar */ }
+  }
+  if (n > 0) console.log('✓ Backfill tesoreria: ' + n + ' empresas con módulo habilitado desde su plan');
 } catch(_) {}
 
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
