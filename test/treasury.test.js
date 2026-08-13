@@ -196,6 +196,22 @@ describe('Treasury HTTP API', () => {
     assert.ok(r.body.every(c => c.saldo !== undefined), 'todas con saldo')
   })
 
+  it('crear sucursal nueva genera su bóveda CASH y aparece en tesorería', async () => {
+    const empDB = getEmpresaDB('default')
+    const r = await request('POST', '/api/sucursales', { headers: csrfHdr, body: { nombre: 'TEST_SUC_BOVEDA_' + Date.now() } })
+    assert.strictEqual(r.status, 200, r.raw)
+    const sucId = r.body.id
+
+    const boveda = empDB.where('treasury_accounts', a => a.tipo === 'cash' && a.suc_id === sucId)[0]
+    assert.ok(boveda, 'debería existir bóveda para la sucursal recién creada')
+
+    const cuentas = await request('GET', '/api/tesoreria/cuentas')
+    assert.ok(cuentas.body.some(c => c.suc_id === sucId && c.tipo === 'cash'), 'la bóveda nueva aparece en el listado')
+
+    empDB.delete('treasury_accounts', boveda.id)
+    empDB.softDel('sucursales', sucId)
+  })
+
   it('crea cuenta, registra ingreso, valida duplicado, anula y desactiva', async () => {
     const hdr = csrfHdr
 

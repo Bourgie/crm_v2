@@ -4,7 +4,7 @@ const { uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || require('../db_sqlite').db;
 const { authMiddleware, requireRol, requirePermiso } = require('../middleware/auth');
 const { requireModule } = require('../middleware/tenant');
-const { calcSaldo, sincSaldo, movTes } = require('../lib/treasury');
+const { calcSaldo, sincSaldo, asegurarBovedas, movTes } = require('../lib/treasury');
 
 router.use(authMiddleware);
 router.use(requireModule('tesoreria'));
@@ -33,6 +33,7 @@ const TIPO_LABEL = { cash: 'Bóveda', banco: 'Banco', billetera: 'Billetera', ta
 // ── CUENTAS ──────────────────────────────────────────────────
 router.get('/cuentas', requireRol('admin', 'tesorero'), (req, res) => {
   const db = _getDB(req);
+  asegurarBovedas(db);
   const { tipo, suc_id } = req.query;
   let rows = cuentasVisibles(db, req);
   if (tipo) rows = rows.filter(c => c.tipo === tipo);
@@ -159,6 +160,10 @@ router.post('/transacciones/:id/anular', requireRol('admin', 'tesorero'), (req, 
   const cuenta = db.findOne('treasury_accounts', tx.cuenta_id);
   if (cuenta && !puedeVerCuenta(req, cuenta)) return res.status(403).json({ error: 'Sin permisos para esta cuenta' });
   db.update('treasury_transactions', tx.id, { anulado: 1 });
+  // Si era un gasto, eliminar el registro de gasto (consistencia contable)
+  if (tx.ref_tipo === 'gasto' && tx.ref_id) {
+    try { db.delete('gastos', String(tx.ref_id)); } catch(e) {}
+  }
   const saldo = sincSaldo(db, tx.cuenta_id);
   db.audit(req.user, tx.suc_id || null, 'tesoreria', 'anular_transaccion', `${tx.concepto} — $${tx.monto}`, tx.id);
   res.json({ ok: true, saldo_cuenta: saldo });

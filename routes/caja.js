@@ -120,6 +120,8 @@ router.post('/cerrar', requireRol('admin', 'supervisor', 'cajero'), (req, res) =
   let depositoTes = null;
   if (saldoReal > 0) {
     try {
+      const { asegurarBovedas } = require('../lib/treasury');
+      asegurarBovedas(empDB);
       const boveda = empDB.where('treasury_accounts', a => a.tipo === 'cash' && a.suc_id === suc_id && a.activo)[0];
       if (boveda) {
         const ya = empDB.where('treasury_transfers', t => t.tipo === 'cierre_caja' && t.caja_id === caja.id && !t.anulado)[0];

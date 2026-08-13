@@ -29,7 +29,9 @@ sucRouter.post('/', requireRol('admin'), (req,res) => {
     }
   } catch(e) { /* master db check failed, allow creation */ }
   const { nombre, dir, ciudad, tel, email, responsable } = req.body;
-  res.json(db.insert('sucursales',{id:'s'+uid(),activo:true,nombre,dir,ciudad,tel,email,responsable}));
+  const suc = db.insert('sucursales',{id:'s'+uid(),activo:true,nombre,dir,ciudad,tel,email,responsable});
+  try { require('../lib/treasury').asegurarBovedas(db); } catch(e) { /* sin tesorería */ }
+  res.json(suc);
 });
 sucRouter.put('/:id', requireRol('admin','supervisor'), (req,res) => {
   const db = _getDB(req);
