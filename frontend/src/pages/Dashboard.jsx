@@ -336,7 +336,7 @@ export function Dashboard() {
             { label: '👥 Clientes', to: '/app/clientes' },
             { label: '💰 Ver caja', to: '/app/caja' },
             { label: '📦 Stock', to: '/app/productos' },
-            { label: '💸 Gastos', to: '/app/gastos' },
+            { label: '💵 Tesorería', to: '/app/tesoreria' },
             { label: '📋 Ventas de hoy', to: '/app/ventas' },
           ].map((a) => (
             <button type="button" key={a.to} className="btn btn-secondary" onClick={() => navigate(a.to)}>

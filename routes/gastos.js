@@ -69,12 +69,15 @@ router.get('/', (req, res) => {
   res.json(rows.sort((a,b) => new Date(b.fecha) - new Date(a.fecha)));
 });
 
+const MEDIO_FALLBACK = { efectivo:'efectivo', transferencia:'transferencia', cheque:'cheque', tarjeta:'tarjeta_credito', debito_cuenta:'transferencia', tarjeta_corp:'tarjeta_credito', debito:'tarjeta_debito', credito:'tarjeta_credito', qr:'billetera', ctacte:'ctacte' };
+
 router.post('/', requireRol('admin','supervisor','cajero'), validate(gastoSchema), (req, res) => {
   const db = _getDB(req);
   const { nombre, categoria_id, monto, fecha, fecha_vencimiento, estado,
           metodo_pago, suc_id, recurrente_id, nro_comprobante, notas,
-          pagado_por, genera_egreso_caja } = req.body;
+          pagado_por, genera_egreso_caja, fuente, cuenta_id } = req.body;
   if (!nombre || !monto) return res.status(400).json({error:'Nombre y monto requeridos'});
+  const fuenteFinal = fuente === 'tesoreria' ? 'tesoreria' : 'cajon';
   if (suc_id && !permiteSucursal(req.user, suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
   const cat = categoria_id ? db.findOne('gastos_categorias', categoria_id) : null;
   const fechaGasto = fecha || new Date().toISOString().substr(0,10);
@@ -83,30 +86,40 @@ router.post('/', requireRol('admin','supervisor','cajero'), validate(gastoSchema
     id, nombre, categoria_id: categoria_id||null,
     categoria_nombre: cat ? cat.nombre : '—',
     monto: parseFloat(monto), fecha: fechaGasto,
-    fecha_vencimiento: fecha_vencimiento||null,
-    estado: estado||'pagado',
-    metodo_pago: metodo_pago||'transferencia',
-    suc_id: suc_id||null, recurrente_id: recurrente_id||null,
+    fecha_vencimiento: null,
+    estado: 'pagado',
+    metodo_pago: metodo_pago||'efectivo',
+    suc_id: suc_id||null, recurrente_id: null,
     nro_comprobante: nro_comprobante||'', notas: notas||'',
     registrado_por: req.user.nombre, pagado_por: pagado_por||req.user.nombre,
-    genera_egreso_caja: genera_egreso_caja ? 1 : 0,
+    genera_egreso_caja: fuenteFinal === 'cajon' ? 1 : 0,
     caja_movimiento_id: null
   });
+  const concepto = nombre + (cat ? ' (' + cat.nombre + ')' : '');
 
-  // Si genera egreso en caja, registrarlo
-  if (genera_egreso_caja && suc_id) {
+  if (fuenteFinal === 'tesoreria') {
+    if (!cuenta_id) { db.delete('gastos', id); return res.status(400).json({error:'Cuenta de tesorería requerida'}); }
+    const { movTes } = require('../lib/treasury');
+    const r = movTes(db, {
+      cuenta_id, tipo: 'expense', concepto, monto: parseFloat(monto),
+      categoria: cat ? cat.nombre : '',
+      metodo_pago: metodo_pago || '', medio: MEDIO_FALLBACK[metodo_pago] || '',
+      suc_id: suc_id || null, usuario: req.user,
+      ref_tipo: 'gasto', ref_id: id,
+    });
+    if (!r.ok) {
+      db.delete('gastos', id);
+      return r.dup ? res.status(409).json({error: r.error}) : res.status(400).json({error: r.error});
+    }
+  } else if (suc_id) {
     const { movCajon } = require('../lib/treasury');
     const r = movCajon(db, {
-      suc_id,
-      tipo: 'egreso',
-      concepto: nombre + (cat ? ' (' + cat.nombre + ')' : ''),
-      monto: parseFloat(monto),
-      pago_metodo: metodo_pago || 'efectivo',
-      usuario: req.user,
-      auto: true,
-      gasto_id: id,
+      suc_id, tipo: 'egreso', concepto, monto: parseFloat(monto),
+      pago_metodo: metodo_pago || 'efectivo', usuario: req.user,
+      auto: true, gasto_id: id,
     });
-    if (r.ok) db.update('gastos', id, { caja_movimiento_id: r.id });
+    if (!r.ok) { db.delete('gastos', id); return res.status(400).json({error: r.error}); }
+    db.update('gastos', id, { caja_movimiento_id: r.id });
   }
   db.audit(req.user, suc_id||null, 'gastos', 'crear', nombre+' — $'+parseFloat(monto), id);
   res.json({id, ok:true});
@@ -130,11 +143,26 @@ router.put('/:id', requireRol('admin','supervisor'), (req, res) => {
   res.json({ok:true});
 });
 
-router.delete('/:id', requireRol('admin'), (req, res) => {
+router.delete('/:id', requireRol('admin','supervisor'), (req, res) => {
   const db = _getDB(req);
   const existing = db.findOne('gastos', req.params.id);
   if (!existing) return res.status(404).json({error:'No encontrado'});
   if (existing.suc_id && !permiteSucursal(req.user, existing.suc_id)) return res.status(403).json({error:'No tenés acceso a esta sucursal'});
+  // Revertir el movimiento de caja asociado
+  if (existing.caja_movimiento_id) {
+    try { db.update('movimientos_caja', existing.caja_movimiento_id, { anulado: true }); } catch(e) {}
+  }
+  // Revertir la transacción de tesorería asociada
+  try {
+    const tx = db.raw.prepare("SELECT id, cuenta_id FROM treasury_transactions WHERE ref_tipo='gasto' AND ref_id=? AND anulado=0").get(String(existing.id));
+    if (tx) {
+      db.update('treasury_transactions', tx.id, { anulado: 1 });
+      require('../lib/treasury').sincSaldo(db, tx.cuenta_id);
+    }
+  } catch(e) {}
+  db.delete('gastos', req.params.id);
+  db.audit(req.user, existing.suc_id || null, 'gastos', 'eliminar', existing.nombre + ' — $' + existing.monto, existing.id);
+  res.json({ok:true});
 });
 
 // ── Resumen mensual ──

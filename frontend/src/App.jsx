@@ -14,7 +14,6 @@ const Privacidad = lazy(() => import('./pages/Privacidad').then(m => ({ default:
 const CookiesPolicy = lazy(() => import('./pages/CookiesPolicy').then(m => ({ default: m.CookiesPolicy })))
 const ActivarCuenta = lazy(() => import('./pages/ActivarCuenta').then(m => ({ default: m.ActivarCuenta })))
 const Clientes = lazy(() => import('./pages/Clientes').then(m => ({ default: m.Clientes })))
-const Gastos = lazy(() => import('./pages/Gastos').then(m => ({ default: m.Gastos })))
 const Productos = lazy(() => import('./pages/Productos').then(m => ({ default: m.Productos })))
 const Ventas = lazy(() => import('./pages/Ventas').then(m => ({ default: m.Ventas })))
 const Caja = lazy(() => import('./pages/Caja').then(m => ({ default: m.Caja })))
@@ -68,7 +67,6 @@ export default function App() {
         <Route index element={<Navigate to="/app/dashboard" replace />} />
         <Route path="dashboard"      element={<Dashboard />} />
         <Route path="clientes"       element={<L><Clientes /></L>} />
-        <Route path="gastos"         element={<L><Gastos /></L>} />
         <Route path="productos"      element={<L><Productos /></L>} />
         <Route path="ventas"         element={<L><Ventas /></L>} />
         <Route path="caja"           element={<L><Caja /></L>} />

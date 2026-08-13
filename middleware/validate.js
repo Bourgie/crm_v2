@@ -162,6 +162,8 @@ const gastoSchema = z.object({
   notas: z.string().optional().default(''),
   pagado_por: z.string().optional(),
   genera_egreso_caja: z.boolean().optional().default(false),
+  fuente: z.string().optional().nullable(),
+  cuenta_id: z.string().optional().nullable(),
 });
 
 const cajaAbrirSchema = z.object({

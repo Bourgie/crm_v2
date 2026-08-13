@@ -15,7 +15,6 @@ const NAV = [
   { to: '/app/pendientes', icon: '🚚', label: 'Pendientes', mod: 'pendientes' },
   { section: 'Finanzas' },
   { to: '/app/ctacte',    icon: '📒', label: 'Cta. Corriente', mod: 'ctacte' },
-  { to: '/app/gastos',    icon: '💸', label: 'Gastos', mod: 'gastos', roles: ['admin','supervisor'] },
   { to: '/app/tesoreria', icon: '💵', label: 'Tesorería', mod: 'tesoreria', roles: ['admin','tesorero'] },
   { section: 'Operaciones' },
   { to: '/app/transferencias', icon: '🔄', label: 'Transferencias', mod: 'transferencias', roles: ['admin','supervisor'] },

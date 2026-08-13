@@ -4,6 +4,7 @@ import { useApi } from '../hooks/useApi'
 import { useApp, useToast, useAuth } from '../store'
 import { Modal } from '../components/Modal'
 import { PageHeader, Field, EmptyRow, Loader, ConfirmDialog } from '../components/UI'
+import { GastoModal } from '../components/GastoModal'
 
 const fmt = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0, minimumFractionDigits: 0 })
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('es-AR') : '—'
@@ -28,6 +29,8 @@ export function Tesoreria() {
   const [form, setForm] = useState({})
   const [saving, setSaving] = useState(false)
   const [confirm, setConfirm] = useState(null)
+  const [gastoOpen, setGastoOpen] = useState(false)
+  const [soloGastos, setSoloGastos] = useState(false)
 
   const veGlobal = useMemo(() => {
     const roles = Array.isArray(me?.roles) && me.roles.length ? me.roles : [me?.rol]
@@ -143,6 +146,7 @@ export function Tesoreria() {
   if (loading) return <Loader />
 
   const cuentasElegibles = cuentas.filter((c) => c.activo !== false)
+  const movsFiltrados = soloGastos ? movs.filter((m) => m.ref_tipo === 'gasto') : movs
 
   return (
     <div>
@@ -178,6 +182,7 @@ export function Tesoreria() {
           ))}
         </div>
         {tab === 'cuentas' && <button type="button" className="btn btn-primary" onClick={openNewCuenta}>+ Nueva cuenta</button>}
+        {tab === 'movs' && <button type="button" className="btn btn-secondary" onClick={() => setGastoOpen(true)}>💸 Gasto</button>}
         {tab === 'movs' && <button type="button" className="btn btn-primary" onClick={openNewMov}>+ Nuevo movimiento</button>}
         {tab === 'transfs' && <button type="button" className="btn btn-primary" onClick={openNewTransf}>+ Transferencia</button>}
       </PageHeader>
@@ -212,20 +217,25 @@ export function Tesoreria() {
 
       {tab === 'movs' && (
         <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ display: 'flex', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--bd)', alignItems: 'center' }}>
+            <button type="button" className={`btn btn-sm ${soloGastos ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setSoloGastos(!soloGastos)}>💸 Solo gastos</button>
+            {soloGastos && <span style={{ fontSize: 12, color: 'var(--mu)' }}>Mostrando egresos registrados como gasto</span>}
+          </div>
           <div className="table-wrap">
             <table>
               <thead><tr>
                 <th>Fecha</th><th>Concepto</th><th>Cuenta</th><th>Categoría</th><th>Método</th><th style={{ textAlign: 'right' }}>Monto</th><th style={{ width: 80 }}></th>
               </tr></thead>
               <tbody>
-                {movs.length === 0
-                  ? <EmptyRow cols={7} icon="💸" text="Sin movimientos todavía." />
-                  : movs.map((m) => (
+                {movsFiltrados.length === 0
+                  ? <EmptyRow cols={7} icon="💸" text={soloGastos ? 'Sin gastos registrados desde tesorería.' : 'Sin movimientos todavía.'} />
+                  : movsFiltrados.map((m) => (
                     <tr key={m.id}>
                       <td data-label="Fecha" style={{ fontSize: 12, color: 'var(--mu)' }}>{fmtDate(m.fecha)}</td>
                       <td data-label="Concepto">
                         <div style={{ fontWeight: 600 }}>{m.concepto}</div>
-                        {m.ref_tipo && <div style={{ fontSize: 11, color: 'var(--mu)' }}>Ref: {m.ref_tipo} {m.ref_id}</div>}
+                        {m.ref_tipo === 'gasto' && <span className="badge badge-orange" style={{ fontSize: 10 }}>💸 Gasto</span>}
+                        {m.ref_tipo && m.ref_tipo !== 'gasto' && <div style={{ fontSize: 11, color: 'var(--mu)' }}>Ref: {m.ref_tipo} {m.ref_id}</div>}
                       </td>
                       <td data-label="Cuenta" style={{ fontSize: 12 }}>{m.cuenta_nombre || '—'}</td>
                       <td data-label="Categoría" style={{ fontSize: 12 }}>{m.categoria || '—'}</td>
@@ -369,6 +379,9 @@ export function Tesoreria() {
         </div>
         <Field label="Concepto"><input value={form.concepto || ''} onChange={set('concepto')} placeholder="Ej: Depósito a banco" /></Field>
       </Modal>
+
+      <GastoModal open={gastoOpen} onClose={() => setGastoOpen(false)} api={api} toast={toast}
+        fuente="tesoreria" cuentas={cuentas} tiposPago={tiposPago} onSaved={load} />
 
       <ConfirmDialog open={!!confirm} onClose={() => setConfirm(null)}
         onConfirm={() => {

@@ -1051,5 +1051,33 @@ try {
   if (n > 0) console.log('✓ Backfill tesoreria: ' + n + ' empresas con módulo habilitado desde su plan');
 } catch(_) {}
 
+// Deprecación módulo 'gastos' — la página standalone se elimina (gastos viven en Caja/Tesorería)
+try {
+  master.prepare("UPDATE modulos SET activo=0 WHERE codigo='gastos'").run();
+  let nPlanes = 0;
+  for (const p of getPlanes()) {
+    const mods = Array.isArray(p.modulos) ? p.modulos : [];
+    if (mods.includes('gastos')) {
+      master.prepare("UPDATE planes SET modulos=? WHERE id=?").run(JSON.stringify(mods.filter(m => m !== 'gastos')), p.id);
+      nPlanes++;
+    }
+  }
+  const { getEmpresaDB } = require('./db_sqlite');
+  const emps = master.prepare("SELECT codigo FROM empresas WHERE activo=1").all();
+  let nEmps = 0;
+  for (const e of emps) {
+    try {
+      const empDB = getEmpresaDB(e.codigo);
+      const cfg = empDB.getConfig();
+      let mods = cfg.modulos_habilitados;
+      if (typeof mods === 'string') { try { mods = JSON.parse(mods); } catch { mods = null; } }
+      if (!Array.isArray(mods) || !mods.includes('gastos')) continue;
+      empDB.setConfig({ modulos_habilitados: JSON.stringify(mods.filter(m => m !== 'gastos')) });
+      nEmps++;
+    } catch(err) { /* empresa sin DB o error — saltar */ }
+  }
+  if (nPlanes > 0 || nEmps > 0) console.log('✓ Deprecación módulo gastos: ' + nPlanes + ' planes / ' + nEmps + ' empresas');
+} catch(_) {}
+
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
 module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getLandingLeadsFull, getLandingStats, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado, getOAuthProviders, getOAuthProvider, upsertOAuthProvider, getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas, setEmpresaIntegracion, setEmpresaIntegracionesBatch, syncEmpresaIntegracionesDesdePlan };

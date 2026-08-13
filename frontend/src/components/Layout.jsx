@@ -21,7 +21,6 @@ const TITLES = {
   '/app/presupuestos': '📄 Presupuestos',
   '/app/pendientes': '🚚 Pendientes',
   '/app/ctacte': '📒 Cuenta Corriente',
-  '/app/gastos': '💸 Gastos',
   '/app/transferencias': '🔄 Transferencias',
   '/app/proveedores': '📦 Proveedores',
   '/app/listabebe': '🎁 Lista de Regalos',

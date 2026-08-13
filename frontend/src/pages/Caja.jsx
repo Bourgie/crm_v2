@@ -3,6 +3,7 @@ import { useApi } from '../hooks/useApi'
 import { useApp, useToast, useAuth } from '../store'
 import { Modal } from '../components/Modal'
 import { Field, EmptyRow, Loader, ConfirmDialog } from '../components/UI'
+import { GastoModal } from '../components/GastoModal'
 import { exportExcel } from '../utils/excel'
 import QRCode from 'qrcode'
 
@@ -700,6 +701,7 @@ export function Caja() {
   const { api } = useApi()
   const { toast } = useToast()
   const { sucSesion, allSucs, allProds } = useApp()
+  const { me } = useAuth()
 
   const [estado, setEstado] = useState(null)
   const [ventasPendientes, setVentasPendientes] = useState([])
@@ -710,6 +712,7 @@ export function Caja() {
   const [tab, setTab] = useState('pendientes')
   const [modalApertura, setModalApertura] = useState(false)
   const [modalMov, setModalMov] = useState(null)
+  const [gastoOpen, setGastoOpen] = useState(false)
   const [modalCierre, setModalCierre] = useState(false)
   const [modalCobro, setModalCobro] = useState(null)        // venta normal
   const [dupConfirm, setDupConfirm] = useState(null)          // confirm duplicado comprobante
@@ -726,6 +729,7 @@ export function Caja() {
 
   const suc = allSucs.find((s) => s.id === sucSesion)
   const esMovil = isMobileDevice()
+  const puedeBorrarGasto = ['admin', 'supervisor'].includes(me?.rol) || (Array.isArray(me?.roles) && me.roles.some((r) => ['admin', 'supervisor'].includes(r)))
 
   const load = useCallback(async () => {
     if (!sucSesion) return
@@ -769,6 +773,11 @@ export function Caja() {
   }
   async function anularMovimiento(id) {
     try { await api('DELETE', '/caja/movimiento/' + id); toast('Movimiento anulado', 'ok'); load() } catch (e) { toast(e.message, 'err') }
+  }
+  async function borrarGasto(gastoId) {
+    if (!window.confirm('¿Eliminar este gasto? Se revertirá el egreso de caja.')) return
+    try { await api('DELETE', '/gastos/' + gastoId); toast('Gasto eliminado', 'ok'); load() }
+    catch (e) { toast(e.message, 'err') }
   }
   async function guardarEditarVenta(id, data) {
     return api('PUT', `/ventas/${id}/items`, data)
@@ -911,6 +920,7 @@ export function Caja() {
               : <>
                 <button type="button" className="btn btn-secondary" onClick={() => setModalMov('ingreso')}>+ Ingreso</button>
                 <button type="button" className="btn btn-secondary" onClick={() => setModalMov('egreso')}>− Retiro</button>
+                <button type="button" className="btn btn-secondary" onClick={() => setGastoOpen(true)}>💸 Gasto</button>
                 <button type="button" className="btn btn-secondary" onClick={() => abrirCorteParcial()}>📋 Corte parcial</button>
                 <button type="button" className="btn btn-danger" onClick={() => setModalCierre(true)}>🔒 Cerrar caja</button>
               </>}
@@ -1033,6 +1043,7 @@ export function Caja() {
                       <td data-label="Hora" style={{ fontSize: 12, color: 'var(--mu)' }}>{fmtTime(m.fecha)}</td>
                       <td data-label="Concepto">
                         <div style={{ fontWeight: 500 }}>{m.concepto}</div>
+                        {m.gasto_id && <span className="badge badge-orange" style={{ fontSize: 10 }}>💸 Gasto</span>}
                         {m.usuario && <div style={{ fontSize: 11, color: 'var(--mu)' }}>{m.usuario}</div>}
                         {m.anulado && <span className="badge badge-red" style={{ fontSize: 10 }}>Anulado</span>}
                       </td>
@@ -1043,7 +1054,10 @@ export function Caja() {
                       <td data-label="Monto" style={{ textAlign: 'right', fontWeight: 700, color: m.tipo === 'ingreso' ? 'var(--ok)' : 'var(--bad)' }}>
                         {m.tipo === 'egreso' ? '−' : ''}{fmt(m.monto)}
                       </td>
-                      <td data-label="">{!m.anulado && !m.auto && <button type="button" className="btn btn-icon btn-sm" onClick={() => anularMovimiento(m.id)}>✕</button>}</td>
+                      <td data-label="">
+                        {!m.anulado && !m.auto && <button type="button" className="btn btn-icon btn-sm" onClick={() => anularMovimiento(m.id)}>✕</button>}
+                        {!m.anulado && m.gasto_id && puedeBorrarGasto && <button type="button" className="btn btn-icon btn-sm" title="Eliminar gasto" onClick={() => borrarGasto(m.gasto_id)}>🗑</button>}
+                      </td>
                     </tr>
                   ))}
               </tbody>
@@ -1162,6 +1176,8 @@ export function Caja() {
       <ModalCorteParcial open={modalCorteParcial} onClose={() => setModalCorteParcial(false)} estado={estado} />
       <ModalApertura open={modalApertura} onClose={() => setModalApertura(false)} onAbrir={abrir} />
       <ModalMovimiento key={modalMov || 'closed'} open={!!modalMov} onClose={() => setModalMov(null)} tipo={modalMov} onGuardar={registrarMovimiento} />
+      <GastoModal open={gastoOpen} onClose={() => setGastoOpen(false)} api={api} toast={toast}
+        fuente="cajon" sucs={allSucs} sucSesion={sucSesion} tiposPago={pagosMethods} onSaved={load} />
       <ModalCierre open={modalCierre} onClose={() => setModalCierre(false)} estado={estado} onCerrar={cerrar} />
       <ModalCobro key={modalCobro?.id || 'cobro-closed'} open={!!modalCobro} onClose={() => setModalCobro(null)} venta={modalCobro} pagosMethods={pagosMethods} onConfirm={confirmarCobro} />
       <ModalComprobante open={!!modalComprobante} onClose={() => setModalComprobante(null)} venta={modalComprobante} onConfirm={confirmarComprobante} cfg={cfg} />
