@@ -58,9 +58,53 @@ function superAuth(req, res, next) {
   try {
     const p = jwt.verify(token, SA_SECRET);
     if(p.role !== 'superadmin') return res.status(403).json({error:'Sin permisos'});
+    // Sesión revocable: valida que el admin siga activo y que el token no sea previo a un cambio de password
+    const sa = master.prepare("SELECT activo, token_version FROM superadmin WHERE id=?").get(p.id);
+    if (!sa || !sa.activo) return res.status(401).json({error:'Sesión inválida'});
+    if ((p.token_version || 0) !== (sa.token_version || 0)) return res.status(401).json({error:'Sesión expirada. Volvé a iniciar sesión.'});
     req.sadmin = p;
     next();
   } catch(e) { res.status(401).json({error:'Token inválido o expirado'}); }
+}
+
+function saTokenVersion(saId) {
+  const row = master.prepare("SELECT token_version FROM superadmin WHERE id=?").get(saId);
+  return row ? (row.token_version || 0) : 0;
+}
+
+// ── Lockout persistente por usuario para login superadmin ──
+const SA_MAX_ATTEMPTS = 5;
+const SA_LOCK_MINUTES = 15;
+
+function saCheckLocked(key) {
+  try {
+    const row = master.prepare("SELECT locked_until FROM sa_login_attempts WHERE key=?").get(key);
+    if (!row || !row.locked_until) return false;
+    if (new Date(row.locked_until) > new Date()) return true;
+    master.prepare("DELETE FROM sa_login_attempts WHERE key=?").run(key);
+  } catch(e) {}
+  return false;
+}
+
+function saRecordFailed(key) {
+  try {
+    const now = new Date();
+    const row = master.prepare("SELECT count FROM sa_login_attempts WHERE key=?").get(key);
+    const count = row ? row.count + 1 : 1;
+    const lockedUntil = count >= SA_MAX_ATTEMPTS ? new Date(now.getTime() + SA_LOCK_MINUTES * 60000).toISOString() : null;
+    if (row) {
+      master.prepare("UPDATE sa_login_attempts SET count=?, last_attempt=?, locked_until=? WHERE key=?")
+        .run(count, now.toISOString(), lockedUntil, key);
+    } else {
+      master.prepare("INSERT INTO sa_login_attempts(key,count,last_attempt,locked_until) VALUES(?,?,?,?)")
+        .run(key, count, now.toISOString(), lockedUntil);
+    }
+    return SA_MAX_ATTEMPTS - count;
+  } catch(e) { return 0; }
+}
+
+function saResetAttempts(key) {
+  try { master.prepare("DELETE FROM sa_login_attempts WHERE key=?").run(key); } catch(e) {}
 }
 
 // ══════════════════════════════════════
@@ -68,13 +112,25 @@ function superAuth(req, res, next) {
 // ══════════════════════════════════════
 router.post('/login', superadminLoginLimiter, validate(superadminLoginSchema), async (req, res) => {
   const { usuario, password } = req.body;
+  const lockKey = String(usuario).toLowerCase().trim();
+  if (saCheckLocked(lockKey)) {
+    saAudit('lockout', 'login_bloqueado', null, 'Usuario bloqueado por intentos fallidos: ' + lockKey);
+    return res.status(429).json({ error: `Demasiados intentos. Esperá ${SA_LOCK_MINUTES} minutos antes de intentar de nuevo.` });
+  }
   const sa = master.prepare("SELECT * FROM superadmin WHERE usuario=? AND activo=1").get(usuario);
   if(!sa) {
     await bcrypt.compare(password, '$2a$10$XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX');
+    saRecordFailed(lockKey);
+    saAudit('lockout', 'login_fallido', null, 'Usuario inexistente: ' + lockKey);
     return res.status(401).json({error:'Credenciales incorrectas'});
   }
-  if(!await bcrypt.compare(password, sa.password))
+  if(!await bcrypt.compare(password, sa.password)) {
+    saRecordFailed(lockKey);
+    saAudit(sa.id, 'login_fallido', null, 'Contraseña incorrecta para: ' + lockKey);
+    await new Promise(r => setTimeout(r, 500));
     return res.status(401).json({error:'Credenciales incorrectas'});
+  }
+  saResetAttempts(lockKey);
 
   let saData = {};
   try { saData = JSON.parse(sa.data || '{}'); } catch(e) {}
@@ -115,7 +171,7 @@ router.post('/login', superadminLoginLimiter, validate(superadminLoginSchema), a
   if (saData.twofa_enabled && saData.twofa_secret) {
     if (trustedMatch) {
       // Trusted device — skip 2FA
-      const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin'}, SA_SECRET, {expiresIn:'8h'});
+      const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin', token_version: saTokenVersion(sa.id)}, SA_SECRET, {expiresIn:'8h'});
       saAudit(sa.id, 'login_dispositivo_confiable', null, 'Login superadmin con dispositivo confiable');
       setAuthCookie(res, token);
       return res.json({nombre:sa.nombre, dispositivo_confiable: true});
@@ -138,7 +194,7 @@ router.post('/login', superadminLoginLimiter, validate(superadminLoginSchema), a
     return res.json({ require_2fa_setup: true, temp_token: tempToken, nombre: sa.nombre });
   }
 
-  const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin'}, SA_SECRET, {expiresIn:'8h'});
+  const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin', token_version: saTokenVersion(sa.id)}, SA_SECRET, {expiresIn:'8h'});
   saAudit(sa.id, 'login', null, 'Login superadmin');
   setAuthCookie(res, token);
   res.json({nombre:sa.nombre});
@@ -167,10 +223,10 @@ router.put('/password', superAuth, async (req, res) => {
   if (history.length > 5) history.shift();
   data.password_history = history;
 
-  master.prepare("UPDATE superadmin SET password=?, data=?, must_change_password=0 WHERE id=?")
+  master.prepare("UPDATE superadmin SET password=?, data=?, must_change_password=0, token_version = token_version + 1 WHERE id=?")
     .run(bcrypt.hashSync(password_nuevo,10), JSON.stringify(data), req.sadmin.id);
-  saAudit(req.sadmin.id, 'cambio_password', null, 'Cambio de contraseña superadmin');
-  res.json({ok:true});
+  saAudit(req.sadmin.id, 'cambio_password', null, 'Cambio de contraseña superadmin (todas las sesiones fueron invalidadas)');
+  res.json({ ok:true, mensaje: 'Contraseña actualizada. Todas las demás sesiones fueron cerradas.' });
 });
 
 // ── Superadmin 2FA ──
@@ -220,7 +276,7 @@ router.post('/2fa/confirm', superAuth, validate(require('../middleware/validate'
     backupCodes.push(bc);
   }
   data.twofa_enabled = true;
-  data.twofa_backup = backupCodes.map(c => crypto.createHash('sha256').update(c).digest('hex'));
+  data.twofa_backup = backupCodes.map(c => crypto.createHmac('sha256', SA_SECRET).update(c).digest('hex'));
   master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), req.sadmin.id);
   saAudit(req.sadmin.id, '2fa_activado', null, '2FA activado');
   res.json({ ok: true, backup_codes: backupCodes, mensaje: '2FA activado. Guardá tus códigos de respaldo.' });
@@ -294,7 +350,7 @@ router.post('/2fa/confirm-forced', validate(require('../middleware/validate').tw
     backupCodes.push(bc);
   }
   data.twofa_enabled = true;
-  data.twofa_backup = backupCodes.map(c => crypto.createHash('sha256').update(c).digest('hex'));
+  data.twofa_backup = backupCodes.map(c => crypto.createHmac('sha256', SA_SECRET).update(c).digest('hex'));
 
   // Device trust
   if (confiar_dispositivo !== false) {
@@ -314,7 +370,7 @@ router.post('/2fa/confirm-forced', validate(require('../middleware/validate').tw
   master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), sa.id);
   saAudit(sa.id, '2fa_activado', null, '2FA activado (setup forzado)');
 
-  const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin'}, SA_SECRET, {expiresIn:'8h'});
+  const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin', token_version: saTokenVersion(sa.id)}, SA_SECRET, {expiresIn:'8h'});
   setAuthCookie(res, token);
   res.json({ nombre:sa.nombre, backup_codes: backupCodes, mensaje: '2FA activado. Guardá tus códigos de respaldo.' });
 });
@@ -340,8 +396,13 @@ router.post('/2fa/verify-login', validate(require('../middleware/validate').supe
   const crypto = require('crypto');
   let valid = totp.verify({ token: code, secret: data.twofa_secret }).valid;
   if (!valid) {
-    const hash = crypto.createHash('sha256').update(code).digest('hex');
-    const bcIndex = (data.twofa_backup || []).indexOf(hash);
+    // Códigos nuevos: HMAC con SA_SECRET. Compat con códigos viejos (sha256 simple)
+    const hmacHash = crypto.createHmac('sha256', SA_SECRET).update(code).digest('hex');
+    let bcIndex = (data.twofa_backup || []).indexOf(hmacHash);
+    if (bcIndex === -1) {
+      const legacyHash = crypto.createHash('sha256').update(code).digest('hex');
+      bcIndex = (data.twofa_backup || []).indexOf(legacyHash);
+    }
     if (bcIndex === -1) return res.status(400).json({ error: 'Código inválido o ya usado' });
     data.twofa_backup.splice(bcIndex, 1);
   }
@@ -369,7 +430,7 @@ router.post('/2fa/verify-login', validate(require('../middleware/validate').supe
 
   master.prepare("UPDATE superadmin SET data=? WHERE id=?").run(JSON.stringify(data), sa.id);
 
-  const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin'}, SA_SECRET, {expiresIn:'8h'});
+  const token = jwt.sign({id:sa.id, usuario:sa.usuario, nombre:sa.nombre, role:'superadmin', token_version: saTokenVersion(sa.id)}, SA_SECRET, {expiresIn:'8h'});
   saAudit(sa.id, 'login_2fa', null, 'Login superadmin con 2FA');
   setAuthCookie(res, token);
   res.json({nombre:sa.nombre});
@@ -773,7 +834,7 @@ router.post('/empresas/:id/modulos', superAuth, (req, res) => {
 });
 
 
-router.delete('/empresas/:id', superAuth, (req, res) => {
+router.delete('/empresas/:id', superAuth, async (req, res) => {
   try {
     const e = master.prepare("SELECT * FROM empresas WHERE id=? OR codigo=?").get(req.params.id, req.params.id);
     if(!e) return res.status(404).json({error:'No encontrado'});
@@ -783,16 +844,29 @@ router.delete('/empresas/:id', superAuth, (req, res) => {
     const { hacer_backup, enviar_email } = req.query;
     let backupFilename = null;
 
-    // Generate backup if requested
+    // Generate backup if requested — fail-safe: si falla, NO se elimina la empresa
     if (hacer_backup === 'true' || enviar_email === 'true') {
       try {
-        const { makeFullBackup } = require('./backup');
-        const result = makeFullBackup();
+        const { makeEmpresaBackup } = require('./backup');
+        const result = makeEmpresaBackup(empresaCodigo);
         backupFilename = result.name;
-      } catch(be) { console.error('[DeleteEmpresa] Backup error:', be.message); }
+      } catch(be) {
+        console.error('[DeleteEmpresa] Backup error:', be.message);
+        return res.status(500).json({ error: 'No se pudo generar el backup. La empresa NO fue eliminada. Detalle: ' + be.message });
+      }
     }
 
-    // Send email if requested
+    // Borrar archivos de la empresa ANTES de borrar la fila master (verificación de borrado a cero)
+    const { remaining } = await purgeEmpresa(empresaId, empresaCodigo);
+    if (remaining.length > 0) {
+      console.error('[DeleteEmpresa] No se pudieron eliminar archivos (' + empresaCodigo + '):', remaining.join(', '));
+      return res.status(500).json({ error: 'No se pudieron eliminar todos los archivos de la empresa (' + remaining.join(', ') + '). La empresa NO fue eliminada. Reintentá en unos segundos.' });
+    }
+
+    // Hard delete from master DB
+    master.prepare("DELETE FROM empresas WHERE id=?").run(empresaId);
+
+    // Send email if requested (posterior a la eliminación, best-effort)
     if (enviar_email === 'true' && adminEmail && backupFilename) {
       setImmediate(async () => {
         try {
@@ -816,15 +890,6 @@ router.delete('/empresas/:id', superAuth, (req, res) => {
         } catch(se) { console.error('[DeleteEmpresa] Email error:', se.message); }
       });
     }
-
-    // Hard delete from master DB
-    master.prepare("DELETE FROM empresas WHERE id=?").run(empresaId);
-
-    // Purge tenant DB files (incluye -wal/-shm) y filas huerfanas en master
-    purgeEmpresa(empresaId, empresaCodigo);
-
-    // Invalidate DB cache so stale references don't survive
-    try { const { _dbCache } = require('../db_sqlite'); delete _dbCache[empresaCodigo]; } catch(e) {}
 
     saAudit(req.sadmin.id, 'eliminar_empresa', empresaId, 'Eliminada: ' + empresaNombre + (backupFilename ? ' — Backup: '+backupFilename : ''));
     res.json({ ok: true, backup: backupFilename, mensaje: 'Empresa eliminada.' });
@@ -952,7 +1017,7 @@ router.get('/empresas/:codigo/integraciones/logs', superAuth, (req, res) => {
 // Download a specific backup file
 router.get('/empresas/backup-download/:file', superAuth, (req, res) => {
   const file = req.params.file;
-  if (file.includes('..') || !file.endsWith('.zip')) return res.status(400).json({ error: 'Nombre invalido' });
+  if (file.includes('..') || (!file.endsWith('.zip') && !file.endsWith('.db'))) return res.status(400).json({ error: 'Nombre invalido' });
   const fp = require('path').join(__dirname, '../data/backups', file);
   if (!require('fs').existsSync(fp)) return res.status(404).json({ error: 'No encontrado' });
   res.download(fp, file);
@@ -1176,10 +1241,13 @@ router.post('/solicitudes-eliminacion/:id/resolver', superAuth, async (req, res)
 
     if (hacer_backup || enviar_email) {
       try {
-        const { makeFullBackup } = require('./backup');
-        const result = makeFullBackup();
+        const { makeEmpresaBackup } = require('./backup');
+        const result = makeEmpresaBackup(empresa.codigo);
         backupFilename = result.name;
-      } catch(be) { console.error('[DeleteSolicitud] Backup error:', be.message); }
+      } catch(be) {
+        console.error('[DeleteSolicitud] Backup error:', be.message);
+        return res.status(500).json({ error: 'No se pudo generar el backup. La empresa NO fue eliminada.' });
+      }
     }
 
     if (enviar_email && sol.email && backupFilename) {
@@ -1206,9 +1274,15 @@ router.post('/solicitudes-eliminacion/:id/resolver', superAuth, async (req, res)
       });
     }
 
+    // Borrado a cero: archivos primero (con verificación), luego fila master
+    const { remaining } = await purgeEmpresa(sol.empresa_id, empresa.codigo);
+    if (remaining.length > 0) {
+      console.error('[DeleteSolicitud] No se pudieron eliminar archivos (' + empresa.codigo + '):', remaining.join(', '));
+      return res.status(500).json({ error: 'No se pudieron eliminar todos los archivos de la empresa. La empresa NO fue eliminada.' });
+    }
+
     // Hard delete
     master.prepare("DELETE FROM empresas WHERE id=?").run(sol.empresa_id);
-    purgeEmpresa(sol.empresa_id, empresa.codigo);
 
     saAudit(req.sadmin.id, 'eliminar_empresa_solicitada', sol.empresa_id,
       'Eliminada por solicitud: ' + empresa.nombre + ' — ' + sol.email + (backupFilename ? ' Backup: '+backupFilename : ''));

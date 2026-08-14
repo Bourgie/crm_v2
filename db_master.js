@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 
-const MASTER_PATH = path.join(__dirname, 'data', 'master.db');
+const MASTER_PATH = process.env.MASTER_PATH || path.join(__dirname, 'data', 'master.db');
 const dir = path.dirname(MASTER_PATH);
 if(!fs.existsSync(dir)) fs.mkdirSync(dir, {recursive:true});
 
@@ -79,6 +79,13 @@ master.exec(`
     accion TEXT,
     empresa_id TEXT,
     detalle TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS sa_login_attempts (
+    key TEXT PRIMARY KEY,
+    count INTEGER DEFAULT 0,
+    last_attempt TEXT,
+    locked_until TEXT
   );
 
   CREATE TABLE IF NOT EXISTS solicitudes_plan (
@@ -310,6 +317,7 @@ master.prepare("UPDATE landing_leads SET tipo='lead' WHERE nombre NOT IN ('Analy
 try { master.exec("ALTER TABLE superadmin ADD COLUMN email TEXT"); } catch(e) {}
 try { master.exec("ALTER TABLE superadmin ADD COLUMN data TEXT DEFAULT '{}'"); } catch(e) {}
 try { master.exec("ALTER TABLE superadmin ADD COLUMN must_change_password INTEGER DEFAULT 0"); } catch(e) {}
+try { master.exec("ALTER TABLE superadmin ADD COLUMN token_version INTEGER DEFAULT 0"); } catch(e) {}
 // Fix superadmin with null email
 try { master.prepare("UPDATE superadmin SET email='admin@flexcrm.local' WHERE email IS NULL").run(); } catch(e) {}
 // Migration: unique index on admin_email
@@ -321,8 +329,12 @@ try { master.exec("ALTER TABLE planes ADD COLUMN integraciones TEXT DEFAULT '[]'
 const sa = master.prepare("SELECT id FROM superadmin LIMIT 1").get();
 if(!sa) {
   const bcrypt = require('bcryptjs');
-  const saPassword = process.env.SEED_SUPERADMIN_PASSWORD || 'superadmin123';
-  const hash = bcrypt.hashSync(saPassword, 10);
+  const saPassword = process.env.SEED_SUPERADMIN_PASSWORD;
+  // Fail-fast en producción: nunca sembrar una clave por defecto conocida
+  if (!saPassword && process.env.NODE_ENV === 'production') {
+    throw new Error('SEED_SUPERADMIN_PASSWORD no configurada. No se puede crear el superadmin inicial en producción.');
+  }
+  const hash = bcrypt.hashSync(saPassword || 'superadmin123', 10);
   master.prepare("INSERT INTO superadmin (id,usuario,password,nombre,email,must_change_password) VALUES (?,?,?,?,?,1)").run(
     'sa_' + Date.now(), 'superadmin', hash, 'Super Admin', 'admin@flexcrm.local'
   );
@@ -493,13 +505,9 @@ if(planCount === 0) {
   console.log('✓ Planes sembrados:', PLANES.length);
 }
 
-// Seed default empresa for backward compat
-const def = master.prepare("SELECT id FROM empresas WHERE codigo=?").get('default');
-if(!def) {
-  master.prepare("INSERT INTO empresas (id,codigo,nombre,rubro,creado) VALUES (?,?,?,?,?)").run(
-    'emp_default', 'default', 'Mi Empresa', 'general', new Date().toISOString()
-  );
-}
+// NOTA: ya no se auto-siembra la empresa 'default' ('Mi Empresa').
+// Históricamente se recreaba en cada arranque, lo que hacía que una empresa
+// eliminada desde superadmin "reapareciera" tras cada deploy/restart.
 
 function getPlanes() {
   return master.prepare("SELECT * FROM planes WHERE activo=1 ORDER BY orden").all()
@@ -671,7 +679,7 @@ function getDbStats() {
   try {
     const fs = require('fs');
     const path = require('path');
-    const dbPath = path.join(__dirname, 'data', 'master.db');
+    const dbPath = MASTER_PATH;
     const stats = fs.statSync(dbPath);
     const empresaCount = master.prepare("SELECT COUNT(*) as n FROM empresas").get().n;
     const activeCount = master.prepare("SELECT COUNT(*) as n FROM empresas WHERE activo=1").get().n;

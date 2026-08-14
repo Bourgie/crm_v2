@@ -764,6 +764,10 @@ function buildSeed() {
   const insS = sqlite.prepare("INSERT INTO sucursales(id,nombre,dir,ciudad,tel,email,responsable) VALUES(?,?,?,?,?,?,?)");
   suc.forEach(s => insS.run(...s));
 
+  // Fail-fast en producción: nunca sembrar claves por defecto conocidas
+  if (!process.env.SEED_ADMIN_PASSWORD && process.env.NODE_ENV === 'production') {
+    throw new Error('SEED_ADMIN_PASSWORD no configurada. No se pueden sembrar usuarios iniciales en producción.');
+  }
   const seedAdminPass = process.env.SEED_ADMIN_PASSWORD || 'admin123';
   const seedVendPass = process.env.SEED_ADMIN_PASSWORD || 'vend123';
   const pass = bcrypt.hashSync(seedAdminPass,10);

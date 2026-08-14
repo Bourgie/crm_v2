@@ -21,6 +21,9 @@ const { csrfProtection, csrfTokenEndpoint } = require('./middleware/csrf');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// ── Purga de archivos huérfanos de empresas eliminadas (auto-reparación del borrado a cero) ──
+try { require('./lib/purgeEmpresa').purgeOrphanTenantDBs(); } catch(e) { console.error('[Startup] purgeOrphanTenantDBs:', e.message); }
+
 // ── Trust proxy (Railway / reverse proxy) ──
 app.set('trust proxy', 1);
 
@@ -280,8 +283,10 @@ app.use('/api', (req, res, next) => {
       const { getSecret } = require('./middleware/auth');
       const payload = jwt.verify(token, getSecret());
       if (!req.user) req.user = payload;
-      const { getEmpresaDB } = require('./db_sqlite');
-      req.db = getEmpresaDB(payload.empresa || 'default');
+      const { getEmpresaDB, db } = require('./db_sqlite');
+      // existingOnly: no recrear el archivo de una empresa eliminada con tokens viejos
+      const empresaCode = payload.empresa || 'default';
+      req.db = (typeof empresaCode === 'string' && /^[a-z0-9_]+$/.test(empresaCode) ? getEmpresaDB(empresaCode, { existingOnly: true }) : null) || db;
     } catch(e) {
       if (process.env.NODE_ENV !== 'production') console.error('[tenant] JWT verify error:', e.message);
     }
@@ -320,8 +325,10 @@ app.use('/api/meli-callback', meliCallbackLimiter, require('./routes/sync-tienda
 app.get('/api/config/public', (req, res) => {
   const empresa = req.query.empresa || 'default';
   try {
+    if (!/^[a-z0-9_]+$/.test(String(empresa))) return res.json({});
     const { getEmpresaDB } = require('./db_sqlite');
-    const db = getEmpresaDB(empresa);
+    const db = getEmpresaDB(empresa, { existingOnly: true });
+    if (!db) return res.json({});
     const cfg = db.getConfig();
     res.json({ nombre: cfg.nombre||'', slogan: cfg.slogan||'', logo_url: cfg.logo_url||'', tema_color: cfg.tema_color||'' });
   } catch(e) { res.json({}); }

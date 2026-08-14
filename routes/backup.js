@@ -9,7 +9,7 @@ const { db } = require('../db_sqlite');
 const { authMiddleware, requireRol } = require('../middleware/auth');
 const crypto = require('crypto');
 
-const DATA_DIR = path.join(__dirname, '../data');
+const DATA_DIR = process.env.TENANT_DATA_DIR || path.join(__dirname, '../data');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 
 function ensureBackupDir() {
@@ -35,7 +35,6 @@ function makeFullBackup() {
   const ts = new Date().toISOString().replace(/[:.]/g,'-').substr(0,19);
   const zipName = `flexcrm-full-${ts}.zip`;
   const zipPath = path.join(BACKUP_DIR, zipName);
-
   // Simple ZIP format (stores DBs uncompressed for speed)
   const dbFiles = getAllDbFiles();
   const entries = [];
@@ -118,6 +117,33 @@ function makeFullBackup() {
   }
 
   return { path: zipPath, name: zipName, size: zip.length, dbs: dbFiles.length };
+}
+
+// ── Backup de UNA sola empresa (consistente con WAL vía VACUUM INTO) ──
+// Usado al eliminar una empresa: el backup/email solo contiene sus datos (no los de otros tenants)
+function makeEmpresaBackup(codigo) {
+  ensureBackupDir();
+  const ts = new Date().toISOString().replace(/[:.]/g,'-').substr(0,19);
+  const fileName = `empresa_${codigo}-${ts}.db`;
+  const dest = path.join(BACKUP_DIR, fileName);
+  const { getEmpresaDB } = require('../db_sqlite');
+  const empDB = getEmpresaDB(codigo, { existingOnly: true });
+  if (!empDB) throw new Error('Empresa no encontrada: ' + codigo);
+  const safeDest = dest.replace(/[^a-zA-Z0-9_\\/.\-:]/g, '');
+  empDB.raw.exec(`VACUUM INTO '${safeDest.replace(/'/g, "''")}'`);
+  if (!fs.existsSync(dest)) throw new Error('Backup de empresa no generado: ' + fileName);
+
+  // Mantener solo los últimos 30 backups por empresa
+  const files = fs.readdirSync(BACKUP_DIR)
+    .filter(f => f.startsWith('empresa_') && f.endsWith('.db'))
+    .sort();
+  if (files.length > 30) {
+    files.slice(0, files.length - 30).forEach(f => {
+      try { fs.unlinkSync(path.join(BACKUP_DIR, f)); } catch(e) {}
+    });
+  }
+
+  return { path: dest, name: fileName, size: fs.statSync(dest).size };
 }
 
 function crc32(buf) {
@@ -214,4 +240,4 @@ function startBackupScheduler() {
   setInterval(runAutoBackup, 60 * 60 * 1000);
 }
 
-module.exports = { router, startBackupScheduler, makeFullBackup };
+module.exports = { router, startBackupScheduler, makeFullBackup, makeEmpresaBackup };

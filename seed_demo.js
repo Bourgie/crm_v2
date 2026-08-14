@@ -76,6 +76,10 @@ sucursales.forEach(s => { upsertById('sucursales', s); console.log(`  ✓ ${s.no
 
 // ── 4. Usuarios ──────────────────────────────────────────────────
 console.log('\n👤 Creando usuarios...')
+// Fail-fast en producción: el demo nunca debe sembrarse con claves por defecto
+if (!process.env.SEED_DEMO_PASSWORD && process.env.NODE_ENV === 'production') {
+  throw new Error('SEED_DEMO_PASSWORD no configurada. El seed demo está prohibido en producción sin esta variable.')
+}
 const DEMO_PASSWORD = process.env.SEED_DEMO_PASSWORD || 'demo123'
 const PASS_HASH = bcrypt.hashSync(DEMO_PASSWORD, 10)
 
