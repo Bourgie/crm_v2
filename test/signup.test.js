@@ -2,6 +2,12 @@
 // Run: npx vitest run
 import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import http from 'node:http'
+import path from 'node:path'
+
+// Aislar DB de tests (master y tenants) — no tocar data/ real
+process.env.NODE_ENV = 'test'
+process.env.MASTER_PATH = path.join(process.cwd(), 'data', 'test', 'master.db')
+process.env.TENANT_DATA_DIR = path.join(process.cwd(), 'data', 'test')
 
 let server, baseUrl
 

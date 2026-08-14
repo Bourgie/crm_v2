@@ -2,10 +2,15 @@ const { describe, it, before, after } = require('node:test')
 const assert = require('node:assert')
 const http = require('node:http')
 const path = require('node:path')
+const fs = require('node:fs')
 
 // Use test DB locations
 process.env.NODE_ENV = 'test'
-process.env.DB_PATH = path.join(__dirname, '..', 'data', 'test_master.db')
+const TEST_DATA_DIR = path.join(__dirname, '..', 'data', 'test')
+// Arranque limpio: se borra el directorio de test ANTES de abrir conexiones
+try { fs.rmSync(TEST_DATA_DIR, { recursive: true, force: true }) } catch {}
+process.env.MASTER_PATH = path.join(TEST_DATA_DIR, 'master.db')
+process.env.TENANT_DATA_DIR = TEST_DATA_DIR
 process.env.JWT_SECRET = 'test-jwt-secret-for-integration-tests-only'
 process.env.SA_SECRET = 'test-sa-secret-for-integration-tests-only'
 
@@ -337,6 +342,12 @@ describe('Backend Integration Tests', async () => {
       master.prepare("DELETE FROM superadmin WHERE id=?").run(TEST_SA_ID)
       master.prepare("INSERT INTO superadmin (id,usuario,password,nombre,email,activo,must_change_password,data) VALUES (?,?,?,?,?,1,0,?)")
         .run(TEST_SA_ID, TEST_SA_USER, bcrypt.hashSync(TEST_SA_PASS, 10), 'SA Test 2FA', 'sa_2fa_test@test.com', JSON.stringify({ sa_2fa_obligatorio: false }))
+      // Empresa 'default' de test: requerida por /2fa/verify-login y por validateTenant
+      try {
+        master.prepare("INSERT OR IGNORE INTO empresas (id,codigo,nombre,rubro,activo,creado) VALUES ('emp_test_default','default','Test Default','general',1,?)")
+          .run(new Date().toISOString())
+      } catch {}
+      try { require('../db_sqlite').getEmpresaDB('default') } catch {}
       saToken = jwt.sign({ id: TEST_SA_ID, usuario: TEST_SA_USER, nombre: 'SA Test 2FA', role: 'superadmin' },
         process.env.SA_SECRET, { expiresIn: '1h' })
     })
