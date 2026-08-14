@@ -6,7 +6,7 @@ const { getEmpresa } = require('../db_master');
 
 function validateTenant(req, res, next) {
   // Skip for superadmin routes and auth
-  if(!req.user || !req.user.empresa || req.user.empresa === 'default') return next();
+  if(!req.user || !req.user.empresa) return next();
   if(req.path.startsWith('/superadmin')) return next();
 
   try {
@@ -42,7 +42,7 @@ function validateTenant(req, res, next) {
 // Middleware that checks if a specific module is enabled for the empresa
 function requireModule(moduloCodigo) {
   return function(req, res, next) {
-    if(!req.user || !req.user.empresa || req.user.empresa === 'default') return next();
+    if(!req.user || !req.user.empresa) return next();
     try {
       const db = req.db;
       if(!db) return next();

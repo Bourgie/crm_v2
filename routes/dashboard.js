@@ -2,12 +2,44 @@ const express = require('express');
 const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, permiteSucursal } = require('../middleware/auth');
 router.use(authMiddleware);
+
+// null = admin (sin restricción) · [] = sin sucursales · [ids] = permitidas
+function getSucScope(user) {
+  if (!user) return [];
+  if (user.rol === 'admin' || (Array.isArray(user.roles) && user.roles.includes('admin'))) return null;
+  let permitidas = user.suc_sesiones_permitidas;
+  if (typeof permitidas === 'string') { try { permitidas = JSON.parse(permitidas); } catch { permitidas = []; } }
+  if (Array.isArray(permitidas) && permitidas.length) return permitidas.map(String);
+  return user.suc_id ? [String(user.suc_id)] : [];
+}
+
+function estaEnScope(scope, suc_id) {
+  if (scope === null) return true;
+  return !!suc_id && scope.includes(String(suc_id));
+}
+
+function validateSucRequest(req, res, suc_id, vend_id) {
+  if (suc_id && !permiteSucursal(req.user, suc_id)) {
+    res.status(403).json({ error: 'No tenés acceso a esta sucursal' });
+    return false;
+  }
+  if (vend_id) {
+    const vd = _getDB(req).findOne('vendedores', vend_id);
+    if (vd && vd.suc_id && !permiteSucursal(req.user, vd.suc_id)) {
+      res.status(403).json({ error: 'No tenés acceso a este vendedor' });
+      return false;
+    }
+  }
+  return true;
+}
 
 router.get('/', (req,res) => {
   const db = _getDB(req);
   const {suc_id, vend_id, cli_id, fecha} = req.query;
+  const scope = getSucScope(req.user);
+  if (!validateSucRequest(req, res, suc_id, vend_id)) return;
   const now=new Date();
   const localDate = (d) => { const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+day; };
   const hoy=fecha || localDate(now);
@@ -15,6 +47,7 @@ router.get('/', (req,res) => {
 
   let ventas=db.all('ventas').filter(v=>!v.anulada);
   if(suc_id) ventas=ventas.filter(v=>v.suc_id===suc_id);
+  else if(scope !== null) ventas=ventas.filter(v=>estaEnScope(scope, v.suc_id));
   if(vend_id) ventas=ventas.filter(v=>v.vend_id===vend_id);
   if(cli_id) ventas=ventas.filter(v=>v.cliente_id===cli_id);
 
@@ -34,27 +67,32 @@ router.get('/', (req,res) => {
     dias7.push({fecha:ds,total:dv.reduce((a,v)=>a+v.total,0),n:dv.length});
   }
 
-  // Stock crítico — stock se calcula desde stock_suc (no es columna en SQLite)
+  // Sucursales/vendedores/clientes (se usan en todo el endpoint)
+  const sucs=db.all('sucursales'), vends=db.all('vendedores'), clis=db.all('clientes');
+
+  // Stock crítico — stock calculado desde stock_suc, restringido al scope del usuario
   const allProds = db.find('productos',{activo:true});
   const stockCrit = allProds.map(p => {
-    const row = db.raw.prepare("SELECT SUM(cantidad) as total FROM stock_suc WHERE prod_id=?").get(p.id);
+    let row;
+    if (scope === null) row = db.raw.prepare("SELECT SUM(cantidad) as total FROM stock_suc WHERE prod_id=?").get(p.id);
+    else if (scope.length === 0) row = { total: 0 };
+    else row = db.raw.prepare(`SELECT SUM(cantidad) as total FROM stock_suc WHERE prod_id=? AND suc_id IN (${scope.map(()=>'?').join(',')})`).get(p.id, ...scope);
     const s = row?.total || 0;
     return { ...p, stock: s };
   }).filter(p => p.stock <= p.stock_min).sort((a,b) => a.stock - b.stock).slice(0,8);
 
   // Últimas 10 ventas
-  const sucs=db.all('sucursales'),vends=db.all('vendedores'),clis=db.all('clientes');
   const ultimas=ventas.sort((a,b)=>new Date(b.fecha)-new Date(a.fecha)).slice(0,10).map(v=>{
     const vd=vends.find(x=>x.id===v.vend_id); const c=clis.find(x=>x.id===v.cliente_id);
     return {...v,suc_nombre:(sucs.find(s=>s.id===v.suc_id)||{}).nombre||'—',vend_nombre:vd?vd.nombre+' '+vd.apellido:'—',cli_nombre:c?c.nombre+' '+c.apellido:''};
   });
 
   // Pendientes
-  const pendientes=db.where('pendientes',p=>(p.estado==='pendiente'||p.estado==='listo')&&(!suc_id||(p.suc_id===suc_id||p.suc_entrega===suc_id||p.suc_cobro===suc_id)));
+  const pendientes=db.where('pendientes',p=>(p.estado==='pendiente'||p.estado==='listo')&&(!suc_id||(p.suc_id===suc_id||p.suc_entrega===suc_id||p.suc_cobro===suc_id))&&(scope===null||estaEnScope(scope,p.suc_id)||estaEnScope(scope,p.suc_entrega)||estaEnScope(scope,p.suc_cobro)));
   const pendDemorados=pendientes.filter(p=>Math.floor((now-new Date(p.fecha))/(1000*60*60*24))>parseInt(db.getConfig('pendiente_dias_max')||30));
 
   // Cuenta corriente alertas
-  const ctacte=db.all('ctacte_movimientos');
+  const ctacte=db.all('ctacte_movimientos').filter(m => scope === null || estaEnScope(scope, m.suc_id));
   const deudasVencidas=ctacte.filter(m=>m.tipo==='deuda'&&!m.cancelado&&m.fecha_vto&&m.fecha_vto<hoy);
   const deudasProximas=ctacte.filter(m=>{
     if(m.tipo!=='deuda'||m.cancelado||!m.fecha_vto)return false;
@@ -64,7 +102,7 @@ router.get('/', (req,res) => {
 
   // Margen
   const ventasItems=db.all('venta_items');
-  const margenMes=ventasItems.filter(i=>{const v=db.findOne('ventas',i.venta_id);return v&&!v.anulada&&v.fecha.substr(0,7)===mes;}).reduce((a,i)=>a+((i.precio-(i.costo||0))*i.cantidad),0);
+  const margenMes=ventasItems.filter(i=>{const v=db.findOne('ventas',i.venta_id);return v&&!v.anulada&&v.fecha.substr(0,7)===mes&&(scope===null||estaEnScope(scope,v.suc_id));}).reduce((a,i)=>a+((i.precio-(i.costo||0))*i.cantidad),0);
 
   // ─── Pipeline: tareas del día ──
   // Seguimientos de pipeline (solo recordatorios, no cambios de etapa)
@@ -126,7 +164,7 @@ router.get('/', (req,res) => {
     if (!c.bebe_nac) return [];
     const nac = new Date(c.bebe_nac);
     const next = new Date(hoyDate.getFullYear(), nac.getMonth(), nac.getDate());
-    if(next < hoyDate) next.setFullYear(hoy.getFullYear()+1);
+    if(next < hoyDate) next.setFullYear(hoyDate.getFullYear()+1);
     const dias = Math.ceil((next-hoyDate)/86400000);
     const edad = next.getFullYear() - nac.getFullYear();
     return dias<=30?[{cliente_id:c.id, nombre:c.nombre+' '+c.apellido,
@@ -151,6 +189,7 @@ router.get('/', (req,res) => {
   let ventasMismoMesAnioAnterior = db.all('ventas')
     .filter(v=>!v.anulada && v.fecha && v.fecha.substr(0,7)===mesAnoAnteriorKey);
   if(suc_id) ventasMismoMesAnioAnterior = ventasMismoMesAnioAnterior.filter(v=>v.suc_id===suc_id);
+  else if(scope !== null) ventasMismoMesAnioAnterior = ventasMismoMesAnioAnterior.filter(v=>estaEnScope(scope, v.suc_id));
   const totalMismoMesAnio = ventasMismoMesAnioAnterior.reduce((a,v)=>a+v.total,0);
 
   // Mes anterior (comparación mes a mes)
@@ -159,6 +198,7 @@ router.get('/', (req,res) => {
   let ventasMesAnterior = db.all('ventas')
     .filter(v=>!v.anulada && v.fecha && v.fecha.substr(0,7)===mesAnteriorKey);
   if(suc_id) ventasMesAnterior = ventasMesAnterior.filter(v=>v.suc_id===suc_id);
+  else if(scope !== null) ventasMesAnterior = ventasMesAnterior.filter(v=>estaEnScope(scope, v.suc_id));
   const totalMesAnterior = ventasMesAnterior.reduce((a,v)=>a+v.total,0);
 
   // Gastos del mes
@@ -168,6 +208,7 @@ router.get('/', (req,res) => {
     return g.fecha.substr(0,7) === mes;
   });
   if(suc_id) gastos = gastos.filter(g => g.suc_id === suc_id);
+  else if(scope !== null) gastos = gastos.filter(g => estaEnScope(scope, g.suc_id));
   const totalGastos = gastos.reduce((a,g) => a + (parseFloat(g.monto)||0), 0);
 
   res.json({
@@ -211,11 +252,14 @@ router.get('/reporte', (req,res) => {
   const db = _getDB(req);
   const dias=parseInt(req.query.dias)||30;
   const {suc_id,vend_id,desde,hasta} = req.query;
+  const scope = getSucScope(req.user);
+  if (!validateSucRequest(req, res, suc_id, vend_id)) return;
   const desdeStr = desde || (() => { const d = new Date(); d.setDate(d.getDate()-dias); return d.toISOString().substr(0,10); })();
   const hastaStr = hasta || new Date().toISOString().substr(0,10);
 
   let ventas=db.where('ventas',v=>!v.anulada&&v.fecha.substr(0,10)>=desdeStr&&v.fecha.substr(0,10)<=hastaStr);
   if(suc_id) ventas=ventas.filter(v=>v.suc_id===suc_id);
+  else if(scope !== null) ventas=ventas.filter(v=>estaEnScope(scope, v.suc_id));
   if(vend_id) ventas=ventas.filter(v=>v.vend_id===vend_id);
 
   const sucs=db.all('sucursales'); const vends=db.all('vendedores');
@@ -267,10 +311,11 @@ router.get('/reporte', (req,res) => {
 router.get('/reporte-sucs', (req,res) => {
   const db = _getDB(req);
   const dias = parseInt(req.query.dias)||30;
+  const scope = getSucScope(req.user);
   const desde = new Date(); desde.setDate(desde.getDate()-dias);
   const desdeStr = desde.toISOString().substr(0,10);
-  const sucs = db.all('sucursales').filter(s=>s.activo);
-  const ventas = db.where('ventas', v=>!v.anulada && v.fecha && v.fecha.substr(0,10)>=desdeStr);
+  const sucs = db.all('sucursales').filter(s=>s.activo && (scope === null || scope.includes(String(s.id))));
+  const ventas = db.where('ventas', v=>!v.anulada && v.fecha && v.fecha.substr(0,10)>=desdeStr && (scope === null || estaEnScope(scope, v.suc_id)));
   const ventaIds = new Set(ventas.map(v=>v.id));
   const items = db.where('venta_items', i=>ventaIds.has(i.venta_id));
 

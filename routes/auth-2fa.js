@@ -117,7 +117,8 @@ router.post('/setup-forced', (req, res) => {
 
   const empresa = payload.empresa;
   const { getEmpresaDB } = require('../db_sqlite');
-  const userDB = getEmpresaDB(empresa);
+  const userDB = /^[a-z0-9_]+$/.test(String(empresa)) ? getEmpresaDB(empresa, { existingOnly: true }) : null;
+  if (!userDB) return res.status(401).json({ error: 'Usuario no válido' });
   const user = userDB.findOne('usuarios', payload.id);
   if (!user || !user.activo) return res.status(401).json({ error: 'Usuario no válido' });
 
@@ -175,7 +176,8 @@ router.post('/confirm-login', validate(twofaConfirmSchema), (req, res) => {
 
   const empresa = payload.empresa;
   const { getEmpresaDB } = require('../db_sqlite');
-  const userDB = getEmpresaDB(empresa);
+  const userDB = /^[a-z0-9_]+$/.test(String(empresa)) ? getEmpresaDB(empresa, { existingOnly: true }) : null;
+  if (!userDB) return res.status(401).json({ error: 'Usuario no válido' });
   const user = userDB.findOne('usuarios', payload.id);
   if (!user || !user.activo) return res.status(401).json({ error: 'Usuario no válido' });
 
@@ -241,7 +243,8 @@ router.post('/backup-codes', authMiddleware, (req, res) => {
 router.post('/verify-login', validate(twofaVerifySchema), (req, res) => {
   const { temp_token, code, empresa } = req.body;
   const { getEmpresaDB } = require('../db_sqlite');
-  const userDB = getEmpresaDB(empresa);
+  const userDB = /^[a-z0-9_]+$/.test(String(empresa)) ? getEmpresaDB(empresa, { existingOnly: true }) : null;
+  if (!userDB) return res.status(400).json({ error: 'Token inválido o expirado' });
 
   let payload;
   try {

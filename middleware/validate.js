@@ -1,9 +1,11 @@
 const { z } = require('zod');
 
+const empresaField = z.string().regex(/^[a-z0-9_]+$/, 'Código de empresa inválido').optional().default('default');
+
 const loginSchema = z.object({
   usuario: z.string().min(1, 'Usuario requerido'),
   password: z.string().min(1, 'Contraseña requerida'),
-  empresa: z.string().optional().default('default'),
+  empresa: empresaField,
 });
 
 const createUserSchema = z.object({
@@ -28,7 +30,7 @@ const changePasswordSchema = z.object({
 
 const forgotPasswordSchema = z.object({
   usuario: z.string().min(1, 'Usuario o email requerido'),
-  empresa: z.string().optional().default('default'),
+  empresa: empresaField,
 });
 
 const resetPasswordSchema = z.object({
@@ -37,7 +39,7 @@ const resetPasswordSchema = z.object({
     .regex(/[A-Z]/, 'Debe contener al menos una mayúscula')
     .regex(/[0-9]/, 'Debe contener al menos un número')
     .regex(/[^A-Za-z0-9]/, 'Debe contener al menos un símbolo'),
-  empresa: z.string().optional().default('default'),
+  empresa: empresaField,
 });
 
 const webhookCreateSchema = z.object({
@@ -61,7 +63,7 @@ const twofaConfirmSchema = z.object({
 const twofaVerifySchema = z.object({
   temp_token: z.string().min(1, 'Token temporal requerido'),
   code: z.string().min(1, 'Código requerido'),
-  empresa: z.string().optional().default('default'),
+  empresa: empresaField,
 });
 
 const twofaDisableSchema = z.object({

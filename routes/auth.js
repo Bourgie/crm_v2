@@ -73,13 +73,28 @@ function resetAttempts(db, key) {
   db.raw.prepare("DELETE FROM login_attempts WHERE key=?").run(key);
 }
 
+function sucursalesPermitidas(user) {
+  if (!user) return [];
+  if (user.rol === 'admin' || (Array.isArray(user.roles) && user.roles.includes('admin'))) return null; // null = todas
+  let permitidas = user.suc_sesiones_permitidas;
+  if (typeof permitidas === 'string') { try { permitidas = JSON.parse(permitidas); } catch { permitidas = []; } }
+  if (Array.isArray(permitidas) && permitidas.length) return permitidas.map(String);
+  return user.suc_id ? [String(user.suc_id)] : [];
+}
+
 function findVendedorForUser(user, userDB) {
   if (!user.roles) user.roles = [user.rol];
   const vends = userDB.all('vendedores');
   let v = vends.find(v => v.usuario_id === user.id);
   if (!v && user.email) v = vends.find(v => v.email && v.email === user.email);
   if (!v && user.usuario) v = vends.find(v => v.usuario === user.usuario);
-  if (!v) v = vends.find(v => (v.nombre + ' ' + v.apellido).toLowerCase() === user.nombre.toLowerCase());
+  if (!v) {
+    // Fallback por nombre: solo dentro de las sucursales permitidas (evita homónimos cruzados)
+    const permitidas = sucursalesPermitidas(user);
+    const candidates = vends.filter(v => (v.nombre + ' ' + v.apellido).toLowerCase() === user.nombre.toLowerCase());
+    if (permitidas === null) v = candidates[0];
+    else v = candidates.find(v => v.suc_id && permitidas.includes(String(v.suc_id)));
+  }
   if (!v && user.suc_id) v = vends.find(v => v.suc_id === user.suc_id && v.activo !== false);
   return v || null;
 }
@@ -505,7 +520,8 @@ router.get('/activar-cuenta/verify', async (req, res) => {
   try {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const { getEmpresaDB } = require('../db_sqlite');
-    const empDB = getEmpresaDB(empresa);
+    const empDB = /^[a-z0-9_]+$/.test(String(empresa)) ? getEmpresaDB(empresa, { existingOnly: true }) : null;
+    if (!empDB) return res.status(400).json({ error: 'Link inválido o ya usado.' });
     const row = empDB.raw.prepare(
       "SELECT et.*, u.email, u.nombre, u.usuario FROM email_tokens et JOIN usuarios u ON u.id = et.usuario_id WHERE et.token_hash=? AND et.usado=0"
     ).get(tokenHash);
@@ -530,7 +546,8 @@ router.post('/activar-cuenta', async (req, res) => {
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const { getEmpresaDB } = require('../db_sqlite');
     const { saAuditExtended } = require('../db_master');
-    const empDB = getEmpresaDB(empresa);
+    const empDB = /^[a-z0-9_]+$/.test(String(empresa)) ? getEmpresaDB(empresa, { existingOnly: true }) : null;
+    if (!empDB) return res.status(400).json({ error: 'Link inválido o ya usado.' });
     const row = empDB.raw.prepare("SELECT * FROM email_tokens WHERE token_hash=? AND usado=0").get(tokenHash);
     if (!row) return res.status(400).json({ error: 'Link inválido o ya usado.' });
     if (new Date(row.expires) < new Date()) return res.status(400).json({ error: 'Link expirado.' });
@@ -568,8 +585,16 @@ router.post('/refresh', (req, res) => {
   }
 
   const empresa = req.body.empresa || 'default';
+  if (!/^[a-z0-9_]+$/.test(String(empresa))) {
+    res.clearCookie('refresh-token', { path: '/api/auth' });
+    return res.status(401).json({ error: 'Refresh token inválido o expirado' });
+  }
   const { getEmpresaDB } = require('../db_sqlite');
-  const userDB = getEmpresaDB(empresa);
+  const userDB = getEmpresaDB(empresa, { existingOnly: true });
+  if (!userDB) {
+    res.clearCookie('refresh-token', { path: '/api/auth' });
+    return res.status(401).json({ error: 'Refresh token inválido o expirado' });
+  }
   const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
 
   const stored = userDB.where('password_reset_tokens', t =>
@@ -626,12 +651,14 @@ router.post('/logout', (req, res) => {
   if (refreshToken) {
     const empresa = req.body.empresa || 'default';
     const { getEmpresaDB } = require('../db_sqlite');
-    const userDB = getEmpresaDB(empresa);
+    const userDB = /^[a-z0-9_]+$/.test(String(empresa)) ? getEmpresaDB(empresa, { existingOnly: true }) : null;
     const hash = crypto.createHash('sha256').update(refreshToken).digest('hex');
     try {
-      const stored = userDB.where('password_reset_tokens', t => t.token === hash)[0];
-      if (stored) userDB.update('password_reset_tokens', stored.id, { usado: 1 });
-      userDB.raw.prepare("UPDATE user_sessions SET activo=0 WHERE token_hash=?").run(hash);
+      if (userDB) {
+        const stored = userDB.where('password_reset_tokens', t => t.token === hash)[0];
+        if (stored) userDB.update('password_reset_tokens', stored.id, { usado: 1 });
+        userDB.raw.prepare("UPDATE user_sessions SET activo=0 WHERE token_hash=?").run(hash);
+      }
     } catch(e) { /* non-blocking */ }
   }
   res.clearCookie('refresh-token', { path: '/api/auth' });
@@ -711,7 +738,8 @@ router.post('/forced-password-change', async (req, res) => {
 
   const empresa = payload.empresa;
   const { getEmpresaDB, uid } = require('../db_sqlite');
-  const userDB = getEmpresaDB(empresa);
+  const userDB = /^[a-z0-9_]+$/.test(String(empresa)) ? getEmpresaDB(empresa, { existingOnly: true }) : null;
+  if (!userDB) return res.status(401).json({ error: 'Usuario no válido' });
   const user = userDB.findOne('usuarios', payload.id);
   if (!user || !user.activo) return res.status(401).json({ error: 'Usuario no válido' });
 
@@ -1267,7 +1295,11 @@ async function sendEmail(host, port, smtpUser, smtpPass, from, to, subject, html
 router.post('/forgot-password', validate(forgotPasswordSchema), async (req, res) => {
   const { usuario, empresa } = req.body;
   const { getEmpresaDB, uid } = require('../db_sqlite');
-  const userDB = getEmpresaDB(empresa);
+  const userDB = /^[a-z0-9_]+$/.test(String(empresa)) ? getEmpresaDB(empresa, { existingOnly: true }) : null;
+  if (!userDB) {
+    // No revelar si la empresa existe ni crear archivos para códigos arbitrarios
+    return res.json({ ok: true, mensaje: 'Si el usuario existe, recibirás un email con instrucciones' });
+  }
   suspicious.auditForgotPassword(req, userDB, empresa, usuario)
   const user = userDB.where('usuarios', u => (u.usuario === usuario || u.email === usuario) && u.activo)[0];
   if (!user || !user.email) {
@@ -1323,7 +1355,8 @@ router.post('/forgot-password', validate(forgotPasswordSchema), async (req, res)
 router.post('/reset-password', validate(resetPasswordSchema), async (req, res) => {
   const { token, password, empresa } = req.body;
   const { getEmpresaDB } = require('../db_sqlite');
-  const userDB = getEmpresaDB(empresa);
+  const userDB = /^[a-z0-9_]+$/.test(String(empresa)) ? getEmpresaDB(empresa, { existingOnly: true }) : null;
+  if (!userDB) return res.status(400).json({ error: 'Token inválido o ya usado' });
   const rt = userDB.where('password_reset_tokens', t => t.token === token && t.usado === 0)[0];
   if (!rt) return res.status(400).json({ error: 'Token inválido o ya usado' });
   if (new Date(rt.expires) < new Date()) return res.status(400).json({ error: 'Token expirado. Solicitá uno nuevo.' });

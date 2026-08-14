@@ -35,7 +35,12 @@ function authMiddleware(req, res, next) {
     const payload = jwt.verify(token, getSecret());
     // Use empresa-specific DB if available (set by global middleware), else fall back to default
     const { getEmpresaDB } = require('../db_sqlite');
-    const userDB = req.db || (payload.empresa ? getEmpresaDB(payload.empresa) : db);
+    let userDB = req.db;
+    if (!userDB) {
+      const code = payload.empresa && /^[a-z0-9_]+$/.test(String(payload.empresa)) ? payload.empresa : null;
+      userDB = code ? getEmpresaDB(code, { existingOnly: true }) : null;
+      if (!userDB) userDB = db;
+    }
     const user = userDB.findOne('usuarios', payload.id);
     if (!user || !user.activo) return res.status(401).json({ error: 'Usuario no válido' });
 
@@ -93,7 +98,7 @@ function requireRol(...roles) {
 
 function permiteSucursal(user, suc_id) {
   if (!suc_id) return false;
-  if (user.rol === 'admin') return true;
+  if (user.rol === 'admin' || (Array.isArray(user.roles) && user.roles.includes('admin'))) return true;
   let permitidas = user.suc_sesiones_permitidas;
   if (typeof permitidas === 'string') { try { permitidas = JSON.parse(permitidas); } catch { permitidas = []; } }
   if (Array.isArray(permitidas) && permitidas.length) return permitidas.includes(String(suc_id));
