@@ -198,6 +198,14 @@ export function Tesoreria() {
     toast('📊 Excel exportado', 'ok')
   }
 
+  // Filtros derivados — DEBEN ser hooks antes de cualquier return condicional
+  const movsFiltrados = useMemo(() => {
+    let list = movs
+    if (soloGastos) list = list.filter((m) => m.ref_tipo === 'gasto')
+    if (filtroSuc) list = list.filter((m) => m.suc_id === filtroSuc)
+    return list
+  }, [movs, soloGastos, filtroSuc])
+
   if (!puedeEntrar) return <Navigate to="/app/dashboard" replace />
   if (loading) return <Loader />
 
@@ -206,12 +214,6 @@ export function Tesoreria() {
     const c = cuentas.find((x) => x.id === id)
     return c && c.tipo !== 'cash'
   }
-  const movsFiltrados = useMemo(() => {
-    let list = movs
-    if (soloGastos) list = list.filter((m) => m.ref_tipo === 'gasto')
-    if (filtroSuc) list = list.filter((m) => m.suc_id === filtroSuc)
-    return list
-  }, [movs, soloGastos, filtroSuc])
   const transfsFiltrados = filtroSuc ? transfs.filter((t) => t.suc_id === filtroSuc) : transfs
 
   const diffEgresos = resumen && resumen.egresos_mes_anterior > 0
