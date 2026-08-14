@@ -17,6 +17,7 @@ COPY --from=build /app/seed_demo.js ./
 COPY --from=build /app/routes ./routes
 COPY --from=build /app/middleware ./middleware
 COPY --from=build /app/lib ./lib
+COPY --from=build /app/scripts ./scripts
 COPY --from=build /app/public ./public
 COPY --from=build /app/frontend/package.json ./frontend/
 RUN mkdir -p /app/data
