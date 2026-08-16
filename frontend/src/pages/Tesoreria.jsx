@@ -10,46 +10,50 @@ import { imprimirComprobante } from '../utils/comprobante'
 
 const fmt = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0, minimumFractionDigits: 0 })
 const fmtDate = (d) => d ? new Date(d).toLocaleDateString('es-AR') : '—'
-const TIPO_LABEL = { cash: 'Bóveda', banco: 'Banco', billetera: 'Billetera', tarjeta: 'Tarjeta', otro: 'Otra' }
-const TIPOS_CREAR = { banco: 'Banco', billetera: 'Billetera', tarjeta: 'Tarjeta', otro: 'Otra' }
 const MEDIO_LABEL = { efectivo: 'Efectivo', transferencia: 'Transferencia', tarjeta_debito: 'Débito', tarjeta_credito: 'Crédito', ctacte: 'Cta. Corriente', billetera: 'Billetera', cheque: 'Cheque', otro: 'Otro' }
+
+function Pct({ actual, anterior }) {
+  if (!anterior) return <span style={{ fontSize: 11, color: 'var(--mu)' }}>—</span>
+  const p = Math.round(((actual - anterior) / Math.abs(anterior)) * 100)
+  const color = p === 0 ? 'var(--mu)' : p > 0 ? 'var(--ok)' : 'var(--bad)'
+  return <span style={{ fontSize: 11, fontWeight: 700, color }}>{p > 0 ? '+' : ''}{p}% vs anterior</span>
+}
 
 export function Tesoreria() {
   const { api } = useApi()
   const { toast } = useToast()
-  const { sucSesion, allSucs, hasModule } = useApp()
+  const { allSucs, hasModule } = useApp()
   const { me } = useAuth()
 
-  const [tab, setTab] = useState('cuentas')
+  const [tab, setTab] = useState('boveda')
   const [loading, setLoading] = useState(true)
-  const [resumen, setResumen] = useState(null)
-  const [cuentas, setCuentas] = useState([])
-  const [movs, setMovs] = useState([])
-  const [transfs, setTransfs] = useState([])
+  const [data, setData] = useState(null)
   const [tiposPago, setTiposPago] = useState([])
+  const [cats, setCats] = useState([])
 
-  const [modal, setModal] = useState(null)
-  const [form, setForm] = useState({})
-  const [saving, setSaving] = useState(false)
-  const [confirm, setConfirm] = useState(null)
   const [gastoOpen, setGastoOpen] = useState(false)
-  const [soloGastos, setSoloGastos] = useState(false)
+  const [gastoPrefill, setGastoPrefill] = useState(null)
+  const [filtroMetodo, setFiltroMetodo] = useState('')
   const [filtroSuc, setFiltroSuc] = useState('')
+  const [filtroTipo, setFiltroTipo] = useState('')
+
+  const [compModal, setCompModal] = useState(null)
+  const [compForm, setCompForm] = useState({})
+  const [presModal, setPresModal] = useState(null)
+  const [presForm, setPresForm] = useState({})
+  const [confirm, setConfirm] = useState(null)
+  const [saving, setSaving] = useState(false)
 
   const [reporte, setReporte] = useState(null)
   const [repForm, setRepForm] = useState(() => {
     const hoy = new Date().toISOString().substr(0, 10)
     const ini = new Date(); ini.setDate(1)
-    return { desde: ini.toISOString().substr(0, 10), hasta: hoy, suc_id: '', cuenta_id: '' }
+    return { desde: ini.toISOString().substr(0, 10), hasta: hoy, suc_id: '' }
   })
   const [repLoading, setRepLoading] = useState(false)
 
-  const veGlobal = useMemo(() => {
-    const roles = Array.isArray(me?.roles) && me.roles.length ? me.roles : [me?.rol]
-    return roles.includes('admin') || roles.includes('tesorero') || me?.rol === 'admin'
-  }, [me])
+  const esAdmin = useMemo(() => me?.rol === 'admin' || (Array.isArray(me?.roles) && me.roles.includes('admin')), [me])
 
-  // Guard: módulo habilitado en el plan + rol con acceso (evita requests 403 que desloguean)
   const puedeEntrar = useMemo(() => {
     if (!hasModule('tesoreria')) return false
     const roles = Array.isArray(me?.roles) && me.roles.length ? me.roles : [me?.rol]
@@ -59,17 +63,13 @@ export function Tesoreria() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [r, c, m, t, cfg] = await Promise.all([
-        api('GET', '/tesoreria/resumen').catch(() => null),
-        api('GET', '/tesoreria/cuentas').catch(() => []),
-        api('GET', '/tesoreria/transacciones?limit=200').catch(() => []),
-        api('GET', '/tesoreria/transferencias?limit=100').catch(() => []),
+      const [b, cfg, catsData] = await Promise.all([
+        api('GET', '/tesoreria/boveda').catch(() => null),
         api('GET', '/config').catch(() => ({})),
+        api('GET', '/gastos/categorias').catch(() => []),
       ])
-      setResumen(r)
-      setCuentas(Array.isArray(c) ? c : [])
-      setMovs(Array.isArray(m) ? m : [])
-      setTransfs(Array.isArray(t) ? t : [])
+      setData(b)
+      setCats(Array.isArray(catsData) ? catsData : [])
       if (cfg?.tipos_pago) {
         try {
           const tp = typeof cfg.tipos_pago === 'string' ? JSON.parse(cfg.tipos_pago) : cfg.tipos_pago
@@ -85,7 +85,7 @@ export function Tesoreria() {
   const loadReporte = useCallback(async () => {
     setRepLoading(true)
     try {
-      const qs = `?desde=${repForm.desde}&hasta=${repForm.hasta}${repForm.suc_id ? '&suc_id=' + repForm.suc_id : ''}${repForm.cuenta_id ? '&cuenta_id=' + repForm.cuenta_id : ''}`
+      const qs = `?desde=${repForm.desde}&hasta=${repForm.hasta}${repForm.suc_id ? '&suc_id=' + repForm.suc_id : ''}`
       setReporte(await api('GET', '/tesoreria/reporte' + qs))
     } catch (e) { toast(e.message, 'err') }
     finally { setRepLoading(false) }
@@ -93,98 +93,95 @@ export function Tesoreria() {
 
   useEffect(() => { if (puedeEntrar && tab === 'reporte') loadReporte() }, [tab, puedeEntrar, loadReporte])
 
-  const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }))
-  const setRep = (f) => (e) => setRepForm((p) => ({ ...p, [f]: e.target.value }))
+  const movsFiltrados = useMemo(() => {
+    let list = (data && data.movimientos) || []
+    if (filtroMetodo) list = list.filter((m) => m.metodo_pago === filtroMetodo)
+    if (filtroSuc) list = list.filter((m) => m.suc_id === filtroSuc)
+    if (filtroTipo) list = list.filter((m) => m.tipo === filtroTipo)
+    return list
+  }, [data, filtroMetodo, filtroSuc, filtroTipo])
 
-  function openNewCuenta() {
-    setForm({ nombre: '', tipo: 'banco', suc_id: '', saldo_inicial: '0', notas: '' })
-    setModal('cuenta')
-  }
-  function openEditCuenta(c) {
-    setForm({ nombre: c.nombre, tipo: c.tipo, suc_id: c.suc_id || '', saldo_inicial: c.saldo_inicial, notas: c.notas || '' })
-    setModal(c)
-  }
+  if (!puedeEntrar) return <Navigate to="/app/dashboard" replace />
+  if (loading) return <Loader />
 
-  async function saveCuenta() {
-    if (!form.nombre?.trim()) { toast('Nombre requerido', 'err'); return }
-    setSaving(true)
-    try {
-      const body = { ...form, saldo_inicial: parseFloat(form.saldo_inicial) || 0, suc_id: form.suc_id || '' }
-      if (modal === 'cuenta') { await api('POST', '/tesoreria/cuentas', body); toast('Cuenta creada', 'ok') }
-      else { await api('PUT', '/tesoreria/cuentas/' + modal.id, body); toast('Cuenta actualizada', 'ok') }
-      setModal(null); load()
-    } catch (e) { toast(e.message, 'err') }
-    finally { setSaving(false) }
+  async function aprobar(g) {
+    try { await api('POST', '/gastos/' + g.id + '/aprobar'); toast('Gasto aprobado', 'ok'); load() }
+    catch (e) { toast(e.message, 'err') }
   }
-
-  function openNewMov() {
-    setForm({ tipo: 'income', cuenta_id: '', monto: '', concepto: '', categoria: '', metodo_pago: '', fecha: new Date().toISOString().substr(0, 10) })
-    setModal('mov')
+  async function rechazar(g) {
+    try { await api('POST', '/gastos/' + g.id + '/rechazar'); toast('Gasto rechazado', 'ok'); load() }
+    catch (e) { toast(e.message, 'err') }
   }
-  async function saveMov() {
-    if (!form.cuenta_id) { toast('Elegí una cuenta', 'err'); return }
-    if (!form.monto || parseFloat(form.monto) <= 0) { toast('Monto inválido', 'err'); return }
-    if (!form.concepto?.trim()) { toast('Concepto requerido', 'err'); return }
-    setSaving(true)
-    try {
-      const mp = tiposPago.find((p) => p.id === form.metodo_pago)
-      const body = { ...form, monto: parseFloat(form.monto), medio: mp?.medio || '' }
-      await api('POST', '/tesoreria/transacciones', body)
-      toast(form.tipo === 'income' ? 'Ingreso registrado' : 'Egreso registrado', 'ok')
-      setModal(null); load()
-    } catch (e) { toast(e.message, 'err') }
-    finally { setSaving(false) }
-  }
-
-  function openNewTransf() {
-    setForm({ cuenta_origen: '', cuenta_destino: '', monto: '', concepto: '', fecha: new Date().toISOString().substr(0, 10) })
-    setModal('transf')
-  }
-  async function saveTransf() {
-    if (!form.cuenta_origen || !form.cuenta_destino) { toast('Elegí origen y destino', 'err'); return }
-    if (!form.monto || parseFloat(form.monto) <= 0) { toast('Monto inválido', 'err'); return }
-    setSaving(true)
-    try {
-      const body = { ...form, monto: parseFloat(form.monto), suc_id: sucSesion || null }
-      await api('POST', '/tesoreria/transferencias', body)
-      toast('Transferencia realizada', 'ok')
-      setModal(null); load()
-    } catch (e) { toast(e.message, 'err') }
-    finally { setSaving(false) }
-  }
-
   async function anularMov(id) {
     try { await api('POST', '/tesoreria/transacciones/' + id + '/anular'); toast('Movimiento anulado', 'ok'); load() }
     catch (e) { toast(e.message, 'err') }
   }
-  async function anularTransf(id) {
-    try { await api('POST', '/tesoreria/transferencias/' + id + '/anular'); toast('Transferencia anulada', 'ok'); load() }
-    catch (e) { toast(e.message, 'err') }
-  }
-  async function desactivarCuenta(id) {
-    try { await api('DELETE', '/tesoreria/cuentas/' + id); toast('Cuenta desactivada', 'ok'); load() }
-    catch (e) { toast(e.message, 'err') }
-  }
-  async function conciliar(m) {
-    try {
-      await api('POST', '/tesoreria/transacciones/' + m.id + '/conciliar', { conciliado: !m.conciliado })
-      toast(m.conciliado ? 'Desconciliado' : 'Conciliado ✅', 'ok'); load()
-    } catch (e) { toast(e.message, 'err') }
-  }
-
   function comprobanteMov(m) {
     imprimirComprobante({
       titulo: m.tipo === 'income' ? 'Comprobante de Ingreso' : 'Comprobante de Egreso',
-      lineas: [['Cuenta', m.cuenta_nombre || '—'], ['Sucursal', m.suc_nombre || '—'], ['Concepto', m.concepto], ['Método', MEDIO_LABEL[m.medio] || m.metodo_pago || '—'], ['Registrado por', m.usuario || '—']],
+      lineas: [['Cuenta', 'Bóveda Central'], ['Sucursal', m.suc_nombre || '—'], ['Concepto', m.concepto], ['Método', m.metodo_nombre || '—'], ['Registrado por', m.usuario || '—']],
       monto: m.monto, fecha: m.fecha,
     })
   }
-  function comprobanteTransf(t) {
+  function comprobanteDeposito(t) {
     imprimirComprobante({
-      titulo: t.tipo === 'cierre_caja' ? 'Comprobante de Depósito (Cierre de Caja)' : 'Comprobante de Transferencia',
-      lineas: [['Origen', t.origen_nombre || '—'], ['Destino', t.destino_nombre || '—'], ['Sucursal', t.suc_nombre || '—'], ['Concepto', t.concepto]],
+      titulo: 'Comprobante de Depósito (Cierre de Caja)',
+      lineas: [['Destino', 'Bóveda Central'], ['Sucursal', t.suc_nombre || '—'], ['Concepto', t.concepto]],
       monto: t.monto, fecha: t.fecha,
     })
+  }
+
+  // ── Compromisos ──
+  function openNewComp() { setCompForm({ nombre: '', categoria_id: '', monto_estimado: '', dia_vencimiento: '5', notas: '' }); setCompModal('new') }
+  function openEditComp(c) { setCompForm({ nombre: c.nombre, categoria_id: c.categoria_id || '', monto_estimado: c.monto_estimado, dia_vencimiento: c.dia_vencimiento, notas: c.notas || '' }); setCompModal(c) }
+  const setC = (f) => (e) => setCompForm((p) => ({ ...p, [f]: e.target.value }))
+  async function saveComp() {
+    if (!compForm.nombre?.trim()) { toast('Nombre requerido', 'err'); return }
+    setSaving(true)
+    try {
+      if (compModal === 'new') await api('POST', '/tesoreria/compromisos', compForm)
+      else await api('PUT', '/tesoreria/compromisos/' + compModal.id, compForm)
+      toast('Compromiso guardado', 'ok'); setCompModal(null); load()
+    } catch (e) { toast(e.message, 'err') }
+    finally { setSaving(false) }
+  }
+  async function borrarComp(id) {
+    try { await api('DELETE', '/tesoreria/compromisos/' + id); toast('Compromiso eliminado', 'ok'); load() }
+    catch (e) { toast(e.message, 'err') }
+  }
+  function pagarCompromiso(c) {
+    setGastoPrefill({ nombre: c.nombre, categoria_id: c.categoria_id || '', monto: String(c.monto_estimado || ''), compromiso_id: c.id })
+    setGastoOpen(true)
+  }
+
+  // ── Presupuestos ──
+  function openNewPres() { setPresForm({ categoria_id: '', monto: '', mes: data.mes }); setPresModal('new') }
+  function openEditPres(p) { setPresForm({ categoria_id: p.categoria_id || '', monto: p.monto, mes: p.mes }); setPresModal(p) }
+  const setP = (f) => (e) => setPresForm((p) => ({ ...p, [f]: e.target.value }))
+  async function savePres() {
+    if (!presForm.monto || parseFloat(presForm.monto) <= 0) { toast('Monto requerido', 'err'); return }
+    setSaving(true)
+    try {
+      if (presModal === 'new') await api('POST', '/tesoreria/presupuestos', { ...presForm, monto: parseFloat(presForm.monto) })
+      else await api('PUT', '/tesoreria/presupuestos/' + presModal.id, { monto: parseFloat(presForm.monto), categoria_id: presForm.categoria_id })
+      toast('Presupuesto guardado', 'ok'); setPresModal(null); load()
+    } catch (e) { toast(e.message, 'err') }
+    finally { setSaving(false) }
+  }
+  async function borrarPres(id) {
+    try { await api('DELETE', '/tesoreria/presupuestos/' + id); toast('Presupuesto eliminado', 'ok'); load() }
+    catch (e) { toast(e.message, 'err') }
+  }
+
+  async function cerrarMes() {
+    if (!window.confirm(`¿Cerrar el mes ${data.mes}? Se guardará una foto del saldo y del detalle por método/sucursal.`)) return
+    try { await api('POST', '/tesoreria/cierre-mes', { mes: data.mes }); toast('Mes cerrado 🔒', 'ok'); load() }
+    catch (e) { toast(e.message, 'err') }
+  }
+
+  async function guardarUmbral(v) {
+    try { await api('PUT', '/config', { tesoreria_umbral_aprobacion: String(v) }); toast('Umbral actualizado', 'ok'); load() }
+    catch (e) { toast(e.message, 'err') }
   }
 
   function exportarReporte() {
@@ -198,216 +195,316 @@ export function Tesoreria() {
     toast('📊 Excel exportado', 'ok')
   }
 
-  // Filtros derivados — DEBEN ser hooks antes de cualquier return condicional
-  const movsFiltrados = useMemo(() => {
-    let list = movs
-    if (soloGastos) list = list.filter((m) => m.ref_tipo === 'gasto')
-    if (filtroSuc) list = list.filter((m) => m.suc_id === filtroSuc)
-    return list
-  }, [movs, soloGastos, filtroSuc])
-
-  if (!puedeEntrar) return <Navigate to="/app/dashboard" replace />
-  if (loading) return <Loader />
-
-  const cuentasElegibles = cuentas.filter((c) => c.activo !== false)
-  const cuentasConciliables = (id) => {
-    const c = cuentas.find((x) => x.id === id)
-    return c && c.tipo !== 'cash'
-  }
-  const transfsFiltrados = filtroSuc ? transfs.filter((t) => t.suc_id === filtroSuc) : transfs
-
-  const diffEgresos = resumen && resumen.egresos_mes_anterior > 0
-    ? Math.round(((resumen.egresos_mes - resumen.egresos_mes_anterior) / resumen.egresos_mes_anterior) * 100)
+  const setRep = (f) => (e) => setRepForm((p) => ({ ...p, [f]: e.target.value }))
+  const boveda = data?.boveda
+  const diffEgresos = data && data.egresos_mes_anterior > 0
+    ? Math.round(((data.egresos_mes - data.egresos_mes_anterior) / data.egresos_mes_anterior) * 100)
     : null
 
   return (
     <div>
-      {resumen?.en_rojo?.length > 0 && (
-        <div style={{ background: 'rgba(239,68,68,.1)', border: '1px solid var(--bad)', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 13 }}>
-          ⚠️ Cuentas en rojo: {resumen.en_rojo.map((c) => `${c.nombre} (${fmt(c.saldo)})`).join(' · ')}
+      {data?.alertas?.length > 0 && (
+        <div style={{ background: 'rgba(245,158,11,.08)', border: '1px solid var(--warn)', borderRadius: 8, padding: '10px 14px', marginBottom: 12, fontSize: 13 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>⚠️ Alertas</div>
+          {data.alertas.map((a, i) => <div key={i} style={{ marginBottom: 2 }}>{a.tipo === 'presupuesto_cerca' ? '🟡' : a.tipo === 'caja_abierta' ? '🕒' : '🔴'} {a.texto}</div>)}
         </div>
       )}
 
-      {resumen && (
-        <div className="grid-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10, marginBottom: 16 }}>
-          <div className="kpi-card" style={{ borderLeft: '3px solid var(--ok)' }}>
-            <div className="kpi-label">Saldo total</div>
-            <div className="kpi-value" style={{ color: 'var(--ok)' }}>{fmt(resumen.total)}</div>
-            <div className="kpi-sub">{resumen.cuentas?.length || 0} cuentas</div>
-          </div>
-          {(resumen.por_tipo || []).map((t) => (
-            <div key={t.tipo} className="kpi-card">
-              <div className="kpi-label">{t.tipo}</div>
-              <div className="kpi-value" style={{ fontSize: 18 }}>{fmt(t.saldo)}</div>
+      {/* Bóveda Central — card principal */}
+      <div className="card" style={{ padding: 20, marginBottom: 16, background: 'linear-gradient(135deg, rgba(79,70,229,.08), rgba(16,185,129,.08))', border: '1.5px solid var(--bd)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 34 }}>🏦</span>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 18 }}>Bóveda Central <span title="Cuenta única de la empresa">🔒</span></div>
+              <div style={{ fontSize: 12, color: 'var(--mu)' }}>Recibe retiros, cierres y cobros de todas las sucursales — única cuenta de tesorería</div>
             </div>
-          ))}
-          <div className="kpi-card">
-            <div className="kpi-label">Ingresos del mes</div>
-            <div className="kpi-value" style={{ color: 'var(--ok)', fontSize: 18 }}>+{fmt(resumen.ingresos_mes)}</div>
           </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Egresos del mes</div>
-            <div className="kpi-value" style={{ color: 'var(--bad)', fontSize: 18 }}>-{fmt(resumen.egresos_mes)}</div>
-            {diffEgresos !== null && (
-              <div className="kpi-sub" style={{ color: diffEgresos > 0 ? 'var(--bad)' : 'var(--ok)' }}>
-                {diffEgresos > 0 ? '+' : ''}{diffEgresos}% vs mes anterior
-              </div>
-            )}
-          </div>
-          <div className="kpi-card">
-            <div className="kpi-label">Retiros de cajas</div>
-            <div className="kpi-value" style={{ fontSize: 18 }}>{fmt(resumen.retiros_mes || 0)}</div>
-            <div className="kpi-sub">del mes</div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 11, color: 'var(--mu)', textTransform: 'uppercase' }}>Saldo disponible</div>
+            <div style={{ fontWeight: 900, fontSize: 30, color: 'var(--ok)' }}>{fmt(boveda?.saldo || 0)}</div>
           </div>
         </div>
-      )}
+        {data?.otras_cuentas?.length > 0 && (
+          <div style={{ marginTop: 12, fontSize: 12, color: 'var(--mu)', background: 'var(--sf)', borderRadius: 8, padding: '8px 12px' }}>
+            Otras cuentas (solo lectura): {data.otras_cuentas.map((c) => `${c.nombre} ${fmt(c.saldo)}`).join(' · ')}
+          </div>
+        )}
+      </div>
 
-      {resumen && (resumen.por_sucursal || []).length > 0 && (
-        <div className="card" style={{ padding: 14, marginBottom: 16 }}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 10 }}>🏪 Aporte de cada sucursal al mes</div>
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-            {(resumen.por_sucursal || []).map((s) => (
-              <div key={s.suc_id} style={{ background: 'var(--sf)', borderRadius: 8, padding: '8px 14px', minWidth: 150 }}>
-                <div style={{ fontSize: 12, fontWeight: 600 }}>{s.suc_nombre}</div>
-                <div style={{ fontSize: 11, color: 'var(--mu)' }}>Retiros: {fmt(s.retiros)} · Cierres: {fmt(s.cierres)}</div>
-                <div style={{ fontWeight: 800, fontSize: 15, color: 'var(--ok)' }}>{fmt(s.total)}</div>
-              </div>
-            ))}
-          </div>
+      {/* KPIs */}
+      <div className="grid-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, marginBottom: 16 }}>
+        <div className="kpi-card">
+          <div className="kpi-label">Ingresos del mes</div>
+          <div className="kpi-value" style={{ color: 'var(--ok)', fontSize: 20 }}>+{fmt(data?.ingresos_mes)}</div>
+          <div className="kpi-sub">retiros + cierres + cobros electrónicos</div>
         </div>
-      )}
+        <div className="kpi-card">
+          <div className="kpi-label">Egresos del mes</div>
+          <div className="kpi-value" style={{ color: 'var(--bad)', fontSize: 20 }}>-{fmt(data?.egresos_mes)}</div>
+          {diffEgresos !== null && <div className="kpi-sub" style={{ color: diffEgresos > 0 ? 'var(--bad)' : 'var(--ok)' }}>{diffEgresos > 0 ? '+' : ''}{diffEgresos}% vs anterior</div>}
+        </div>
+        <div className="kpi-card">
+          <div className="kpi-label">Retiros de cajas</div>
+          <div className="kpi-value" style={{ fontSize: 20 }}>{fmt(data?.retiros_mes)}</div>
+          <div className="kpi-sub">efectivo del mes</div>
+        </div>
+      </div>
 
       <PageHeader title="💵 Tesorería">
         <div style={{ display: 'flex', gap: 6 }}>
-          {[['cuentas', '🏦 Cuentas'], ['movs', '💸 Movimientos'], ['transfs', '🔁 Transferencias'], ['reporte', '📈 Reporte']].map(([k, l]) => (
+          {[['boveda', '🏦 Bóveda'], ['reporte', '📈 Reporte']].map(([k, l]) => (
             <button key={k} type="button" onClick={() => setTab(k)}
               className={tab === k ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm'}>{l}</button>
           ))}
         </div>
-        {tab === 'cuentas' && <button type="button" className="btn btn-primary" onClick={openNewCuenta}>+ Nueva cuenta</button>}
-        {tab === 'movs' && <button type="button" className="btn btn-secondary" onClick={() => setGastoOpen(true)}>💸 Gasto</button>}
-        {tab === 'movs' && <button type="button" className="btn btn-primary" onClick={openNewMov}>+ Nuevo movimiento</button>}
-        {tab === 'transfs' && <button type="button" className="btn btn-primary" onClick={openNewTransf}>+ Transferencia</button>}
+        {tab === 'boveda' && <button type="button" className="btn btn-primary" onClick={() => { setGastoPrefill(null); setGastoOpen(true) }}>💸 Registrar gasto</button>}
       </PageHeader>
 
-      {tab === 'cuentas' && (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div className="table-wrap">
-            <table>
-              <thead><tr>
-                <th>Cuenta</th><th>Tipo</th><th>Sucursal</th><th>Notas</th><th style={{ textAlign: 'right' }}>Saldo</th><th style={{ width: 80 }}></th>
-              </tr></thead>
-              <tbody>
-                {cuentas.length === 0
-                  ? <EmptyRow cols={6} icon="🏦" text="Sin cuentas. Creá la primera (banco o billetera)." />
-                  : cuentas.map((c) => {
-                    const esBoveda = c.tipo === 'cash'
-                    return (
-                      <tr key={c.id} style={{ cursor: esBoveda ? 'default' : 'pointer' }} onClick={() => !esBoveda && openEditCuenta(c)}>
-                        <td data-label="Cuenta">
-                          <div style={{ fontWeight: 600 }}>{c.nombre} {esBoveda && <span title="Bóveda única de la empresa — no editable">🔒</span>}</div>
-                          {esBoveda && <div style={{ fontSize: 11, color: 'var(--mu)' }}>Central de la empresa — recibe retiros y cierres de todas las cajas</div>}
-                        </td>
-                        <td data-label="Tipo"><span className="badge badge-blue" style={{ fontSize: 11 }}>{c.tipo_label}</span></td>
-                        <td data-label="Sucursal" style={{ fontSize: 12 }}>{c.suc_nombre || 'Todas'}</td>
-                        <td data-label="Notas" style={{ fontSize: 12, color: 'var(--mu)' }}>{c.notas || '—'}</td>
-                        <td data-label="Saldo" style={{ textAlign: 'right', fontWeight: 700, color: c.saldo < 0 ? 'var(--bad)' : 'var(--ok)' }}>{fmt(c.saldo)}</td>
-                        <td data-label="" onClick={(e) => e.stopPropagation()}>
-                          {!esBoveda && <button type="button" className="btn btn-icon btn-sm" onClick={() => setConfirm({ tipo: 'cuenta', id: c.id, msg: `¿Desactivar "${c.nombre}"? Solo se puede si el saldo es $0.` })}>🗑</button>}
+      {tab === 'boveda' && (
+        <div>
+          {/* Por método de pago */}
+          <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 10 }}>💳 Por método de pago — {data?.mes}</div>
+            <div className="grid-auto" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
+              {(data?.por_metodo || []).map((p) => (
+                <div key={p.id} style={{ background: 'var(--sf)', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <span style={{ fontSize: 18 }}>{p.icono}</span>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{p.nombre}</span>
+                  </div>
+                  <div style={{ fontSize: 12, color: 'var(--ok)' }}>+{fmt(p.ingresos_mes)}</div>
+                  <div style={{ fontSize: 12, color: 'var(--bad)', marginBottom: 4 }}>-{fmt(p.egresos_mes)}</div>
+                  <div style={{ fontWeight: 800, fontSize: 15, color: p.neto < 0 ? 'var(--bad)' : 'inherit' }}>{fmt(p.neto)}</div>
+                  <Pct actual={p.neto} anterior={p.neto_anterior} />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Por sucursal */}
+          <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 16 }}>
+            <div style={{ padding: '12px 16px', fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', borderBottom: '1px solid var(--bd)' }}>🏪 Aporte de cada sucursal — {data?.mes}</div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Sucursal</th><th style={{ textAlign: 'right' }}>Retiros</th><th style={{ textAlign: 'right' }}>Cierres ef.</th><th style={{ textAlign: 'right' }}>Cobros electr.</th><th style={{ textAlign: 'right' }}>Total</th><th></th></tr></thead>
+                <tbody>
+                  {(data?.por_sucursal || []).length === 0
+                    ? <EmptyRow cols={6} icon="🏪" text="Sin aportes de cajas este mes todavía." />
+                    : (data?.por_sucursal || []).map((s) => (
+                      <tr key={s.suc_id || 'otra'}>
+                        <td data-label="Sucursal" style={{ fontWeight: 600 }}>{s.suc_nombre}</td>
+                        <td data-label="Retiros" style={{ textAlign: 'right' }}>{fmt(s.retiros)}</td>
+                        <td data-label="Cierres ef." style={{ textAlign: 'right' }}>{fmt(s.cierres_efectivo)}</td>
+                        <td data-label="Cobros electr." style={{ textAlign: 'right' }}>{fmt(s.cobros_electronicos)}</td>
+                        <td data-label="Total" style={{ textAlign: 'right', fontWeight: 800, color: 'var(--ok)' }}>{fmt(s.total)}</td>
+                        <td data-label=""><Pct actual={s.total} anterior={s.total_anterior} /></td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Pendientes de aprobación */}
+          {(data?.pendientes || []).length > 0 && (
+            <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 16 }}>
+              <div style={{ padding: '12px 16px', fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', borderBottom: '1px solid var(--bd)' }}>⏳ Gastos pendientes de aprobación</div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Concepto</th><th>Categoría</th><th style={{ textAlign: 'right' }}>Monto</th><th>Registrado por</th><th style={{ width: 140 }}></th></tr></thead>
+                  <tbody>
+                    {data.pendientes.map((g) => (
+                      <tr key={g.id}>
+                        <td data-label="Concepto" style={{ fontWeight: 600 }}>{g.nombre}</td>
+                        <td data-label="Categoría" style={{ fontSize: 12 }}>{g.categoria_nombre || '—'}</td>
+                        <td data-label="Monto" style={{ textAlign: 'right', fontWeight: 700, color: 'var(--bad)' }}>{fmt(g.monto)}</td>
+                        <td data-label="Registrado por" style={{ fontSize: 12 }}>{g.registrado_por}</td>
+                        <td data-label="">
+                          {esAdmin
+                            ? <div style={{ display: 'flex', gap: 4 }}>
+                                <button type="button" className="btn btn-sm btn-primary" onClick={() => aprobar(g)}>✅ Aprobar</button>
+                                <button type="button" className="btn btn-sm btn-danger" onClick={() => rechazar(g)}>❌</button>
+                              </div>
+                            : <span style={{ fontSize: 12, color: 'var(--mu)' }}>Esperando admin</span>}
                         </td>
                       </tr>
-                    )
-                  })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
-      {tab === 'movs' && (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--bd)', alignItems: 'center', flexWrap: 'wrap' }}>
-            <button type="button" className={`btn btn-sm ${soloGastos ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setSoloGastos(!soloGastos)}>💸 Solo gastos</button>
-            <select value={filtroSuc} onChange={(e) => setFiltroSuc(e.target.value)} style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid var(--bd)', fontSize: 12 }}>
-              <option value="">Todas las sucursales</option>
-              {allSucs.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-            </select>
-            {soloGastos && <span style={{ fontSize: 12, color: 'var(--mu)' }}>Mostrando egresos registrados como gasto</span>}
+          {/* Compromisos */}
+          <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase' }}>📅 Compromisos mensuales</div>
+              {esAdmin && <button type="button" className="btn btn-secondary btn-sm" onClick={openNewComp}>+ Nuevo</button>}
+            </div>
+            {(data?.compromisos || []).length === 0
+              ? <div style={{ fontSize: 13, color: 'var(--mu)' }}>Sin compromisos fijos (alquiler, servicios, sueldos...). {esAdmin ? 'Agregá uno con "+ Nuevo".' : ''}</div>
+              : <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {(data?.compromisos || []).map((c) => {
+                  const vencido = c.dia_vencimiento < parseInt(new Date().toISOString().substr(8, 2)) && !c.pagado_este_mes
+                  return (
+                    <div key={c.id} style={{ background: 'var(--sf)', borderRadius: 10, padding: '10px 14px', minWidth: 190, border: vencido ? '1px solid var(--warn)' : '1px solid transparent' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontWeight: 600, fontSize: 13, flex: 1 }}>{c.nombre}</span>
+                        {c.pagado_este_mes && <span className="badge badge-green" style={{ fontSize: 10 }}>Pagado</span>}
+                        {vencido && <span className="badge badge-red" style={{ fontSize: 10 }}>Vencido</span>}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--mu)' }}>{c.categoria_nombre || 'Sin categoría'} · vence el {c.dia_vencimiento}</div>
+                      <div style={{ fontWeight: 800, fontSize: 15, margin: '4px 0 8px' }}>{fmt(c.monto_estimado)}</div>
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        {!c.pagado_este_mes && <button type="button" className="btn btn-sm btn-primary" onClick={() => pagarCompromiso(c)}>💸 Pagar ahora</button>}
+                        {esAdmin && <>
+                          <button type="button" className="btn btn-icon btn-sm" onClick={() => openEditComp(c)}>✏️</button>
+                          <button type="button" className="btn btn-icon btn-sm" onClick={() => borrarComp(c.id)}>🗑</button>
+                        </>}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>}
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead><tr>
-                <th>Fecha</th><th>Concepto</th><th>Sucursal</th><th>Cuenta</th><th>Método</th><th style={{ textAlign: 'right' }}>Monto</th><th style={{ width: 120 }}></th>
-              </tr></thead>
-              <tbody>
-                {movsFiltrados.length === 0
-                  ? <EmptyRow cols={7} icon="💸" text={soloGastos ? 'Sin gastos registrados desde tesorería.' : 'Sin movimientos todavía.'} />
-                  : movsFiltrados.map((m) => (
-                    <tr key={m.id} style={{ opacity: m.anulado ? .4 : 1 }}>
-                      <td data-label="Fecha" style={{ fontSize: 12, color: 'var(--mu)' }}>{fmtDate(m.fecha)}</td>
-                      <td data-label="Concepto">
-                        <div style={{ fontWeight: 600 }}>{m.concepto}</div>
-                        {m.ref_tipo === 'gasto' && <span className="badge badge-orange" style={{ fontSize: 10 }}>💸 Gasto</span>}
-                        {m.ref_tipo === 'retiro_caja' && <span className="badge badge-green" style={{ fontSize: 10 }}>🏪 Retiro de caja</span>}
-                        {m.conciliado ? <span className="badge badge-blue" style={{ fontSize: 10 }}>✅ Conciliado</span> : null}
-                      </td>
-                      <td data-label="Sucursal" style={{ fontSize: 12 }}>{m.suc_nombre || '—'}</td>
-                      <td data-label="Cuenta" style={{ fontSize: 12 }}>{m.cuenta_nombre || '—'}</td>
-                      <td data-label="Método" style={{ fontSize: 12 }}>{MEDIO_LABEL[m.medio] || m.metodo_pago || '—'}</td>
-                      <td data-label="Monto" style={{ textAlign: 'right', fontWeight: 700, color: m.tipo === 'income' ? 'var(--ok)' : 'var(--bad)' }}>
-                        {m.tipo === 'income' ? '+' : '-'}{fmt(m.monto)}
-                      </td>
-                      <td data-label="" style={{ whiteSpace: 'nowrap' }}>
-                        {!m.anulado && cuentasConciliables(m.cuenta_id) && (
-                          <button type="button" className="btn btn-icon btn-sm" title={m.conciliado ? 'Desconciliar' : 'Marcar conciliado'} onClick={() => conciliar(m)}>✅</button>
-                        )}
-                        {!m.anulado && <button type="button" className="btn btn-icon btn-sm" title="Imprimir comprobante" onClick={() => comprobanteMov(m)}>🖨️</button>}
-                        {!m.anulado && <button type="button" className="btn btn-icon btn-sm" title="Anular" onClick={() => setConfirm({ tipo: 'mov', id: m.id, msg: `¿Anular el movimiento "${m.concepto}"? Se revertirá el saldo.` })}>↩️</button>}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
-      {tab === 'transfs' && (
-        <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-          <div style={{ display: 'flex', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--bd)', alignItems: 'center' }}>
-            <select value={filtroSuc} onChange={(e) => setFiltroSuc(e.target.value)} style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid var(--bd)', fontSize: 12 }}>
-              <option value="">Todas las sucursales</option>
-              {allSucs.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-            </select>
+          {/* Presupuestos */}
+          <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase' }}>🎯 Presupuesto del mes por categoría</div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                {esAdmin && <button type="button" className="btn btn-secondary btn-sm" onClick={openNewPres}>+ Presupuesto</button>}
+                {esAdmin && (
+                  <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12, color: 'var(--mu)' }}>
+                    Umbral aprobación $
+                    <input type="number" defaultValue={data?.umbral || 0} key={'umbral_' + (data?.umbral || 0)}
+                      onBlur={(e) => guardarUmbral(e.target.value)} style={{ width: 90, padding: '5px 8px', borderRadius: 6, border: '1.5px solid var(--bd)', fontSize: 12 }} />
+                  </label>
+                )}
+              </div>
+            </div>
+            {(data?.presupuestos || []).length === 0
+              ? <div style={{ fontSize: 13, color: 'var(--mu)' }}>Sin presupuestos para {data?.mes}. {esAdmin ? 'Definí límites por categoría de gasto.' : ''}</div>
+              : (data?.presupuestos || []).map((p) => (
+                <div key={p.id} style={{ marginBottom: 10 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, marginBottom: 4 }}>
+                    <span style={{ fontWeight: 600 }}>{p.categoria_icono} {p.categoria_nombre}</span>
+                    <span>
+                      <strong style={{ color: p.pct >= 100 ? 'var(--bad)' : p.pct >= 80 ? 'var(--warn)' : 'inherit' }}>{fmt(p.gastado)}</strong> / {fmt(p.monto)}
+                      <span style={{ fontSize: 11, color: 'var(--mu)', marginLeft: 6 }}>({p.pct}%)</span>
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ flex: 1, height: 8, background: 'var(--bd)', borderRadius: 99, overflow: 'hidden' }}>
+                      <div style={{ width: Math.min(100, p.pct) + '%', height: '100%', borderRadius: 99, background: p.pct >= 100 ? 'var(--bad)' : p.pct >= 80 ? 'var(--warn)' : 'var(--ok)' }} />
+                    </div>
+                    {esAdmin && <>
+                      <button type="button" className="btn btn-icon btn-sm" onClick={() => openEditPres(p)}>✏️</button>
+                      <button type="button" className="btn btn-icon btn-sm" onClick={() => borrarPres(p.id)}>🗑</button>
+                    </>}
+                  </div>
+                </div>
+              ))}
           </div>
-          <div className="table-wrap">
-            <table>
-              <thead><tr>
-                <th>Fecha</th><th>Concepto</th><th>Sucursal</th><th>Origen</th><th>Destino</th><th style={{ textAlign: 'right' }}>Monto</th><th style={{ width: 90 }}></th>
-              </tr></thead>
-              <tbody>
-                {transfsFiltrados.length === 0
-                  ? <EmptyRow cols={7} icon="🔁" text="Sin transferencias. El cierre de caja deposita automáticamente en la Bóveda Central." />
-                  : transfsFiltrados.map((t) => (
-                    <tr key={t.id} style={{ opacity: t.anulado ? .4 : 1 }}>
-                      <td data-label="Fecha" style={{ fontSize: 12, color: 'var(--mu)' }}>{fmtDate(t.fecha)}</td>
-                      <td data-label="Concepto">
-                        <div style={{ fontWeight: 600 }}>{t.concepto}</div>
-                        {t.tipo === 'cierre_caja' && <span className="badge badge-green" style={{ fontSize: 10 }}>Cierre de caja</span>}
-                        {t.tipo === 'retiro_caja' && <span className="badge badge-orange" style={{ fontSize: 10 }}>Retiro de caja</span>}
-                      </td>
-                      <td data-label="Sucursal" style={{ fontSize: 12 }}>{t.suc_nombre || '—'}</td>
-                      <td data-label="Origen" style={{ fontSize: 12 }}>{t.origen_nombre}</td>
-                      <td data-label="Destino" style={{ fontSize: 12 }}>{t.destino_nombre}</td>
-                      <td data-label="Monto" style={{ textAlign: 'right', fontWeight: 700 }}>{fmt(t.monto)}</td>
-                      <td data-label="" style={{ whiteSpace: 'nowrap' }}>
-                        {!t.anulado && <button type="button" className="btn btn-icon btn-sm" title="Imprimir comprobante" onClick={() => comprobanteTransf(t)}>🖨️</button>}
-                        {!t.anulado && <button type="button" className="btn btn-icon btn-sm" title="Anular" onClick={() => setConfirm({ tipo: 'transf', id: t.id, msg: `¿Anular la transferencia de ${fmt(t.monto)}?` })}>↩️</button>}
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
+
+          {/* Movimientos */}
+          <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, padding: '10px 14px', borderBottom: '1px solid var(--bd)', alignItems: 'center', flexWrap: 'wrap' }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', flex: 1 }}>📒 Movimientos de la bóveda</div>
+              <select value={filtroMetodo} onChange={(e) => setFiltroMetodo(e.target.value)} style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid var(--bd)', fontSize: 12 }}>
+                <option value="">Todos los métodos</option>
+                {tiposPago.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+              </select>
+              <select value={filtroSuc} onChange={(e) => setFiltroSuc(e.target.value)} style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid var(--bd)', fontSize: 12 }}>
+                <option value="">Todas las sucursales</option>
+                {allSucs.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              </select>
+              <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value)} style={{ padding: '6px 10px', borderRadius: 8, border: '1.5px solid var(--bd)', fontSize: 12 }}>
+                <option value="">Ingresos y egresos</option>
+                <option value="income">Ingresos</option>
+                <option value="expense">Egresos</option>
+              </select>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Fecha</th><th>Concepto</th><th>Sucursal</th><th>Método</th><th style={{ textAlign: 'right' }}>Monto</th><th style={{ width: 90 }}></th></tr></thead>
+                <tbody>
+                  {movsFiltrados.length === 0
+                    ? <EmptyRow cols={6} icon="📒" text="Sin movimientos. Los retiros y cierres de caja llegan solos acá." />
+                    : movsFiltrados.map((m) => (
+                      <tr key={m.id}>
+                        <td data-label="Fecha" style={{ fontSize: 12, color: 'var(--mu)' }}>{fmtDate(m.fecha)}</td>
+                        <td data-label="Concepto">
+                          <div style={{ fontWeight: 600 }}>{m.concepto}</div>
+                          {m.ref_tipo === 'gasto' && <span className="badge badge-orange" style={{ fontSize: 10 }}>💸 Gasto</span>}
+                          {m.ref_tipo === 'retiro_caja' && <span className="badge badge-green" style={{ fontSize: 10 }}>🏪 Retiro</span>}
+                          {m.ref_tipo === 'cierre_caja_metodo' && <span className="badge badge-blue" style={{ fontSize: 10 }}>🏦 Cierre</span>}
+                          {m.ref_tipo === 'sueldo_pago' && <span className="badge badge-gray" style={{ fontSize: 10 }}>👥 Sueldo</span>}
+                          {m.ref_tipo === 'prov_pago' && <span className="badge badge-gray" style={{ fontSize: 10 }}>📦 Proveedor</span>}
+                        </td>
+                        <td data-label="Sucursal" style={{ fontSize: 12 }}>{m.suc_nombre || '—'}</td>
+                        <td data-label="Método" style={{ fontSize: 12 }}>{m.metodo_icono} {m.metodo_nombre || MEDIO_LABEL[m.medio] || '—'}</td>
+                        <td data-label="Monto" style={{ textAlign: 'right', fontWeight: 700, color: m.tipo === 'income' ? 'var(--ok)' : 'var(--bad)' }}>
+                          {m.tipo === 'income' ? '+' : '-'}{fmt(m.monto)}
+                        </td>
+                        <td data-label="" style={{ whiteSpace: 'nowrap' }}>
+                          <button type="button" className="btn btn-icon btn-sm" title="Imprimir comprobante" onClick={() => comprobanteMov(m)}>🖨️</button>
+                          <button type="button" className="btn btn-icon btn-sm" title="Anular" onClick={() => setConfirm({ tipo: 'mov', id: m.id, msg: `¿Anular "${m.concepto}"? Se revertirá el saldo.` })}>↩️</button>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Depósitos de cierres */}
+          {(data?.depositos || []).length > 0 && (
+            <div className="card" style={{ padding: 0, overflow: 'hidden', marginBottom: 16 }}>
+              <div style={{ padding: '12px 16px', fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', borderBottom: '1px solid var(--bd)' }}>🏦 Depósitos de cierres de caja — {data?.mes}</div>
+              <div className="table-wrap">
+                <table>
+                  <thead><tr><th>Fecha</th><th>Sucursal</th><th>Concepto</th><th style={{ textAlign: 'right' }}>Monto</th><th style={{ width: 50 }}></th></tr></thead>
+                  <tbody>
+                    {data.depositos.map((t) => (
+                      <tr key={t.id}>
+                        <td data-label="Fecha" style={{ fontSize: 12, color: 'var(--mu)' }}>{fmtDate(t.fecha)}</td>
+                        <td data-label="Sucursal" style={{ fontSize: 12 }}>{t.suc_nombre || '—'}</td>
+                        <td data-label="Concepto" style={{ fontSize: 12 }}>{t.concepto}</td>
+                        <td data-label="Monto" style={{ textAlign: 'right', fontWeight: 700, color: 'var(--ok)' }}>+{fmt(t.monto)}</td>
+                        <td data-label=""><button type="button" className="btn btn-icon btn-sm" onClick={() => comprobanteDeposito(t)}>🖨️</button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          {/* Cierre de mes */}
+          <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+              <div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 4 }}>🔒 Cierre de mes</div>
+                <div style={{ fontSize: 12, color: 'var(--mu)' }}>Guardá una foto del saldo y del detalle por método/sucursal del mes {data?.mes}.</div>
+              </div>
+              {esAdmin && <button type="button" className="btn btn-secondary" onClick={cerrarMes}>🔒 Cerrar {data?.mes}</button>}
+            </div>
+            {(data?.historial || []).length > 0 && (
+              <div style={{ marginTop: 12 }}>
+                {(data?.historial || []).slice(0, 6).map((h) => (
+                  <div key={h.mes} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderBottom: '1px dashed var(--bd)', fontSize: 13 }}>
+                    <span style={{ fontWeight: 700, minWidth: 70 }}>{h.mes}</span>
+                    <span style={{ color: 'var(--ok)', fontWeight: 700 }}>{fmt(h.saldo_total)}</span>
+                    <span style={{ flex: 1, fontSize: 11, color: 'var(--mu)' }}>
+                      {Object.entries(h.por_metodo || {}).map(([k, v]) => `${k}: ${fmt(v)}`).join(' · ')}
+                    </span>
+                    <span style={{ fontSize: 11, color: 'var(--mu)' }}>{h.cerrado_por}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -422,12 +519,6 @@ export function Tesoreria() {
                 <select value={repForm.suc_id} onChange={setRep('suc_id')}>
                   <option value="">Todas</option>
                   {allSucs.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                </select>
-              </Field>
-              <Field label="Cuenta">
-                <select value={repForm.cuenta_id} onChange={setRep('cuenta_id')}>
-                  <option value="">Todas</option>
-                  {cuentasElegibles.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                 </select>
               </Field>
               <button type="button" className="btn btn-primary" onClick={loadReporte} disabled={repLoading}>
@@ -477,111 +568,55 @@ export function Tesoreria() {
         </div>
       )}
 
-      <Modal open={modal === 'cuenta' || (modal && typeof modal === 'object')} onClose={() => setModal(null)} title={modal === 'cuenta' ? '+ Nueva cuenta' : 'Editar cuenta'}
-        footer={<>
-          <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-          <button type="button" className="btn btn-primary" onClick={saveCuenta} disabled={saving}>
-            {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Guardando...</> : '💾 Guardar'}
-          </button>
-        </>}
-      >
-        <div className="fr">
-          <Field label="Nombre *"><input value={form.nombre || ''} onChange={set('nombre')} placeholder="Ej: Banco Galicia" /></Field>
-          <Field label="Tipo">
-            <select value={form.tipo || 'banco'} onChange={set('tipo')} disabled={modal !== 'cuenta' && modal?.tipo === 'cash'}>
-              {Object.entries(modal === 'cuenta' ? TIPOS_CREAR : TIPO_LABEL).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-            </select>
-          </Field>
-        </div>
-        <div className="fr">
-          <Field label="Sucursal">
-            <select value={form.suc_id || ''} onChange={set('suc_id')} disabled={!veGlobal}>
-              <option value="">Todas (empresa)</option>
-              {allSucs.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-            </select>
-          </Field>
-          <Field label="Saldo inicial"><input type="number" value={form.saldo_inicial ?? ''} onChange={set('saldo_inicial')} step="0.01" /></Field>
-        </div>
-        <Field label="Notas"><input value={form.notas || ''} onChange={set('notas')} placeholder="Opcional" /></Field>
-      </Modal>
-
-      <Modal open={modal === 'mov'} onClose={() => setModal(null)} title={form.tipo === 'income' ? '+ Ingreso' : '+ Egreso'}
-        footer={<>
-          <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-          <button type="button" className="btn btn-primary" onClick={saveMov} disabled={saving}>
-            {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Guardando...</> : '💾 Guardar'}
-          </button>
-        </>}
-      >
-        <div className="fr">
-          <Field label="Tipo">
-            <select value={form.tipo} onChange={set('tipo')}>
-              <option value="income">Ingreso (+)</option>
-              <option value="expense">Egreso (-)</option>
-            </select>
-          </Field>
-          <Field label="Cuenta *">
-            <select value={form.cuenta_id || ''} onChange={set('cuenta_id')}>
-              <option value="">Elegir cuenta...</option>
-              {cuentasElegibles.map((c) => <option key={c.id} value={c.id}>{c.nombre} ({fmt(c.saldo)})</option>)}
-            </select>
-          </Field>
-        </div>
-        <div className="fr">
-          <Field label="Monto *"><input type="number" value={form.monto || ''} onChange={set('monto')} min="0" step="0.01" placeholder="0.00" /></Field>
-          <Field label="Fecha"><input type="date" value={form.fecha || ''} onChange={set('fecha')} /></Field>
-        </div>
-        <Field label="Concepto *"><input value={form.concepto || ''} onChange={set('concepto')} placeholder="Ej: Pago proveedor, Venta mayorista" /></Field>
-        <div className="fr">
-          <Field label="Categoría"><input value={form.categoria || ''} onChange={set('categoria')} placeholder="Ej: Servicios, Sueldos" /></Field>
-          <Field label="Método de pago">
-            <select value={form.metodo_pago || ''} onChange={set('metodo_pago')}>
-              <option value="">—</option>
-              {tiposPago.map((p) => <option key={p.id} value={p.id}>{p.icono} {p.nombre}</option>)}
-            </select>
-          </Field>
-        </div>
-      </Modal>
-
-      <Modal open={modal === 'transf'} onClose={() => setModal(null)} title="+ Transferencia entre cuentas"
-        footer={<>
-          <button type="button" className="btn btn-secondary" onClick={() => setModal(null)}>Cancelar</button>
-          <button type="button" className="btn btn-primary" onClick={saveTransf} disabled={saving}>
-            {saving ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Guardando...</> : '💾 Realizar'}
-          </button>
-        </>}
-      >
-        <div className="fr">
-          <Field label="Origen *">
-            <select value={form.cuenta_origen || ''} onChange={set('cuenta_origen')}>
-              <option value="">Elegir cuenta...</option>
-              {cuentasElegibles.map((c) => <option key={c.id} value={c.id}>{c.nombre} ({fmt(c.saldo)})</option>)}
-            </select>
-          </Field>
-          <Field label="Destino *">
-            <select value={form.cuenta_destino || ''} onChange={set('cuenta_destino')}>
-              <option value="">Elegir cuenta...</option>
-              {cuentasElegibles.map((c) => <option key={c.id} value={c.id}>{c.nombre} ({fmt(c.saldo)})</option>)}
-            </select>
-          </Field>
-        </div>
-        <div className="fr">
-          <Field label="Monto *"><input type="number" value={form.monto || ''} onChange={set('monto')} min="0" step="0.01" placeholder="0.00" /></Field>
-          <Field label="Fecha"><input type="date" value={form.fecha || ''} onChange={set('fecha')} /></Field>
-        </div>
-        <Field label="Concepto"><input value={form.concepto || ''} onChange={set('concepto')} placeholder="Ej: Depósito a banco" /></Field>
-      </Modal>
-
       <GastoModal open={gastoOpen} onClose={() => setGastoOpen(false)} api={api} toast={toast}
-        fuente="tesoreria" cuentas={cuentas} tiposPago={tiposPago} onSaved={load} />
+        fuente="tesoreria" tiposPago={tiposPago} onSaved={load} prefill={gastoPrefill} umbral={data?.umbral || 0} esAdmin={esAdmin} />
+
+      {/* Modal compromiso */}
+      <Modal open={!!compModal} onClose={() => setCompModal(null)} title={compModal === 'new' ? '+ Nuevo compromiso' : 'Editar compromiso'}
+        footer={<>
+          <button type="button" className="btn btn-secondary" onClick={() => setCompModal(null)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={saveComp} disabled={saving}>
+            {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : '💾 Guardar'}
+          </button>
+        </>}
+      >
+        <Field label="Nombre *"><input value={compForm.nombre || ''} onChange={setC('nombre')} placeholder="Ej: Alquiler local" /></Field>
+        <div className="fr">
+          <Field label="Monto estimado"><input type="number" value={compForm.monto_estimado ?? ''} onChange={setC('monto_estimado')} min="0" step="0.01" /></Field>
+          <Field label="Vence el día"><input type="number" value={compForm.dia_vencimiento ?? 1} onChange={setC('dia_vencimiento')} min="1" max="31" /></Field>
+        </div>
+        <Field label="Categoría">
+          <select value={compForm.categoria_id || ''} onChange={setC('categoria_id')}>
+            <option value="">Sin categoría</option>
+            {cats.map((c) => <option key={c.id} value={c.id}>{c.icono} {c.nombre}</option>)}
+          </select>
+        </Field>
+        <Field label="Notas"><input value={compForm.notas || ''} onChange={setC('notas')} /></Field>
+      </Modal>
+
+      {/* Modal presupuesto */}
+      <Modal open={!!presModal} onClose={() => setPresModal(null)} title={presModal === 'new' ? '+ Nuevo presupuesto' : 'Editar presupuesto'}
+        footer={<>
+          <button type="button" className="btn btn-secondary" onClick={() => setPresModal(null)}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={savePres} disabled={saving}>
+            {saving ? <span className="spinner" style={{ width: 14, height: 14 }} /> : '💾 Guardar'}
+          </button>
+        </>}
+      >
+        <Field label="Categoría">
+          <select value={presForm.categoria_id || ''} onChange={setP('categoria_id')}>
+            <option value="">Sin categoría</option>
+            {cats.map((c) => <option key={c.id} value={c.id}>{c.icono} {c.nombre}</option>)}
+          </select>
+        </Field>
+        <Field label="Presupuesto del mes *"><input type="number" value={presForm.monto ?? ''} onChange={setP('monto')} min="0" step="0.01" /></Field>
+      </Modal>
 
       <ConfirmDialog open={!!confirm} onClose={() => setConfirm(null)}
         onConfirm={() => {
           const c = confirm
           setConfirm(null)
           if (c.tipo === 'mov') anularMov(c.id)
-          else if (c.tipo === 'transf') anularTransf(c.id)
-          else desactivarCuenta(c.id)
         }}
         title="Confirmar" message={confirm?.msg || '¿Confirmás?'} confirmLabel="Sí, confirmar" />
     </div>

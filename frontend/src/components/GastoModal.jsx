@@ -3,8 +3,8 @@ import { Modal } from './Modal'
 import { Field } from './UI'
 
 // Modal compartido para registrar un gasto desde su fuente (cajón o tesorería).
-// El gasto queda visible en el módulo desde donde salió el dinero.
-export function GastoModal({ open, onClose, api, toast, fuente, cuentas, sucs, sucSesion, tiposPago, onSaved }) {
+// Tesorería: sale siempre de la Bóveda Central. Caja: egreso del cajón (reporte diario).
+export function GastoModal({ open, onClose, api, toast, fuente, sucs, sucSesion, tiposPago, onSaved, prefill, umbral, esAdmin }) {
   const [form, setForm] = useState({})
   const [cats, setCats] = useState([])
   const [saving, setSaving] = useState(false)
@@ -13,9 +13,9 @@ export function GastoModal({ open, onClose, api, toast, fuente, cuentas, sucs, s
   useEffect(() => {
     if (!open) return
     setForm({
-      nombre: '', monto: '', fecha: new Date().toISOString().substr(0, 10),
-      categoria_id: '', metodo_pago: (tiposPago && tiposPago[0]?.id) || 'efectivo',
-      cuenta_id: '', suc_id: sucSesion || '', notas: '',
+      nombre: prefill?.nombre || '', monto: prefill?.monto || '', fecha: new Date().toISOString().substr(0, 10),
+      categoria_id: prefill?.categoria_id || '', metodo_pago: (tiposPago && tiposPago[0]?.id) || 'efectivo',
+      suc_id: sucSesion || '', notas: '', compromiso_id: prefill?.compromiso_id || null,
     })
     setNuevaCat('')
     api('GET', '/gastos/categorias').then((r) => setCats(Array.isArray(r) ? r : [])).catch(() => setCats([]))
@@ -35,9 +35,10 @@ export function GastoModal({ open, onClose, api, toast, fuente, cuentas, sucs, s
     } catch (e) { toast(e.message, 'err') }
   }
 
+  const requiereAprobacion = fuente === 'tesoreria' && umbral > 0 && parseFloat(form.monto) >= umbral && !esAdmin
+
   async function save() {
     if (!form.nombre?.trim() || !form.monto || parseFloat(form.monto) <= 0) { toast('Concepto y monto requeridos', 'err'); return }
-    if (fuente === 'tesoreria' && !form.cuenta_id) { toast('Elegí la cuenta de tesorería', 'err'); return }
     if (fuente === 'cajon' && !form.suc_id) { toast('Elegí la sucursal (requiere caja abierta hoy)', 'err'); return }
     setSaving(true)
     try {
@@ -46,9 +47,9 @@ export function GastoModal({ open, onClose, api, toast, fuente, cuentas, sucs, s
         monto: parseFloat(form.monto),
         fuente,
         suc_id: form.suc_id || null,
-        cuenta_id: form.cuenta_id || null,
+        recurrente_id: form.compromiso_id || null,
       })
-      toast('Gasto registrado', 'ok')
+      toast(requiereAprobacion ? 'Gasto enviado a aprobación' : 'Gasto registrado', 'ok')
       onClose()
       if (onSaved) onSaved()
     } catch (e) { toast(e.message, 'err') }
@@ -64,24 +65,24 @@ export function GastoModal({ open, onClose, api, toast, fuente, cuentas, sucs, s
         </button>
       </>}
     >
+      {fuente === 'tesoreria' && (
+        <div style={{ fontSize: 12, color: 'var(--mu)', background: 'var(--sf)', borderRadius: 8, padding: '8px 10px', marginBottom: 10 }}>
+          🏦 El dinero sale de la <strong>Bóveda Central</strong> (saldo general de la empresa).
+        </div>
+      )}
       <div className="fr">
         <Field label="Concepto *"><input value={form.nombre || ''} onChange={set('nombre')} placeholder="Ej: Alquiler local" /></Field>
         <Field label="Monto *"><input type="number" value={form.monto || ''} onChange={set('monto')} min="0" step="0.01" placeholder="0.00" /></Field>
       </div>
       <div className="fr">
         <Field label="Fecha"><input type="date" value={form.fecha || ''} onChange={set('fecha')} /></Field>
-        {fuente === 'cajon'
-          ? <Field label="Sucursal *">
-              <select value={form.suc_id || ''} onChange={set('suc_id')}>
-                {(sucs || []).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-              </select>
-            </Field>
-          : <Field label="Cuenta de tesorería *">
-              <select value={form.cuenta_id || ''} onChange={set('cuenta_id')}>
-                <option value="">Elegir cuenta...</option>
-                {(cuentas || []).filter((c) => c.activo !== false).map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
-            </Field>}
+        {fuente === 'cajon' && (
+          <Field label="Sucursal *">
+            <select value={form.suc_id || ''} onChange={set('suc_id')}>
+              {(sucs || []).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+            </select>
+          </Field>
+        )}
       </div>
       <div className="fr">
         <Field label="Categoría">
@@ -101,6 +102,11 @@ export function GastoModal({ open, onClose, api, toast, fuente, cuentas, sucs, s
         </Field>
       </div>
       <Field label="Notas"><input value={form.notas || ''} onChange={set('notas')} placeholder="Opcional" /></Field>
+      {requiereAprobacion && (
+        <div style={{ fontSize: 12, color: 'var(--warn)', background: 'rgba(245,158,11,.1)', borderRadius: 8, padding: '8px 10px', marginTop: 4 }}>
+          ⏳ Este monto supera el umbral de aprobación (${(umbral || 0).toLocaleString('es-AR')}). Quedará pendiente hasta que un admin lo apruebe.
+        </div>
+      )}
     </Modal>
   )
 }

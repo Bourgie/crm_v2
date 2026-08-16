@@ -18,7 +18,6 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
   const [modalCompra, setModalCompra] = useState(false)
   const [modalPago, setModalPago] = useState(false)
   const { allSucs } = useApp()
-  const [cuentasTes, setCuentasTes] = useState([])
   const [fCompra, setFC] = useState({ concepto:'', monto:'', nro_factura:'', fecha:new Date().toISOString().substr(0,10), vto:'', notas:'', pagado_al_recibir:'', forma_pago_inicial:'pendiente' })
   const [fPago, setFP] = useState({ monto:'', metodo:'efectivo', concepto:'Pago proveedor', fecha:new Date().toISOString().substr(0,10), nro_comprobante:'', fuente:'tesoreria', cuenta_id:'', suc_id:'' })
   const [metodos, setMetodos] = useState([])
@@ -39,8 +38,6 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
         setMetodos(Array.isArray(tp) ? tp.filter((p) => p.activo !== false) : [])
       }
     } catch { setMetodos([]) }
-    try { setCuentasTes(await api('GET', '/tesoreria/cuentas')) }
-    catch { setCuentasTes([]) }
   }, [])
 
   useEffect(() => { load(); loadMetodos() }, [load, loadMetodos])
@@ -59,7 +56,6 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
 
   async function savePago() {
     if (!fPago.monto) { toast('Ingresá el monto','err'); return }
-    if (fPago.fuente === 'tesoreria' && !fPago.cuenta_id) { toast('Elegí la cuenta de tesorería','err'); return }
     if (fPago.fuente === 'cajon' && !fPago.suc_id) { toast('Elegí la sucursal del cajón','err'); return }
     setSaving(true)
     try {
@@ -189,7 +185,7 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
         <div className="fr">
           <Field label="Fuente del dinero">
             <select value={fPago.fuente || 'tesoreria'} onChange={setP('fuente')}>
-              <option value="tesoreria">🏦 Tesorería</option>
+              <option value="tesoreria">🏦 Tesorería (Bóveda Central)</option>
               <option value="cajon">💰 Cajón del día</option>
             </select>
           </Field>
@@ -200,11 +196,8 @@ function ProveedorDetail({ prov, onClose, api, toast }) {
               </select>
             </Field>
           ) : (
-            <Field label="Cuenta de tesorería">
-              <select value={fPago.cuenta_id || ''} onChange={setP('cuenta_id')}>
-                <option value="">Elegir cuenta...</option>
-                {cuentasTes.map((c) => <option key={c.id} value={c.id}>{c.nombre} ({fmt(c.saldo)})</option>)}
-              </select>
+            <Field label="Cuenta">
+              <div style={{ fontSize: 12, color: 'var(--mu)', padding: '9px 12px', background: 'var(--sf)', borderRadius: 8 }}>🏦 Bóveda Central — única cuenta de tesorería</div>
             </Field>
           )}
         </div>

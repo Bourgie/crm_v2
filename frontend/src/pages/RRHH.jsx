@@ -25,19 +25,16 @@ function EmpleadosTab({ api, toast, allSucs }) {
   const [sueldoModal, setSueldoModal] = useState(null)
   const [sueldoForm, setSueldoForm] = useState({ monto: '', fecha: new Date().toISOString().substr(0, 10), fuente: 'tesoreria', cuenta_id: '', suc_id: '', metodo: 'transferencia' })
   const [sueldoSaving, setSueldoSaving] = useState(false)
-  const [cuentasTes, setCuentasTes] = useState([])
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [emps, usrs, cuentas] = await Promise.all([
+      const [emps, usrs] = await Promise.all([
         api('GET', '/rrhh/empleados'),
         api('GET', '/auth/usuarios').catch(() => []),
-        api('GET', '/tesoreria/cuentas').catch(() => []),
       ])
       setList(Array.isArray(emps) ? emps : [])
       setUsers(Array.isArray(usrs) ? usrs : [])
-      setCuentasTes(Array.isArray(cuentas) ? cuentas : [])
     } catch { setList([]) }
     finally { setLoading(false) }
   }, [api])
@@ -89,7 +86,7 @@ function EmpleadosTab({ api, toast, allSucs }) {
 
   async function saveSueldo() {
     if (!sueldoForm.monto || parseFloat(sueldoForm.monto) <= 0) { toast('Monto inválido', 'err'); return }
-    if (sueldoForm.fuente === 'tesoreria' && !sueldoForm.cuenta_id) { toast('Elegí la cuenta de tesorería', 'err'); return }
+    if (sueldoForm.fuente === 'cajon' && !sueldoForm.suc_id) { toast('Elegí la sucursal del cajón', 'err'); return }
     if (sueldoForm.fuente === 'cajon' && !sueldoForm.suc_id) { toast('Elegí la sucursal del cajón', 'err'); return }
     setSueldoSaving(true)
     try {
@@ -218,7 +215,7 @@ function EmpleadosTab({ api, toast, allSucs }) {
               <div className="fr">
                 <Field label="Fuente del dinero">
                   <select value={sueldoForm.fuente} onChange={e => setSueldoForm(p => ({ ...p, fuente: e.target.value }))}>
-                    <option value="tesoreria">🏦 Tesorería</option>
+                    <option value="tesoreria">🏦 Tesorería (Bóveda Central)</option>
                     <option value="cajon">💰 Cajón del día</option>
                   </select>
                 </Field>
@@ -229,11 +226,8 @@ function EmpleadosTab({ api, toast, allSucs }) {
                     </select>
                   </Field>
                 ) : (
-                  <Field label="Cuenta de tesorería">
-                    <select value={sueldoForm.cuenta_id || ''} onChange={e => setSueldoForm(p => ({ ...p, cuenta_id: e.target.value }))}>
-                      <option value="">Elegir cuenta...</option>
-                      {cuentasTes.map(c => <option key={c.id} value={c.id}>{c.nombre} ({fmt(c.saldo)})</option>)}
-                    </select>
+                  <Field label="Cuenta">
+                    <div style={{ fontSize: 12, color: 'var(--mu)', padding: '9px 12px', background: 'var(--sf)', borderRadius: 8 }}>🏦 Bóveda Central — única cuenta de tesorería</div>
                   </Field>
                 )}
               </div>
