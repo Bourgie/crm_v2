@@ -116,13 +116,15 @@ router.post('/cerrar', requireRol('admin', 'supervisor', 'cajero'), (req, res) =
   });
   empDB.audit(req.user, caja.suc_id, 'caja', 'cerrar', 'Cierre caja — Saldo: $'+saldo_esperado_efectivo, caja.id);
 
-  // Depósito automático del saldo real a la Bóveda Central de tesorería (empresa)
+  // Depósito automático a la Bóveda Central de tesorería (empresa)
   let depositoTes = null;
-  if (saldoReal > 0) {
-    try {
-      const { asegurarBovedaCentral } = require('../lib/treasury');
-      const boveda = asegurarBovedaCentral(empDB);
-      if (boveda) {
+  const depositosMetodo = [];
+  try {
+    const { asegurarBovedaCentral, movTes, sincSaldo } = require('../lib/treasury');
+    const boveda = asegurarBovedaCentral(empDB);
+    if (boveda) {
+      // Efectivo real contado → transferencia cierre_caja (idempotente por caja_id)
+      if (saldoReal > 0) {
         const ya = empDB.where('treasury_transfers', t => t.tipo === 'cierre_caja' && t.caja_id === caja.id && !t.anulado)[0];
         if (!ya) {
           const tid = 'tf_' + uid();
@@ -133,15 +135,46 @@ router.post('/cerrar', requireRol('admin', 'supervisor', 'cajero'), (req, res) =
             caja_id: caja.id, suc_id,
             usuario: req.user.nombre, usuario_id: req.user.id, anulado: 0
           });
-          require('../lib/treasury').sincSaldo(empDB, boveda.id);
+          sincSaldo(empDB, boveda.id);
           empDB.audit(req.user, suc_id, 'tesoreria', 'deposito_cierre', `Cierre de caja → ${boveda.nombre} — $${saldoReal}`, tid);
           depositoTes = { transferencia_id: tid, boveda: boveda.nombre, monto: saldoReal };
         }
       }
-    } catch(e) { console.error('[Caja] Error depósito tesorería:', e.message); }
-  }
 
-  res.json({ ok: true, saldo_esperado: saldo_esperado_efectivo, diferencia, deposito_tesoreria: depositoTes });
+      // Cobros electrónicos del día → ingreso en bóveda por método (idempotente por caja_id + método)
+      const movs = empDB.where('movimientos_caja', m => m.caja_id === caja.id && !m.anulado);
+      const porMetodo = {};
+      for (const m of movs) {
+        if (m.tipo !== 'ingreso' || !m.pago_metodo || esFisicoEnCaja(m.pago_metodo)) continue;
+        porMetodo[m.pago_metodo] = (porMetodo[m.pago_metodo] || 0) + (parseFloat(m.monto) || 0);
+      }
+      const tiposPago = empDB.getConfig('tipos_pago');
+      let tp = null;
+      if (typeof tiposPago === 'string') { try { tp = JSON.parse(tiposPago) } catch {} } else tp = tiposPago;
+      const tpList = Array.isArray(tp) ? tp : [];
+      const MEDIO_FALLBACK = { transferencia:'transferencia', cheque:'cheque', debito_cuenta:'transferencia', tarjeta_corp:'tarjeta_credito', debito:'tarjeta_debito', credito:'tarjeta_credito', qr:'billetera', ctacte:'ctacte' };
+      for (const [metodo, total] of Object.entries(porMetodo)) {
+        const monto = Math.round(total * 100) / 100;
+        if (monto <= 0) continue;
+        const refId = caja.id + ':' + metodo;
+        const yaMet = empDB.raw.prepare("SELECT id FROM treasury_transactions WHERE ref_tipo='cierre_caja_metodo' AND ref_id=? AND anulado=0").get(refId);
+        if (yaMet) continue;
+        const tpMet = tpList.find(p => p.id === metodo);
+        const r = movTes(empDB, {
+          cuenta_id: boveda.id, tipo: 'income',
+          concepto: `Cobros ${tpMet ? tpMet.nombre : metodo} — Cierre de caja`,
+          monto,
+          metodo_pago: metodo,
+          medio: (tpMet && tpMet.medio) || MEDIO_FALLBACK[metodo] || 'otro',
+          suc_id, usuario: req.user,
+          ref_tipo: 'cierre_caja_metodo', ref_id: refId,
+        });
+        if (r.ok) depositosMetodo.push({ metodo, nombre: tpMet ? tpMet.nombre : metodo, monto });
+      }
+    }
+  } catch(e) { console.error('[Caja] Error depósito tesorería:', e.message); }
+
+  res.json({ ok: true, saldo_esperado: saldo_esperado_efectivo, diferencia, deposito_tesoreria: depositoTes, depositos_metodo: depositosMetodo });
 });
 
 // Cierre forzado

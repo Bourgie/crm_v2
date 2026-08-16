@@ -71,7 +71,7 @@ router.get('/', (req, res) => {
 
 const MEDIO_FALLBACK = { efectivo:'efectivo', transferencia:'transferencia', cheque:'cheque', tarjeta:'tarjeta_credito', debito_cuenta:'transferencia', tarjeta_corp:'tarjeta_credito', debito:'tarjeta_debito', credito:'tarjeta_credito', qr:'billetera', ctacte:'ctacte' };
 
-router.post('/', requireRol('admin','supervisor','cajero'), validate(gastoSchema), (req, res) => {
+router.post('/', requireRol('admin','supervisor','cajero','tesorero'), validate(gastoSchema), (req, res) => {
   const db = _getDB(req);
   const { nombre, categoria_id, monto, fecha, fecha_vencimiento, estado,
           metodo_pago, suc_id, recurrente_id, nro_comprobante, notas,
@@ -82,14 +82,21 @@ router.post('/', requireRol('admin','supervisor','cajero'), validate(gastoSchema
   const cat = categoria_id ? db.findOne('gastos_categorias', categoria_id) : null;
   const fechaGasto = fecha || new Date().toISOString().substr(0,10);
   const id = 'g'+uid();
+
+  // Aprobación de gastos grandes desde la bóveda (admin aprueba, tesorero solicita)
+  const esAdmin = req.user.rol === 'admin' || (Array.isArray(req.user.roles) && req.user.roles.includes('admin'));
+  let umbral = 0;
+  try { umbral = parseFloat(db.getConfig('tesoreria_umbral_aprobacion')) || 0; } catch {}
+  const requiereAprobacion = fuenteFinal === 'tesoreria' && umbral > 0 && parseFloat(monto) >= umbral && !esAdmin;
+
   const gasto = db.insert('gastos', {
     id, nombre, categoria_id: categoria_id||null,
     categoria_nombre: cat ? cat.nombre : '—',
     monto: parseFloat(monto), fecha: fechaGasto,
     fecha_vencimiento: null,
-    estado: 'pagado',
+    estado: requiereAprobacion ? 'pendiente_aprobacion' : 'pagado',
     metodo_pago: metodo_pago||'efectivo',
-    suc_id: suc_id||null, recurrente_id: null,
+    suc_id: suc_id||null, recurrente_id: recurrente_id||null,
     nro_comprobante: nro_comprobante||'', notas: notas||'',
     registrado_por: req.user.nombre, pagado_por: pagado_por||req.user.nombre,
     genera_egreso_caja: fuenteFinal === 'cajon' ? 1 : 0,
@@ -97,11 +104,18 @@ router.post('/', requireRol('admin','supervisor','cajero'), validate(gastoSchema
   });
   const concepto = nombre + (cat ? ' (' + cat.nombre + ')' : '');
 
+  if (requiereAprobacion) {
+    db.audit(req.user, suc_id||null, 'gastos', 'solicitar_aprobacion', nombre+' — $'+parseFloat(monto), id);
+    return res.json({ id, ok: true, estado: 'pendiente_aprobacion', mensaje: 'Gasto pendiente de aprobación por un admin' });
+  }
+
   if (fuenteFinal === 'tesoreria') {
-    if (!cuenta_id) { db.delete('gastos', id); return res.status(400).json({error:'Cuenta de tesorería requerida'}); }
-    const { movTes } = require('../lib/treasury');
+    const { movTes, asegurarBovedaCentral } = require('../lib/treasury');
+    const central = asegurarBovedaCentral(db);
+    const cuentaFinal = cuenta_id || (central && central.id);
+    if (!cuentaFinal) { db.delete('gastos', id); return res.status(400).json({error:'No se pudo acceder a la Bóveda Central'}); }
     const r = movTes(db, {
-      cuenta_id, tipo: 'expense', concepto, monto: parseFloat(monto),
+      cuenta_id: cuentaFinal, tipo: 'expense', concepto, monto: parseFloat(monto),
       categoria: cat ? cat.nombre : '',
       metodo_pago: metodo_pago || '', medio: MEDIO_FALLBACK[metodo_pago] || '',
       suc_id: suc_id || null, usuario: req.user,
@@ -123,6 +137,40 @@ router.post('/', requireRol('admin','supervisor','cajero'), validate(gastoSchema
   }
   db.audit(req.user, suc_id||null, 'gastos', 'crear', nombre+' — $'+parseFloat(monto), id);
   res.json({id, ok:true});
+});
+
+// Aprobar un gasto pendiente (admin) — mueve el dinero desde la Bóveda Central
+router.post('/:id/aprobar', requireRol('admin'), (req, res) => {
+  const db = _getDB(req);
+  const g = db.findOne('gastos', req.params.id);
+  if (!g) return res.status(404).json({error:'No encontrado'});
+  if (g.estado !== 'pendiente_aprobacion') return res.status(400).json({error:'El gasto no está pendiente de aprobación'});
+  const { movTes, asegurarBovedaCentral } = require('../lib/treasury');
+  const central = asegurarBovedaCentral(db);
+  if (!central) return res.status(400).json({error:'Sin Bóveda Central'});
+  const concepto = g.nombre + (g.categoria_nombre && g.categoria_nombre !== '—' ? ' (' + g.categoria_nombre + ')' : '');
+  const r = movTes(db, {
+    cuenta_id: central.id, tipo: 'expense', concepto, monto: g.monto,
+    categoria: g.categoria_nombre || '',
+    metodo_pago: g.metodo_pago || '', medio: MEDIO_FALLBACK[g.metodo_pago] || '',
+    suc_id: g.suc_id || null, usuario: req.user,
+    ref_tipo: 'gasto', ref_id: g.id,
+  });
+  if (!r.ok) return r.dup ? res.status(409).json({error:r.error}) : res.status(400).json({error:r.error});
+  db.update('gastos', g.id, { estado: 'pagado', pagado_por: req.user.nombre });
+  db.audit(req.user, g.suc_id || null, 'gastos', 'aprobar', g.nombre+' — $'+g.monto, g.id);
+  res.json({ok:true});
+});
+
+// Rechazar un gasto pendiente (admin)
+router.post('/:id/rechazar', requireRol('admin'), (req, res) => {
+  const db = _getDB(req);
+  const g = db.findOne('gastos', req.params.id);
+  if (!g) return res.status(404).json({error:'No encontrado'});
+  if (g.estado !== 'pendiente_aprobacion') return res.status(400).json({error:'El gasto no está pendiente de aprobación'});
+  db.update('gastos', g.id, { estado: 'rechazado', notas: (g.notas || '') + ' — Rechazado por ' + req.user.nombre });
+  db.audit(req.user, g.suc_id || null, 'gastos', 'rechazar', g.nombre+' — $'+g.monto, g.id);
+  res.json({ok:true});
 });
 
 router.put('/:id', requireRol('admin','supervisor'), (req, res) => {

@@ -49,29 +49,7 @@ router.get('/cuentas', requireRol('admin', 'tesorero'), (req, res) => {
 });
 
 router.post('/cuentas', requireRol('admin', 'tesorero'), (req, res) => {
-  const db = _getDB(req);
-  const { nombre, tipo, suc_id, saldo_inicial, moneda, notas } = req.body;
-  if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
-  if (tipo === 'cash') return res.status(400).json({ error: 'La Bóveda Central es única y ya existe. Creá cuentas banco, billetera o tarjeta.' });
-  if (suc_id === undefined || suc_id === '') {
-    const perms = req.userPermisos || [];
-    if (!perms.includes('*') && !perms.includes('tesoreria_view_all_sucursales')) {
-      return res.status(403).json({ error: 'No podés crear cuentas de empresa (todas las sucursales)' });
-    }
-  }
-  const id = 'tc_' + uid();
-  const cuenta = db.insert('treasury_accounts', {
-    id, nombre, tipo: TIPOS_CUENTA.includes(tipo) ? tipo : 'banco',
-    suc_id: suc_id || null,
-    moneda: moneda || 'ARS',
-    saldo_inicial: parseFloat(saldo_inicial) || 0,
-    saldo_actual: parseFloat(saldo_inicial) || 0,
-    activo: true,
-    creado: new Date().toISOString(),
-    notas: notas || '',
-  });
-  db.audit(req.user, suc_id || null, 'tesoreria', 'crear_cuenta', `${nombre} (${TIPO_LABEL[cuenta.tipo] || cuenta.tipo})`, id);
-  res.json({ ...cuenta, saldo: parseFloat(saldo_inicial) || 0 });
+  return res.status(400).json({ error: 'Toda la tesorería opera en la Bóveda Central. No se crean cuentas adicionales.' });
 });
 
 router.put('/cuentas/:id', requireRol('admin', 'tesorero'), (req, res) => {
@@ -393,6 +371,280 @@ router.get('/reporte', requireRol('admin', 'tesorero'), (req, res) => {
       retiros: Math.round(retiros * 100) / 100,
     },
   });
+});
+
+// ══════════════════════════════════════════════════════════════
+// BÓVEDA CENTRAL — vista única de tesorería (nivel pro)
+// ══════════════════════════════════════════════════════════════
+
+function tiposPagoActivos(db) {
+  const raw = db.getConfig('tipos_pago');
+  let tp = null;
+  if (typeof raw === 'string') { try { tp = JSON.parse(raw) } catch { tp = null } } else tp = raw;
+  const lista = Array.isArray(tp) ? tp.filter(p => p.activo !== false) : [];
+  if (!lista.some(p => p.id === 'efectivo')) lista.unshift({ id: 'efectivo', nombre: 'Efectivo', icono: '💵', medio: 'efectivo' });
+  return lista;
+}
+
+function resumenBoveda(db, mesKey) {
+  const central = asegurarBovedaCentral(db);
+  if (!central) return null;
+  const txs = db.all('treasury_transactions').filter(t => !t.anulado && t.cuenta_id === central.id && t.fecha && t.fecha.substr(0, 7) === mesKey);
+  const trs = db.all('treasury_transfers').filter(t => !t.anulado && t.cuenta_destino === central.id && t.fecha && t.fecha.substr(0, 7) === mesKey);
+  const retiros = txs.filter(t => t.ref_tipo === 'retiro_caja');
+  const electr = txs.filter(t => t.ref_tipo === 'cierre_caja_metodo');
+  const cierresEfectivo = trs.filter(t => t.tipo === 'cierre_caja');
+  const ingresos = txs.filter(t => t.tipo === 'income').reduce((a, t) => a + t.monto, 0) + cierresEfectivo.reduce((a, t) => a + t.monto, 0);
+  const egresos = txs.filter(t => t.tipo === 'expense').reduce((a, t) => a + t.monto, 0);
+
+  // Por método (sincronizado con config.tipos_pago)
+  const porMetodo = {};
+  const acumular = (map, metodo, tipo, monto) => {
+    if (!metodo) return;
+    if (!map[metodo]) map[metodo] = { ingresos: 0, egresos: 0 };
+    map[metodo][tipo] += monto;
+  };
+  txs.forEach(t => acumular(porMetodo, t.metodo_pago || (t.medio === 'efectivo' ? 'efectivo' : 'otro'), t.tipo === 'income' ? 'ingresos' : 'egresos', t.monto));
+  cierresEfectivo.forEach(t => acumular(porMetodo, 'efectivo', 'ingresos', t.monto));
+
+  // Por sucursal
+  const porSuc = {};
+  const sucP = (map, sucId, campo, monto) => {
+    const k = sucId || 'otra';
+    if (!map[k]) map[k] = { retiros: 0, cierres_efectivo: 0, cobros_electronicos: 0 };
+    map[k][campo] += monto;
+  };
+  retiros.forEach(t => sucP(porSuc, t.suc_id, 'retiros', t.monto));
+  cierresEfectivo.forEach(t => sucP(porSuc, t.suc_id, 'cierres_efectivo', t.monto));
+  electr.forEach(t => sucP(porSuc, t.suc_id, 'cobros_electronicos', t.monto));
+
+  return { central, txs, retiros, electr, cierresEfectivo, ingresos, egresos, porMetodo, porSuc };
+}
+
+router.get('/boveda', requireRol('admin', 'tesorero'), (req, res) => {
+  const db = _getDB(req);
+  const mesKey = req.query.mes || new Date().toISOString().substr(0, 7);
+  const d = new Date(mesKey + '-01T12:00:00'); d.setMonth(d.getMonth() - 1);
+  const mesAnt = d.toISOString().substr(0, 7);
+
+  const r = resumenBoveda(db, mesKey);
+  const rAnt = resumenBoveda(db, mesAnt);
+  if (!r) return res.status(400).json({ error: 'Sin Bóveda Central' });
+  const central = r.central;
+  const saldo = calcSaldo(db, central.id);
+  const sucs = db.find('sucursales', {});
+  const sucNombre = (id) => id ? ((sucs.find(s => s.id === id) || {}).nombre || id) : '—';
+
+  const tpList = tiposPagoActivos(db);
+  const por_metodo = tpList.map(p => {
+    const act = r.porMetodo[p.id] || { ingresos: 0, egresos: 0 };
+    const ant = (rAnt && rAnt.porMetodo[p.id]) || { ingresos: 0, egresos: 0 };
+    const neto = act.ingresos - act.egresos;
+    const netoAnt = ant.ingresos - ant.egresos;
+    return {
+      id: p.id, nombre: p.nombre, icono: p.icono || '💳', medio: p.medio || '',
+      ingresos_mes: Math.round(act.ingresos * 100) / 100,
+      egresos_mes: Math.round(act.egresos * 100) / 100,
+      neto: Math.round(neto * 100) / 100,
+      neto_anterior: Math.round(netoAnt * 100) / 100,
+    };
+  });
+
+  const por_sucursal = Object.entries(r.porSuc).map(([sucId, v]) => {
+    const ant = (rAnt && rAnt.porSuc[sucId]) || { retiros: 0, cierres_efectivo: 0, cobros_electronicos: 0 };
+    return {
+      suc_id: sucId === 'otra' ? null : sucId,
+      suc_nombre: sucId === 'otra' ? 'Otra / sin sucursal' : sucNombre(sucId),
+      retiros: Math.round(v.retiros * 100) / 100,
+      cierres_efectivo: Math.round(v.cierres_efectivo * 100) / 100,
+      cobros_electronicos: Math.round(v.cobros_electronicos * 100) / 100,
+      total: Math.round((v.retiros + v.cierres_efectivo + v.cobros_electronicos) * 100) / 100,
+      total_anterior: Math.round((ant.retiros + ant.cierres_efectivo + ant.cobros_electronicos) * 100) / 100,
+    };
+  }).sort((a, b) => b.total - a.total);
+
+  // Movimientos recientes de la bóveda (con sucursal y método)
+  const movimientos = db.all('treasury_transactions')
+    .filter(t => !t.anulado && t.cuenta_id === central.id)
+    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha))
+    .slice(0, 60)
+    .map(t => {
+      const tpMet = tpList.find(p => p.id === t.metodo_pago);
+      return { ...t, suc_nombre: sucNombre(t.suc_id), metodo_nombre: tpMet ? tpMet.nombre : (t.metodo_pago || '—'), metodo_icono: tpMet ? tpMet.icono : '💳' };
+    });
+
+  const depositos = r.cierresEfectivo.sort((a, b) => new Date(b.fecha) - new Date(a.fecha)).map(t => ({ ...t, suc_nombre: sucNombre(t.suc_id) }));
+
+  // Compromisos con estado de pago del mes
+  const gastosMes = db.all('gastos').filter(g => g.estado === 'pagado' && g.fecha && g.fecha.substr(0, 7) === mesKey);
+  const compromisos = db.find('compromisos', { activo: true }).map(c => ({
+    ...c,
+    pagado_este_mes: gastosMes.some(g => g.recurrente_id === c.id),
+  }));
+
+  // Presupuestos del mes
+  const presupuestos = db.all('presupuesto_gastos').filter(p => p.activo !== false && p.mes === mesKey).map(p => {
+    const cats = db.find('gastos_categorias', {});
+    const cat = cats.find(c => c.id === p.categoria_id);
+    const gastado = gastosMes.filter(g => g.categoria_id === p.categoria_id).reduce((a, g) => a + g.monto, 0);
+    return {
+      ...p,
+      categoria_nombre: cat ? cat.nombre : (p.categoria_id || 'Sin categoría'),
+      categoria_icono: cat ? cat.icono : '💸',
+      gastado: Math.round(gastado * 100) / 100,
+      pct: p.monto > 0 ? Math.round((gastado / p.monto) * 100) : 0,
+    };
+  });
+
+  // Pendientes de aprobación (gastos grandes desde la bóveda)
+  const pendientes = db.where('gastos', g => g.estado === 'pendiente_aprobacion' && !g.caja_movimiento_id)
+    .sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
+
+  // Alertas operativas
+  const alertas = [];
+  const hoy = new Date().toISOString().substr(0, 10);
+  const cajasAbiertas = db.where('cajas', c => c.estado === 'abierta');
+  cajasAbiertas.forEach(c => alertas.push({ tipo: 'caja_abierta', texto: `Caja abierta sin cerrar: ${sucNombre(c.suc_id)} (desde ${(c.fecha || '').substr(0, 10)})` }));
+  compromisos.filter(c => c.dia_vencimiento < parseInt(hoy.substr(8, 2)) && !c.pagado_este_mes)
+    .forEach(c => alertas.push({ tipo: 'compromiso_vencido', texto: `Compromiso vencido: ${c.nombre} ($ ${c.monto_estimado})` }));
+  presupuestos.filter(p => p.pct >= 100)
+    .forEach(p => alertas.push({ tipo: 'presupuesto_excedido', texto: `Presupuesto excedido: ${p.categoria_nombre} (${p.pct}%)` }));
+  presupuestos.filter(p => p.pct >= 80 && p.pct < 100)
+    .forEach(p => alertas.push({ tipo: 'presupuesto_cerca', texto: `Presupuesto al ${p.pct}%: ${p.categoria_nombre}` }));
+
+  let umbral = 0;
+  try { umbral = parseFloat(db.getConfig('tesoreria_umbral_aprobacion')) || 0; } catch {}
+
+  const historial = db.all('tesoreria_cierre_mes').sort((a, b) => b.mes.localeCompare(a.mes)).map(c => ({
+    ...c,
+    por_metodo: typeof c.por_metodo === 'string' ? JSON.parse(c.por_metodo || '{}') : (c.por_metodo || {}),
+    por_sucursal: typeof c.por_sucursal === 'string' ? JSON.parse(c.por_sucursal || '{}') : (c.por_sucursal || {}),
+  }));
+
+  const otrasCuentas = db.find('treasury_accounts', { activo: true })
+    .filter(c => c.id !== 'boveda_central')
+    .map(c => ({ id: c.id, nombre: c.nombre, tipo: c.tipo, saldo: calcSaldo(db, c.id) }))
+    .filter(c => c.saldo !== 0);
+
+  res.json({
+    boveda: { id: central.id, nombre: central.nombre, saldo: Math.round(saldo * 100) / 100 },
+    mes: mesKey,
+    ingresos_mes: Math.round(r.ingresos * 100) / 100,
+    egresos_mes: Math.round(r.egresos * 100) / 100,
+    egresos_mes_anterior: Math.round((rAnt ? rAnt.egresos : 0) * 100) / 100,
+    retiros_mes: Math.round(r.retiros.reduce((a, t) => a + t.monto, 0) * 100) / 100,
+    por_metodo,
+    por_sucursal,
+    movimientos,
+    depositos,
+    compromisos,
+    presupuestos,
+    pendientes,
+    alertas,
+    umbral,
+    historial,
+    otras_cuentas: otrasCuentas,
+  });
+});
+
+// ── Presupuestos por categoría ────────────────────────────────
+router.get('/presupuestos', requireRol('admin', 'tesorero'), (req, res) => {
+  const db = _getDB(req);
+  res.json(db.all('presupuesto_gastos'));
+});
+router.post('/presupuestos', requireRol('admin'), (req, res) => {
+  const db = _getDB(req);
+  const { categoria_id, mes, monto } = req.body;
+  if (!mes) return res.status(400).json({ error: 'Mes requerido (YYYY-MM)' });
+  const m = parseFloat(monto) || 0;
+  const id = 'pb_' + uid();
+  const row = db.insert('presupuesto_gastos', { id, categoria_id: categoria_id || null, mes, monto: m, activo: true });
+  db.audit(req.user, null, 'tesoreria', 'presupuesto_crear', `${mes} — $${m}`, id);
+  res.json(row);
+});
+router.put('/presupuestos/:id', requireRol('admin'), (req, res) => {
+  const db = _getDB(req);
+  const { monto, categoria_id } = req.body;
+  db.update('presupuesto_gastos', req.params.id, { monto: parseFloat(monto) || 0, categoria_id: categoria_id || null });
+  res.json({ ok: true });
+});
+router.delete('/presupuestos/:id', requireRol('admin'), (req, res) => {
+  const db = _getDB(req);
+  db.delete('presupuesto_gastos', req.params.id);
+  res.json({ ok: true });
+});
+
+// ── Compromisos recurrentes ───────────────────────────────────
+router.get('/compromisos', requireRol('admin', 'tesorero'), (req, res) => {
+  const db = _getDB(req);
+  const cats = db.find('gastos_categorias', { activo: true });
+  res.json(db.find('compromisos', { activo: true }).map(c => ({
+    ...c,
+    categoria_nombre: (cats.find(x => x.id === c.categoria_id) || {}).nombre || '—',
+    categoria_icono: (cats.find(x => x.id === c.categoria_id) || {}).icono || '💸',
+  })));
+});
+router.post('/compromisos', requireRol('admin'), (req, res) => {
+  const db = _getDB(req);
+  const { nombre, categoria_id, monto_estimado, dia_vencimiento, notas } = req.body;
+  if (!nombre) return res.status(400).json({ error: 'Nombre requerido' });
+  const id = 'cp_' + uid();
+  const row = db.insert('compromisos', {
+    id, nombre, categoria_id: categoria_id || null,
+    monto_estimado: parseFloat(monto_estimado) || 0,
+    dia_vencimiento: parseInt(dia_vencimiento) || 1,
+    notas: notas || '', activo: true, creado: new Date().toISOString(),
+  });
+  res.json(row);
+});
+router.put('/compromisos/:id', requireRol('admin'), (req, res) => {
+  const db = _getDB(req);
+  const { nombre, categoria_id, monto_estimado, dia_vencimiento, notas } = req.body;
+  db.update('compromisos', req.params.id, {
+    nombre, categoria_id: categoria_id || null,
+    monto_estimado: parseFloat(monto_estimado) || 0,
+    dia_vencimiento: parseInt(dia_vencimiento) || 1,
+    notas: notas || '',
+  });
+  res.json({ ok: true });
+});
+router.delete('/compromisos/:id', requireRol('admin'), (req, res) => {
+  const db = _getDB(req);
+  db.update('compromisos', req.params.id, { activo: false });
+  res.json({ ok: true });
+});
+
+// ── Cierre de mes histórico ───────────────────────────────────
+router.post('/cierre-mes', requireRol('admin'), (req, res) => {
+  const db = _getDB(req);
+  const mesKey = (req.body && req.body.mes) || new Date().toISOString().substr(0, 7);
+  const r = resumenBoveda(db, mesKey);
+  if (!r) return res.status(400).json({ error: 'Sin Bóveda Central' });
+  const saldo = calcSaldo(db, r.central.id);
+  const porMetodo = {};
+  Object.entries(r.porMetodo).forEach(([k, v]) => { porMetodo[k] = Math.round((v.ingresos - v.egresos) * 100) / 100; });
+  const porSuc = {};
+  Object.entries(r.porSuc).forEach(([k, v]) => { porSuc[k] = Math.round((v.retiros + v.cierres_efectivo + v.cobros_electronicos) * 100) / 100; });
+  const id = 'tcm_' + mesKey;
+  db.insert('tesoreria_cierre_mes', {
+    id, mes: mesKey,
+    saldo_total: Math.round(saldo * 100) / 100,
+    por_metodo: JSON.stringify(porMetodo),
+    por_sucursal: JSON.stringify(porSuc),
+    cerrado_por: req.user.nombre,
+    fecha: new Date().toISOString(),
+  });
+  db.audit(req.user, null, 'tesoreria', 'cierre_mes', `Cierre de mes ${mesKey} — $${Math.round(saldo * 100) / 100}`, id);
+  res.json({ ok: true, id, mes: mesKey, saldo_total: Math.round(saldo * 100) / 100 });
+});
+
+router.get('/cierres-mes', requireRol('admin', 'tesorero'), (req, res) => {
+  const db = _getDB(req);
+  res.json(db.all('tesoreria_cierre_mes').sort((a, b) => b.mes.localeCompare(a.mes)).map(c => ({
+    ...c,
+    por_metodo: typeof c.por_metodo === 'string' ? JSON.parse(c.por_metodo || '{}') : (c.por_metodo || {}),
+    por_sucursal: typeof c.por_sucursal === 'string' ? JSON.parse(c.por_sucursal || '{}') : (c.por_sucursal || {}),
+  })));
 });
 
 module.exports = router;

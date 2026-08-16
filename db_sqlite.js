@@ -695,6 +695,23 @@ try { sqlite.exec(`CREATE TABLE IF NOT EXISTS treasury_transfers (
 )`); } catch(e) {}
 try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_treas_transf_fecha ON treasury_transfers(fecha)"); } catch(e) {}
 
+// Tesorería pro: presupuestos, compromisos y cierre de mes
+try { sqlite.exec(`CREATE TABLE IF NOT EXISTS presupuesto_gastos (
+  id TEXT PRIMARY KEY, categoria_id TEXT, mes TEXT,
+  monto REAL DEFAULT 0, activo INTEGER DEFAULT 1
+)`); } catch(e) {}
+try { sqlite.exec(`CREATE TABLE IF NOT EXISTS compromisos (
+  id TEXT PRIMARY KEY, nombre TEXT, categoria_id TEXT,
+  monto_estimado REAL DEFAULT 0, dia_vencimiento INTEGER DEFAULT 1,
+  notas TEXT DEFAULT '', activo INTEGER DEFAULT 1, creado TEXT,
+  data TEXT DEFAULT '{}'
+)`); } catch(e) {}
+try { sqlite.exec(`CREATE TABLE IF NOT EXISTS tesoreria_cierre_mes (
+  id TEXT PRIMARY KEY, mes TEXT UNIQUE,
+  saldo_total REAL DEFAULT 0, por_metodo TEXT DEFAULT '{}', por_sucursal TEXT DEFAULT '{}',
+  cerrado_por TEXT, fecha TEXT
+)`); } catch(e) {}
+
 // Asegurar Bóveda Central UNICA de empresa (suc_id = null) — idempotente.
 // Consolida bóvedas viejas por sucursal (reapunta movimientos/transferencias y las desactiva).
 try {

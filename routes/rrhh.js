@@ -192,7 +192,6 @@ router.post('/sueldos/pagar', authMiddleware, requireRol('admin','supervisor'), 
   const m = Math.round((parseFloat(monto) || 0) * 100) / 100;
   if (m <= 0) return res.status(400).json({ error: 'Monto inválido' });
   if (fuente === 'cajon' && !suc_id) return res.status(400).json({ error: 'suc_id requerido para pagar desde caja' });
-  if (fuente === 'tesoreria' && !cuenta_id) return res.status(400).json({ error: 'cuenta_id requerido para pagar desde tesorería' });
 
   // Categoría "Sueldos" (se crea si no existe)
   let cat = db.where('gastos_categorias', c => c.nombre && c.nombre.toLowerCase() === 'sueldos')[0];
