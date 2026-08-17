@@ -16,6 +16,7 @@
     "doctor": "npx react-doctor@latest",
     "build:unfulano": "node scripts/build-unfulano-site.js",
     "test:unfulano": "node --test test/unfulano-site.test.js",
+    "indexnow:unfulano": "node scripts/indexnow-unfulano.js",
     "build": "cd frontend && npm install && npm run build"
   },
   "dependencies": {

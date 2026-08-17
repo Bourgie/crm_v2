@@ -4,11 +4,19 @@ const path = require('node:path');
 const test = require('node:test');
 
 const { buildUnfulanoSite } = require('../scripts/build-unfulano-site');
+const { routes } = require('../seo/unfulanodev/routes');
 
 function createOutputDir() {
   const outputRoot = path.resolve(__dirname, '..', 'dist');
   fs.mkdirSync(outputRoot, { recursive: true });
   return fs.mkdtempSync(path.join(outputRoot, 'unfulano-site-'));
+}
+
+function listHtmlFiles(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const fullPath = path.join(directory, entry.name);
+    return entry.isDirectory() ? listHtmlFiles(fullPath) : entry.name.endsWith('.html') ? [fullPath] : [];
+  });
 }
 
 test('builds an isolated Un Fulano static site', () => {
@@ -310,4 +318,36 @@ test('keeps the preliminary privacy page available but out of the indexable site
   const sitemap = fs.readFileSync(path.join(outputDir, 'sitemap.xml'), 'utf8');
   assert.match(privacy, /<meta name="robots" content="noindex, nofollow, noarchive">/);
   assert.doesNotMatch(sitemap, /\/privacidad/);
+});
+
+test('keeps all generated internal links inside the published route contract', () => {
+  const outputDir = createOutputDir();
+  const publishedPaths = new Set(routes.map((route) => route.path));
+
+  buildUnfulanoSite({ outputDir });
+
+  for (const file of listHtmlFiles(outputDir)) {
+    const html = fs.readFileSync(file, 'utf8');
+    for (const [, href] of html.matchAll(/<a\b[^>]*href="([^"]+)"/g)) {
+      if (!href.startsWith('/')) continue;
+      const internalPath = href.split(/[?#]/, 1)[0] || '/';
+      assert.ok(publishedPaths.has(internalPath), `${path.relative(outputDir, file)} links to missing ${href}`);
+    }
+  }
+});
+
+test('builds an IndexNow payload only for indexable Un Fulano URLs', async () => {
+  const { buildPayload, ping } = require('../scripts/indexnow-unfulano');
+  const payload = buildPayload('test-indexnow-key');
+
+  assert.equal(payload.host, 'unfulanodev.com.ar');
+  assert.equal(payload.keyLocation, 'https://unfulanodev.com.ar/test-indexnow-key.txt');
+  assert.equal(payload.urlList.length, 15);
+  assert.ok(payload.urlList.includes('https://unfulanodev.com.ar/portfolio'));
+  assert.ok(!payload.urlList.includes('https://unfulanodev.com.ar/privacidad'));
+
+  let calls = 0;
+  const skipped = await ping({ fetchImpl: async () => { calls += 1; } });
+  assert.equal(skipped.skipped, true);
+  assert.equal(calls, 0);
 });

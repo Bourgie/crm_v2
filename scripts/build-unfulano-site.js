@@ -76,6 +76,9 @@ function buildUnfulanoSite({ outputDir = DEFAULT_OUTPUT_DIR } = {}) {
     fs.mkdirSync(temporaryDir, { recursive: true });
     fs.cpSync(STATIC_DIR, temporaryDir, { recursive: true });
     fs.writeFileSync(path.join(temporaryDir, 'index.html'), renderedHome);
+    if (process.env.UNFULANO_INDEXNOW_KEY) {
+      fs.writeFileSync(path.join(temporaryDir, 'indexnow-key.txt'), `${process.env.UNFULANO_INDEXNOW_KEY.trim()}\n`);
+    }
     for (const page of PAGES.filter((item) => item.status === 'published')) {
       const pagePath = path.join(temporaryDir, pageFileName(page.path));
       fs.mkdirSync(path.dirname(pagePath), { recursive: true });
