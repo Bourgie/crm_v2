@@ -50,3 +50,25 @@ test('publishes search-friendly crawler policy for the Un Fulano site', () => {
   assert.match(llms, /^# Un Fulano Dev/m);
   assert.match(llms, /Catamarca, Argentina/);
 });
+
+test('publishes complete canonical metadata for the home page', () => {
+  const outputDir = createOutputDir();
+
+  buildUnfulanoSite({ outputDir });
+
+  const home = fs.readFileSync(path.join(outputDir, 'index.html'), 'utf8');
+
+  assert.match(home, /<title>Un Fulano Dev \| Desarrollo web/);
+  assert.match(home, /<meta name="description" content="[^"]+Catamarca[^"]+">/);
+  assert.match(home, /<meta name="robots" content="index, follow">/);
+  assert.match(home, /<link rel="canonical" href="https:\/\/unfulanodev\.com\.ar">/);
+  assert.match(home, /<meta property="og:image" content="https:\/\/unfulanodev\.com\.ar\/og\.svg">/);
+  assert.match(home, /<meta property="og:image:width" content="1200">/);
+  assert.match(home, /<meta property="og:image:height" content="630">/);
+  assert.match(home, /<meta property="og:image:type" content="image\/svg\+xml">/);
+  assert.match(home, /<meta name="twitter:image:alt" content="[^"]+">/);
+  assert.match(home, /<link rel="icon" type="image\/svg\+xml" href="\/favicon\.svg">/);
+  assert.match(home, /<link rel="manifest" href="\/manifest\.webmanifest">/);
+  assert.doesNotMatch(home, /meta name="keywords"/);
+  assert.equal((home.match(/<h1\b/g) || []).length, 1);
+});

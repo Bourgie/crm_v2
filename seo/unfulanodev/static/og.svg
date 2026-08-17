@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <rect width="1200" height="630" fill="#F9F6F0"/>
+  <circle cx="180" cy="120" r="50" fill="#E85B4F"/>
+  <circle cx="280" cy="80" r="35" fill="#E85B4F"/>
+  <circle cx="360" cy="120" r="50" fill="#E85B4F"/>
+  <circle cx="530" cy="60" r="28" fill="#E85B4F"/>
+  <ellipse cx="270" cy="180" rx="100" ry="40" fill="#E85B4F" opacity="0.3"/>
+  <rect x="80" y="350" width="1040" height="6" rx="3" fill="#635750" opacity="0.1"/>
+  <text x="600" y="420" text-anchor="middle" font-family="'Segoe UI',system-ui,sans-serif" font-weight="800" font-size="64" fill="#2B221C">un<tspan fill="#E85B4F"> fulano </tspan>dev</text>
+  <text x="600" y="480" text-anchor="middle" font-family="'Segoe UI',system-ui,sans-serif" font-weight="600" font-size="28" fill="#635750">Desarrollo web y software a medida</text>
+  <text x="600" y="530" text-anchor="middle" font-family="'Segoe UI',system-ui,sans-serif" font-weight="500" font-size="18" fill="#635750" opacity="0.5">Catamarca, Argentina</text>
+</svg>
