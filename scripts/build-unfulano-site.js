@@ -40,7 +40,7 @@ function buildPageRedirects(pages) {
     .map((page) => {
       const physicalPath = `/${pageFileName(page.path)}`;
       const slashRedirect = `${page.path}/ ${page.path} 301`;
-      return `${physicalPath} ${page.path} 301\n${slashRedirect}\n${page.path} ${physicalPath} 200`;
+      return `${physicalPath} ${page.path} 301\n${slashRedirect}`;
     })
     .join('\n');
 }

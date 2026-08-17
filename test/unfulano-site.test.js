@@ -326,6 +326,7 @@ test('publishes explicit canonical redirects for legacy and slash variants', () 
   assert.match(redirects, /\/index\.html \/ 301/);
   assert.match(redirects, /\/unfulano-landing\.html \/ 301/);
   assert.match(redirects, /\/desarrollo-web\/ \/desarrollo-web 301/);
+  assert.doesNotMatch(redirects, / 200$/m);
 });
 
 test('keeps the preliminary privacy page available but out of the indexable sitemap', () => {
