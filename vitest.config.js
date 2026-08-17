@@ -10,6 +10,7 @@ module.exports = defineConfig({
       'test/treasury.test.js',
       'test/security-tenant.test.js',
       'test/dashboard-objetivos.test.js',
+      'test/marketing-output.test.js',
       'test/integration-center/**',
       'node_modules/**',
     ],
