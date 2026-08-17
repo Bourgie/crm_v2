@@ -34,7 +34,7 @@ test('publishes only canonical Un Fulano URLs in the sitemap', () => {
   const sitemap = fs.readFileSync(path.join(outputDir, 'sitemap.xml'), 'utf8');
   assert.match(sitemap, /<loc>https:\/\/unfulanodev\.com\.ar<\/loc>/);
   assert.doesNotMatch(sitemap, /flexcrm|unfulano-landing\.html|\.html/);
-  assert.equal((sitemap.match(/<loc>/g) || []).length, 9);
+  assert.equal((sitemap.match(/<loc>/g) || []).length, 15);
 });
 
 test('publishes search-friendly crawler policy for the Un Fulano site', () => {
@@ -176,4 +176,39 @@ test('builds local, about and contact pages with unique page content', () => {
     assert.match(html, /Catamarca/);
     assert.match(html, /BreadcrumbList/);
   }
+});
+
+test('builds the portfolio index and individual demo pages', () => {
+  const outputDir = createOutputDir();
+  const portfolioPaths = [
+    '/portfolio',
+    '/portfolio/entremimos',
+    '/portfolio/vertice-propiedades',
+    '/portfolio/trama-indumentaria',
+    '/portfolio/el-fogon-del-valle',
+    '/portfolio/crm-retail',
+  ];
+
+  buildUnfulanoSite({ outputDir });
+
+  for (const route of portfolioPaths) {
+    const file = path.join(outputDir, `${route.slice(1)}.html`);
+    assert.ok(fs.existsSync(file), `missing generated portfolio page for ${route}`);
+    const html = fs.readFileSync(file, 'utf8');
+    assert.match(html, new RegExp(`<link rel="canonical" href="https://unfulanodev\\.com\\.ar${route}">`));
+    assert.equal((html.match(/<h1\b/g) || []).length, 1);
+    assert.match(html, /demo/i);
+    assert.match(html, /CreativeWork|CollectionPage|ItemList/);
+  }
+});
+
+test('does not keep the old broken demo URLs in the generated home', () => {
+  const outputDir = createOutputDir();
+
+  buildUnfulanoSite({ outputDir });
+
+  const home = fs.readFileSync(path.join(outputDir, 'index.html'), 'utf8');
+  assert.doesNotMatch(home, /\/demos\//);
+  assert.match(home, /\/portfolio\/entremimos/);
+  assert.match(home, /\/portfolio\/vertice-propiedades/);
 });

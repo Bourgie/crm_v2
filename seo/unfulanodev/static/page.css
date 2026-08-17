@@ -32,6 +32,7 @@ h1, h2 { font-family: 'Baloo 2', sans-serif; line-height: 1.15; }
 h1 { max-width: 760px; margin: 10px 0 18px; font-size: clamp(2.3rem, 6vw, 4.2rem); }
 h2 { margin: 0 0 12px; font-size: clamp(1.45rem, 3vw, 2rem); }
 .lead { max-width: 700px; margin: 0 0 52px; color: var(--page-muted); font-size: 1.15rem; }
+.page-notice { max-width: 720px; margin: -26px 0 36px; padding: 14px 16px; border-left: 4px solid #D9A441; background: rgba(217,164,65,.12); color: var(--page-muted); }
 .content-section { max-width: 720px; padding: 28px 0; border-top: 1px solid var(--page-line); }
 .content-section p { margin: 0 0 14px; }
 .content-section ul { padding-left: 22px; color: var(--page-muted); }
@@ -40,6 +41,14 @@ h2 { margin: 0 0 12px; font-size: clamp(1.45rem, 3vw, 2rem); }
 .page-links a, .related a { color: var(--page-coral); }
 .related { margin: 34px 0; padding: 28px; background: var(--page-surface); border: 1px solid var(--page-line); border-radius: 18px; }
 .related ul { display: flex; flex-wrap: wrap; gap: 8px 22px; padding-left: 20px; }
+.portfolio-grid { margin: 24px 0 46px; }
+.portfolio-cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.portfolio-card { padding: 22px; background: var(--page-surface); border: 1px solid var(--page-line); border-radius: 16px; }
+.portfolio-card h3 { margin: 6px 0 8px; font-family: 'Baloo 2', sans-serif; font-size: 1.35rem; line-height: 1.2; }
+.portfolio-card h3 a { text-decoration: none; }
+.portfolio-card p { margin: 0; color: var(--page-muted); }
+.card-kicker { color: var(--page-coral) !important; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.card-link { display: inline-block; margin-top: 16px; color: var(--page-coral); font-weight: 700; }
 .page-cta { margin: 58px 0 80px; padding: 36px; background: var(--page-ink); color: #fff; border-radius: 18px; }
 .page-cta p { color: rgba(255,255,255,.78); }
 .button { display: inline-block; margin-top: 8px; text-decoration: none; }
@@ -52,5 +61,6 @@ h2 { margin: 0 0 12px; font-size: clamp(1.45rem, 3vw, 2rem); }
   .site-header nav { flex-wrap: wrap; gap: 10px 14px; }
   article { padding-top: 28px; }
   .page-cta { padding: 26px; }
+  .portfolio-cards { grid-template-columns: 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }

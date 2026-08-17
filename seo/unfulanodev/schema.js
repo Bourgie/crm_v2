@@ -174,6 +174,42 @@ function pageJsonLd(page) {
   ];
 
   if (service) graph.push(serviceNode(service));
+  if (page.kind === 'portfolio-index') {
+    graph.push({
+      '@type': 'CollectionPage',
+      '@id': `${SITE_URL}${page.path}#collection`,
+      url: `${SITE_URL}${page.path}`,
+      name: page.title,
+      isPartOf: { '@id': WEBSITE_ID },
+      mainEntity: { '@id': `${SITE_URL}${page.path}#itemlist` },
+    });
+    graph.push({
+      '@type': 'ItemList',
+      '@id': `${SITE_URL}${page.path}#itemlist`,
+      itemListElement: page.items.map((item, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        item: {
+          '@type': 'CreativeWork',
+          '@id': `${SITE_URL}${item.path}#project`,
+          name: item.name,
+          url: `${SITE_URL}${item.path}`,
+        },
+      })),
+    });
+  }
+  if (page.kind === 'portfolio-case' && page.project) {
+    graph.push({
+      '@type': 'CreativeWork',
+      '@id': `${SITE_URL}${page.path}#project`,
+      name: page.project.name,
+      description: page.project.description,
+      url: `${SITE_URL}${page.path}`,
+      genre: page.project.category,
+      creator: { '@id': ORGANIZATION_ID },
+      isPartOf: { '@id': `${SITE_URL}/portfolio#webpage` },
+    });
+  }
   if (page.faq?.length) {
     graph.push({
       '@type': 'FAQPage',

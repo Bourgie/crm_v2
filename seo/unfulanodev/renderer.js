@@ -26,6 +26,11 @@ function renderSection(section) {
   return `<section class="content-section"><h2>${escapeHtml(section.heading)}</h2>${paragraphs}${bullets}${links}</section>`;
 }
 
+function renderPortfolioItems(items) {
+  if (!items?.length) return '';
+  return `<section class="portfolio-grid" aria-labelledby="portfolio-items-title"><h2 id="portfolio-items-title">Demos disponibles</h2><div class="portfolio-cards">${items.map((item) => `<article class="portfolio-card"><p class="card-kicker">${escapeHtml(item.category)} · Demo</p><h3><a href="${escapeHtml(item.path)}">${escapeHtml(item.name)}</a></h3><p>${escapeHtml(item.description)}</p><a class="card-link" href="${escapeHtml(item.path)}">Ver demo</a></article>`).join('')}</div></section>`;
+}
+
 function pageFileName(pagePath) {
   return `${pagePath.replace(/^\/+|\/+$/g, '')}.html`;
 }
@@ -79,7 +84,7 @@ function renderPage(page) {
       <a class="brand" href="/">Un Fulano Dev</a>
       <nav aria-label="Navegacion principal">
         <a href="/desarrollo-web">Servicios</a>
-        <a href="/#portfolio">Portfolio</a>
+        <a href="/portfolio">Portfolio</a>
         <a href="/sobre-nosotros">Sobre el proyecto</a>
         <a class="nav-cta" href="/contacto">Contacto</a>
       </nav>
@@ -91,6 +96,8 @@ function renderPage(page) {
       <p class="eyebrow">Un Fulano Dev · Catamarca, Argentina</p>
       <h1>${escapeHtml(page.h1)}</h1>
       <p class="lead">${escapeHtml(page.intro)}</p>
+      ${page.notice ? `<p class="page-notice">${escapeHtml(page.notice)}</p>` : ''}
+      ${renderPortfolioItems(page.items)}
       ${page.sections.map(renderSection).join('\n')}
     </article>
     ${related}
