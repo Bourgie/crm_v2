@@ -3,7 +3,7 @@ const SITE_URL = 'https://unfulanodev.com.ar';
 const routes = [
   {
     path: '/',
-    source: 'public/unfulano-landing.html',
+    source: 'seo/unfulanodev/templates/home.html',
     status: 'published',
     lastmod: '2026-08-17',
   },

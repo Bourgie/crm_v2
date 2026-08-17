@@ -2,7 +2,7 @@
 
 > Desarrollo web y software a medida para negocios. Sitios web, tiendas online, sistemas y CRM. Catamarca, Argentina.
 
-Un Fulano Dev es un servicio de desarrollo web independiente. Trabaja en paginas web, landing pages, tiendas online, sistemas a medida y soluciones de gestion para negocios. El proceso comienza con una conversacion directa y un presupuesto revisado antes de empezar.
+Un Fulano Dev es un servicio de desarrollo web. Trabaja en paginas web, landing pages, tiendas online, sistemas a medida y soluciones de gestion para negocios. El proceso comienza con una conversacion directa y un presupuesto revisado antes de empezar.
 
 ## Servicios
 - Desarrollo web y paginas web
@@ -13,12 +13,11 @@ Un Fulano Dev es un servicio de desarrollo web independiente. Trabaja en paginas
 
 ## Ubicacion
 - Catamarca, Argentina
-- Puede coordinar proyectos de forma remota cuando el alcance lo permite
 
 ## Links
 - [Sitio oficial](https://unfulanodev.com.ar/)
-- [Portfolio](https://unfulanodev.com.ar/portfolio)
-- [Contacto](https://unfulanodev.com.ar/contacto)
+- [Portfolio](https://unfulanodev.com.ar/#portfolio)
+- [Contacto](https://unfulanodev.com.ar/#contacto)
 
 ## Contacto
 - WhatsApp: +54 9 351 742-4391
