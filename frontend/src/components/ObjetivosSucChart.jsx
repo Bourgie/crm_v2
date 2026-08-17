@@ -44,7 +44,7 @@ function ChartTooltip({ active, payload, fmt }) {
   )
 }
 
-export default function ObjetivosSucChart({ data, fmt = defaultFmt, onConfig, height = 220 }) {
+export default function ObjetivosSucChart({ data, fmt = defaultFmt, height = 220 }) {
   const recharts = useRecharts()
 
   if (!recharts) {
@@ -53,18 +53,9 @@ export default function ObjetivosSucChart({ data, fmt = defaultFmt, onConfig, he
 
   const sucs = data?.sucursales || []
   const total = data?.total
-  const sinObjetivos = !total || total.objetivo === 0
+  if (!data || sucs.length === 0 || !total || total.objetivo === 0) return null
 
-  if (!data || sucs.length === 0 || sinObjetivos) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 18px' }}>
-        <span style={{ color: 'var(--mu)', fontSize: 13 }}>🎯 Sin objetivos definidos por sucursal para este mes</span>
-        {onConfig && <button type="button" className="btn btn-primary btn-sm" onClick={onConfig}>Definir objetivos</button>}
-      </div>
-    )
-  }
-
-  const chartData = [...sucs, ...(total ? [total] : [])].map(r => ({
+  const chartData = [...sucs, total].map(r => ({
     nombre: r.nombre.length > 14 ? r.nombre.substr(0, 13) + '…' : r.nombre,
     'Vendido': r.ventas_mes,
     'Objetivo': r.objetivo,

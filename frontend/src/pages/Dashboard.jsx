@@ -275,15 +275,12 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Objetivos por sucursal (solo admin) */}
-      {me?.rol === 'admin' && (
+      {/* Ventas por sucursal vs objetivo (solo admin, solo si hay objetivos) */}
+      {me?.rol === 'admin' && raw?.objetivosSuc?.total?.objetivo > 0 && (
         <div className="card" style={{ marginBottom: 16 }}>
-          <div className="card-header">
-            <h3>🏢 Objetivos por sucursal</h3>
-            <button type="button" className="btn btn-sm btn-secondary" onClick={() => navigate('/app/config')}>⚙ Definir objetivos</button>
-          </div>
+          <div className="card-header"><h3>📊 Ventas por sucursal</h3></div>
           <Suspense fallback={<div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>}>
-            <ObjetivosSucChart data={raw?.objetivosSuc} fmt={fmt} onConfig={() => navigate('/app/config')} />
+            <ObjetivosSucChart data={raw?.objetivosSuc} fmt={fmt} />
           </Suspense>
         </div>
       )}
