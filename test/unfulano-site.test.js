@@ -34,6 +34,7 @@ test('publishes only canonical Un Fulano URLs in the sitemap', () => {
   const sitemap = fs.readFileSync(path.join(outputDir, 'sitemap.xml'), 'utf8');
   assert.match(sitemap, /<loc>https:\/\/unfulanodev\.com\.ar<\/loc>/);
   assert.doesNotMatch(sitemap, /flexcrm|unfulano-landing\.html|\.html/);
+  assert.doesNotMatch(sitemap, /\/blog\//);
   assert.equal((sitemap.match(/<loc>/g) || []).length, 15);
 });
 
@@ -211,4 +212,56 @@ test('does not keep the old broken demo URLs in the generated home', () => {
   assert.doesNotMatch(home, /\/demos\//);
   assert.match(home, /\/portfolio\/entremimos/);
   assert.match(home, /\/portfolio\/vertice-propiedades/);
+});
+
+test('keeps visible FAQ questions aligned with FAQ JSON-LD', () => {
+  const outputDir = createOutputDir();
+
+  buildUnfulanoSite({ outputDir });
+
+  const home = fs.readFileSync(path.join(outputDir, 'index.html'), 'utf8');
+  const visibleQuestions = [...home.matchAll(/<div class="faq-q">\s*<button type="button">([^<]+)<\/button>/g)]
+    .map((match) => match[1].trim());
+  const blocks = [...home.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
+    .map((match) => JSON.parse(match[1]));
+  const faq = blocks.flatMap((block) => block['@graph'] || [block]).find((node) => node['@type'] === 'FAQPage');
+  const schemaQuestions = faq.mainEntity.map((item) => item.name);
+
+  assert.equal(visibleQuestions.length, 8);
+  assert.deepEqual(visibleQuestions, schemaQuestions);
+});
+
+test('keeps all requested editorial articles as reviewable drafts', () => {
+  const { ARTICLES } = require('../seo/unfulanodev/content/articles');
+  const expectedSlugs = [
+    'cuanto-cuesta-pagina-web-catamarca',
+    'cuanto-cuesta-pagina-web-argentina',
+    'cuanto-demora-crear-pagina-web',
+    'pagina-web-vs-redes-sociales',
+    'que-necesita-una-empresa-para-tener-pagina-web',
+    'cuanto-cuesta-tienda-online',
+    'tienda-online-vs-tiendanube',
+    'como-empezar-a-vender-online',
+    'como-administrar-stock-tienda-online',
+    'como-integrar-mercado-pago',
+    'cuando-conviene-sistema-a-medida',
+    'sistema-de-gestion-vs-excel',
+    'que-es-un-crm',
+    'cuando-necesita-una-empresa-un-crm',
+    'crm-a-medida-vs-crm-estandar',
+  ];
+
+  assert.deepEqual(ARTICLES.map((article) => article.slug), expectedSlugs);
+  for (const article of ARTICLES) {
+    assert.equal(article.status, 'draft');
+    assert.ok(article.title);
+    assert.ok(article.description);
+    assert.ok(article.quickAnswer);
+    assert.ok(article.sections?.length);
+    assert.ok(article.example);
+    assert.ok(article.faq?.length);
+    assert.ok(article.links?.length);
+    assert.ok(article.cta?.href);
+    assert.equal(article.schemaType, 'Article');
+  }
 });

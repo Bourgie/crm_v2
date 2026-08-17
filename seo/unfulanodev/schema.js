@@ -4,24 +4,36 @@ const WEBSITE_ID = `${SITE_URL}/#website`;
 
 const FAQ_ITEMS = [
   {
-    name: '¿Cuánto cuesta?',
-    text: 'La landing básica es gratis. Un sitio completo desde $450.000, una tienda o sistema a medida desde $900.000. Cada proyecto es distinto igual: te doy un número exacto antes de arrancar. Nada de presupuestos abiertos ni sorpresas.',
+    name: '¿Cuánto cuesta una página web en Catamarca?',
+    text: 'No hay un precio único: depende de la cantidad de secciones, el contenido y las funciones que necesites. Primero revisamos el alcance y después recibís un presupuesto claro antes de empezar.',
   },
   {
-    name: '¿Necesitás saber de tecnología?',
-    text: 'Para nada. Vos te ocupás del negocio, yo de la web. Te explico todo en criollo, sin palabras raras. Si algo no se entiende, la culpa es mía, no tuya.',
+    name: '¿Cuánto demora desarrollar una página web?',
+    text: 'Depende del alcance y de la información disponible. Antes de empezar se acuerda una primera etapa y un calendario realista para el proyecto.',
   },
   {
-    name: '¿Y si quiero cambios después?',
-    text: 'Si tenés el Plan Tini, los cambios chicos entran en la cuota mensual. Si no, te cotizo el cambio suelto. Siempre te aviso antes de hacer cualquier cosa que implique costo. No me gusta sorprender con la factura.',
+    name: '¿Hacen tiendas online?',
+    text: 'Sí. Se puede trabajar sobre catálogo, categorías, pedidos, carrito y cobros según las necesidades del negocio y el alcance acordado.',
   },
   {
-    name: '¿Cómo empezamos?',
-    text: 'Me escribís por WhatsApp, charlamos cinco minutos, y si veo que puedo ayudarte te paso un presupuesto. Si te va bien, arrancamos. La mitad al inicio, la mitad cuando te entrego el sitio funcionando.',
+    name: '¿Pueden integrar Mercado Pago?',
+    text: 'La integración se evalúa según el flujo de venta, la plataforma y el alcance del proyecto. Se confirma la solución antes de empezar.',
   },
   {
-    name: '¿Qué necesitás de mí?',
-    text: 'Tu WhatsApp, fotos de tu negocio (o lo que quieras mostrar), y una charla de cinco minutos. Nada de llenar formularios eternos ni adjuntar documentos. Simple.',
+    name: '¿Hacen sistemas a medida?',
+    text: 'Sí. Se pueden analizar procesos de clientes, stock, ventas, caja, pedidos o reportes y construir una primera etapa según la prioridad del negocio.',
+  },
+  {
+    name: '¿Desarrollan CRM?',
+    text: 'Sí. Un CRM puede ordenar clientes, oportunidades, ventas, tareas y reportes. También existe FlexCRM como producto de gestión relacionado.',
+  },
+  {
+    name: '¿Trabajan con clientes de otras provincias?',
+    text: 'La primera conversación puede ser por WhatsApp o email. Si el proyecto es viable, la modalidad de trabajo y el alcance se acuerdan según cada caso.',
+  },
+  {
+    name: '¿Cómo comienza un proyecto?',
+    text: 'Me contás de tu negocio, qué querés resolver y qué te gustaría mostrar. Revisamos el alcance y, si puedo ayudarte, preparo una propuesta antes de empezar.',
   },
 ];
 
