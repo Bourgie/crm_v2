@@ -970,7 +970,7 @@ function upsertOAuthProvider(data) {
       .run(data.nombre, data.icono || '🔌', data.categoria || 'ecommerce', JSON.stringify(data.config_schema || {}), JSON.stringify(data.env_keys || []), data.enabled !== false ? 1 : 0, data.orden || 99, ahora, data.provider);
   } else {
     master.prepare("INSERT INTO oauth_providers (id,provider,nombre,icono,categoria,config_schema,env_keys,enabled,orden,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)")
-      .run('prov_' + Date.now(), data.provider, data.nombre, data.icono || '🔌', data.categoria || 'ecommerce', JSON.stringify(data.config_schema || {}), JSON.stringify(data.env_keys || []), data.enabled !== false ? 1 : 0, data.orden || 99, ahora);
+      .run('prov_' + data.provider, data.provider, data.nombre, data.icono || '🔌', data.categoria || 'ecommerce', JSON.stringify(data.config_schema || {}), JSON.stringify(data.env_keys || []), data.enabled !== false ? 1 : 0, data.orden || 99, ahora);
   }
 }
 
@@ -989,7 +989,7 @@ function setEmpresaIntegracion(empresaId, provider, habilitado) {
       .run(habilitado ? 1 : 0, ahora, empresaId, provider);
   } else {
     master.prepare("INSERT INTO empresa_integraciones (id,empresa_id,provider,habilitado,creado,actualizado) VALUES (?,?,?,?,?,?)")
-      .run('ei_' + Date.now(), empresaId, provider, habilitado ? 1 : 0, ahora, ahora);
+      .run('ei_' + empresaId + '_' + provider, empresaId, provider, habilitado ? 1 : 0, ahora, ahora);
   }
 }
 function setEmpresaIntegracionesBatch(empresaId, providers) {
