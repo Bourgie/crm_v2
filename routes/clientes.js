@@ -92,6 +92,42 @@ router.post('/', validate(clienteSchema), (req,res) => {
   try { const { dispararWebhooks } = require('./webhooks'); dispararWebhooks(db, 'cliente.creado', { cliente_id: r.id, nombre: r.nombre, tel: r.tel, email: r.email }); } catch(e) {}
   res.json(r);
 });
+// ── Importación masiva desde Excel ──
+router.post('/importar', (req,res) => {
+  const db = _getDB(req);
+  const lista = Array.isArray(req.body.clientes) ? req.body.clientes : (Array.isArray(req.body) ? req.body : null);
+  if (!lista) return res.status(400).json({error:'clientes requerido'});
+  let creados = 0, actualizados = 0, errores = 0;
+  const errores_detalle = [];
+  lista.forEach((item, idx) => {
+    const fila = idx + 2;
+    try {
+      const nombre = item.nombre != null ? String(item.nombre).trim() : '';
+      if (!nombre) { errores++; errores_detalle.push({fila, dni: item.dni || '', error:'Nombre obligatorio'}); return; }
+      const dni = item.dni != null ? String(item.dni).trim() : '';
+      const tel = item.tel != null ? String(item.tel).trim() : '';
+      const data = {
+        nombre,
+        apellido: item.apellido != null ? String(item.apellido) : '',
+        dni,
+        tel,
+        email: item.email != null ? String(item.email).trim() : '',
+        ciudad: item.ciudad != null ? String(item.ciudad) : '',
+        notas: item.notas != null ? String(item.notas) : '',
+        lista: parseInt(item.lista) || 1,
+      };
+      const existing = (dni && db.find('clientes',{dni}).find(c => c.activo !== false))
+        || (tel && db.find('clientes',{tel}).find(c => c.activo !== false)) || null;
+      if (existing) { db.update('clientes', existing.id, data); actualizados++; }
+      else { db.insert('clientes',{id:'c'+uid(),lista:1,limite_credito:20000,activo:true,creado:new Date().toISOString(),...data,condicion_fiscal:'cf'}); creados++; }
+    } catch(e) {
+      errores++;
+      errores_detalle.push({fila, dni: item.dni || '', error: (e && e.message) || 'Error'});
+    }
+  });
+  res.json({ creados, actualizados, errores, errores_detalle: errores_detalle.slice(0, 50) });
+});
+
 router.put('/:id', validate(clienteSchema), (req,res) => {
   const db = _getDB(req);
   const { dni, email, tel } = req.body;

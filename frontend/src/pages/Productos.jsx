@@ -141,30 +141,26 @@ export function Productos() {
       setImporting(true)
       const rows = await importExcel(file)
       if (!rows.length) { toast('Archivo vacío', 'err'); return }
-      let creados = 0, actualizados = 0, errores = 0
-      for (const r of rows) {
-        try {
-          const nombre = r['Nombre'] || r['nombre']
-          if (!nombre) { errores++; continue }
-          const sku = r['SKU'] || r['sku'] || ''
-          const existing = sku ? prods.find(p => p.sku === sku) : null
-          const data = {
-            nombre: String(nombre).trim(),
-            sku: sku ? String(sku).trim() : '',
-            categoria: r['Categoría'] || r['categoria'] || '',
-            talle: r['Talle'] || r['talle'] || '',
-            color: r['Color'] || r['color'] || '',
-            precio_l1: parseFloat(r['Precio L1'] || r['precio_l1'] || 0) || 0,
-            precio_l2: parseFloat(r['Precio L2'] || r['precio_l2'] || 0) || 0,
-            precio_l3: parseFloat(r['Precio L3'] || r['precio_l3'] || 0) || 0,
-            costo: parseFloat(r['Costo'] || r['costo'] || 0) || 0,
-            stock_min: parseInt(r['Stock mín'] || r['stock_min'] || 0) || 0,
-          }
-          if (existing) { await api('PUT', '/productos/' + existing.id, data); actualizados++ }
-          else { await api('POST', '/productos', data); creados++ }
-        } catch { errores++ }
+      const productos = rows.map(r => ({
+        nombre: String(r['Nombre'] || r['nombre'] || '').trim(),
+        sku: String(r['SKU'] || r['sku'] || '').trim(),
+        categoria: r['Categoría'] || r['categoria'] || '',
+        talle: r['Talle'] || r['talle'] || '',
+        color: r['Color'] || r['color'] || '',
+        precio_l1: parseFloat(r['Precio L1'] || r['precio_l1'] || 0) || 0,
+        precio_l2: parseFloat(r['Precio L2'] || r['precio_l2'] || 0) || 0,
+        precio_l3: parseFloat(r['Precio L3'] || r['precio_l3'] || 0) || 0,
+        costo: parseFloat(r['Costo'] || r['costo'] || 0) || 0,
+        stock_min: parseInt(r['Stock mín'] || r['stock_min'] || 0) || 0,
+      }))
+      const res = await api('POST', '/productos/importar', { productos })
+      const { creados = 0, actualizados = 0, errores = 0, errores_detalle = [] } = res || {}
+      let msg = `📥 Importación: ${creados} creados, ${actualizados} actualizados`
+      if (errores) {
+        const detalle = errores_detalle.slice(0, 3).map(e => `Fila ${e.fila}: ${e.error}`).join(' — ')
+        msg += `, ${errores} errores${detalle ? ' (' + detalle + ')' : ''}`
       }
-      toast(`📥 Importación: ${creados} creados, ${actualizados} actualizados${errores ? ', ' + errores + ' errores' : ''}`, 'ok')
+      toast(msg, errores ? 'warn' : 'ok')
       load()
     } catch (e) {
       if (e.message !== 'Sin archivo') toast('Error: ' + e.message, 'err')

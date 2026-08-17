@@ -294,30 +294,23 @@ export function Clientes() {
       setImporting(true)
       const rows = await importExcel(file)
       if (!rows.length) { toast('Archivo vacío', 'err'); return }
-      let creados = 0, actualizados = 0, errores = 0
-      for (const r of rows) {
-        try {
-          const nombre = r['Nombre'] || r['nombre']
-          if (!nombre) { errores++; continue }
-          const tel = r['Tel'] || r['tel'] || r['Teléfono'] || ''
-          const dni = r['DNI'] || r['dni'] || ''
-          const existing = (dni && clientes.find(c => c.dni === dni)) || (tel && clientes.find(c => c.tel === tel)) || null
-          const data = {
-            nombre: String(nombre).trim(),
-            apellido: r['Apellido'] || r['apellido'] || '',
-            dni: String(dni || '').trim(),
-            tel: String(tel || '').trim(),
-            email: r['Email'] || r['email'] || '',
-            dir: r['Dirección'] || r['direccion'] || r['dir'] || '',
-            lista: parseInt(String(r['Lista'] || r['lista'] || '1').replace(/\D/g, '')) || 1,
-            es_ctacte: String(r['CtaCte'] || r['ctacte'] || '').toLowerCase() === 'sí' || String(r['CtaCte'] || '').toLowerCase() === 'si',
-            notas: r['Notas'] || r['notas'] || '',
-          }
-          if (existing) { await api('PUT', '/clientes/' + existing.id, data); actualizados++ }
-          else { await api('POST', '/clientes', data); creados++ }
-        } catch { errores++ }
+      const clientes = rows.map(r => ({
+        nombre: String(r['Nombre'] || r['nombre'] || '').trim(),
+        apellido: r['Apellido'] || r['apellido'] || '',
+        dni: String(r['DNI'] || r['dni'] || '').trim(),
+        tel: String(r['Tel'] || r['tel'] || r['Teléfono'] || '').trim(),
+        email: r['Email'] || r['email'] || '',
+        notas: r['Notas'] || r['notas'] || '',
+        lista: parseInt(String(r['Lista'] || r['lista'] || '1').replace(/\D/g, '')) || 1,
+      }))
+      const res = await api('POST', '/clientes/importar', { clientes })
+      const { creados = 0, actualizados = 0, errores = 0, errores_detalle = [] } = res || {}
+      let msg = `📥 Importación: ${creados} creados, ${actualizados} actualizados`
+      if (errores) {
+        const detalle = errores_detalle.slice(0, 3).map(e => `Fila ${e.fila}: ${e.error}`).join(' — ')
+        msg += `, ${errores} errores${detalle ? ' (' + detalle + ')' : ''}`
       }
-      toast(`📥 ${creados} creados, ${actualizados} actualizados${errores ? ', ' + errores + ' errores' : ''}`, 'ok')
+      toast(msg, errores ? 'warn' : 'ok')
       load()
     } catch (e) {
       if (e.message !== 'Sin archivo') toast('Error: ' + e.message, 'err')

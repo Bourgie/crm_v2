@@ -710,6 +710,178 @@ describe('Backend Integration Tests', async () => {
     })
   })
 
+  // ── Importación masiva (productos/clientes) ─────────────────
+  // Usa un app aislado (sin rate limiter ni CSRF) con los routers reales
+  // y un DB temporal, para testear la lógica de import sin depender de JWT/tenant.
+  describe('Importación masiva', () => {
+    const express = require('express')
+    const fs = require('node:fs')
+    const bcrypt = require('bcryptjs')
+    const jwt = require('jsonwebtoken')
+    const { createDB } = require('../db_sqlite')
+    const productosRouter = require('../routes/productos')
+    const clientesRouter = require('../routes/clientes')
+    const tempDbPath = path.join(__dirname, '..', 'data', 'test_import_tmp.db')
+
+    let app, srv, url, tempDb
+
+    function tokenFor(userId) {
+      return jwt.sign({ id: userId, empresa: 'default' }, process.env.JWT_SECRET)
+    }
+
+    function localRequest(method, route, opts = {}) {
+      return new Promise((resolve, reject) => {
+        const u = new URL(route, url)
+        const body = opts.body ? JSON.stringify(opts.body) : null
+        const req = http.request(u, {
+          method,
+          headers: {
+            'Content-Type': 'application/json',
+            ...opts.headers,
+            ...(body ? { 'Content-Length': Buffer.byteLength(body) } : {}),
+          },
+        }, (res) => {
+          let data = ''
+          res.on('data', c => data += c)
+          res.on('end', () => {
+            let json
+            try { json = JSON.parse(data) } catch { json = null }
+            resolve({ status: res.statusCode, body: json, raw: data })
+          })
+        })
+        req.on('error', reject)
+        if (body) req.write(body)
+        req.end()
+      })
+    }
+
+    before(async () => {
+      for (const suffix of ['', '-wal', '-shm']) {
+        try { fs.unlinkSync(tempDbPath + suffix) } catch {}
+      }
+      tempDb = createDB(tempDbPath)
+      tempDb.insert('usuarios', {
+        id: 'u-test-admin', nombre: 'Test Admin', usuario: 'testadmin',
+        email: 'testadmin@test.local', password: bcrypt.hashSync('testpass', 10),
+        rol: 'admin', activo: true,
+      })
+      tempDb.insert('usuarios', {
+        id: 'u-test-vend', nombre: 'Test Vend', usuario: 'testvend',
+        email: 'testvend@test.local', password: bcrypt.hashSync('testpass', 10),
+        rol: 'vendedor', activo: true,
+      })
+      app = express()
+      app.use(express.json())
+      app.use((req, res, next) => { req.db = tempDb; next() })
+      app.use('/productos', productosRouter)
+      app.use('/clientes', clientesRouter)
+      await new Promise((resolve, reject) => {
+        srv = app.listen(0, '127.0.0.1', () => {
+          url = `http://127.0.0.1:${srv.address().port}`
+          resolve()
+        })
+      })
+    })
+
+    after(() => {
+      if (srv) srv.close()
+      for (const suffix of ['', '-wal', '-shm']) {
+        try { fs.unlinkSync(tempDbPath + suffix) } catch {}
+      }
+    })
+
+    it('POST /productos/importar crea 350 productos en 1 request (sin 429)', async () => {
+      const productos = Array.from({ length: 350 }, (_, i) => ({
+        nombre: `Producto Test ${i}`, sku: `SKU-${i}`, categoria: 'Test',
+        precio_l1: 100 + i, precio_l2: 90 + i, precio_l3: 80 + i,
+        costo: 50, stock_min: 5,
+      }))
+      const res = await localRequest('POST', '/productos/importar', {
+        body: { productos },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.body.creados, 350)
+      assert.strictEqual(res.body.actualizados, 0)
+      assert.strictEqual(res.body.errores, 0)
+      assert.strictEqual(tempDb.all('productos').length, 350)
+    })
+
+    it('re-importar por SKU actualiza en vez de duplicar', async () => {
+      const productos = Array.from({ length: 350 }, (_, i) => ({
+        nombre: `Producto Test ${i} v2`, sku: `SKU-${i}`, categoria: 'Test',
+        precio_l1: 200 + i, costo: 60,
+      }))
+      const res = await localRequest('POST', '/productos/importar', {
+        body: { productos },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.body.actualizados, 350)
+      assert.strictEqual(res.body.creados, 0)
+      assert.strictEqual(tempDb.all('productos').length, 350)
+      const p = tempDb.find('productos', { sku: 'SKU-0' })[0]
+      assert.strictEqual(p.precio_l1, 200)
+    })
+
+    it('filas inválidas se cuentan como errores sin abortar el resto', async () => {
+      const productos = [
+        { nombre: '', sku: 'SKU-BAD-1', precio_l1: 100 },
+        { nombre: 'Sin Precio', sku: 'SKU-BAD-2', precio_l1: 0 },
+        { nombre: 'Válido', sku: 'SKU-VALID', precio_l1: 500 },
+      ]
+      const res = await localRequest('POST', '/productos/importar', {
+        body: { productos },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.body.creados, 1)
+      assert.strictEqual(res.body.errores, 2)
+      assert.strictEqual(res.body.errores_detalle.length, 2)
+      assert.ok(res.body.errores_detalle.some(e => e.fila === 2 && e.error === 'Nombre obligatorio'))
+      assert.ok(res.body.errores_detalle.some(e => e.fila === 3 && e.error === 'Precio L1 obligatorio'))
+    })
+
+    it('vendedor no puede importar productos (403)', async () => {
+      const res = await localRequest('POST', '/productos/importar', {
+        body: { productos: [{ nombre: 'X', precio_l1: 10 }] },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-vend') },
+      })
+      assert.strictEqual(res.status, 403)
+    })
+
+    it('POST /clientes/importar crea 300 clientes y actualiza por DNI', async () => {
+      const clientes = Array.from({ length: 300 }, (_, i) => ({
+        nombre: `Cliente ${i}`, apellido: 'Test',
+        dni: String(30000000 + i), tel: `11${i}`,
+        email: `cliente${i}@test.local`, lista: 1,
+      }))
+      const res = await localRequest('POST', '/clientes/importar', {
+        body: { clientes },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.body.creados, 300)
+      assert.strictEqual(res.body.errores, 0)
+      assert.strictEqual(tempDb.all('clientes').length, 300)
+
+      const re = await localRequest('POST', '/clientes/importar', {
+        body: { clientes: [{ nombre: 'Cliente 0 actualizado', dni: '30000000', tel: '110', email: 'cliente0@test.local' }] },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(re.body.actualizados, 1)
+      assert.strictEqual(tempDb.all('clientes').length, 300)
+    })
+
+    it('body inválido en /productos/importar devuelve 400', async () => {
+      const res = await localRequest('POST', '/productos/importar', {
+        body: { foo: 'bar' },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(res.status, 400)
+    })
+  })
+
   // ── Rate Limiting (must be last — exhausts the budget) ─────
   describe('Rate Limiting', () => {
     it('rate limit headers track remaining requests', async () => {
