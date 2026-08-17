@@ -455,6 +455,38 @@ const PAGES = [
     ],
     cta: { href: '/#contacto', label: 'Usar el formulario de la home' },
   },
+  {
+    path: '/privacidad',
+    kind: 'legal',
+    breadcrumb: 'Privacidad',
+    status: 'published',
+    indexable: false,
+    robots: 'noindex, nofollow, noarchive',
+    lastmod: '2026-08-17',
+    title: 'Privacidad | Un Fulano Dev',
+    description: 'Información sobre el formulario de contacto y las mediciones del sitio de Un Fulano Dev.',
+    h1: 'Privacidad y datos de contacto',
+    intro: 'Esta información explica qué datos pueden enviarse cuando usás el formulario o aceptás la medición de visitas. Debe revisarse antes de publicarse como texto legal definitivo.',
+    sections: [
+      {
+        heading: 'Formulario de contacto',
+        paragraphs: ['Si completás el formulario, se envían los datos que ingreses, como nombre, email, teléfono y mensaje, al servicio que gestiona las consultas de Un Fulano Dev.'],
+      },
+      {
+        heading: 'Medición del sitio',
+        paragraphs: ['La medición se activa después del consentimiento. Puede incluir información técnica de la visita, referencia y parámetros UTM permitidos para entender de dónde llegan las consultas.'],
+      },
+      {
+        heading: 'Consultas',
+        paragraphs: ['Para consultar sobre tus datos o pedir una revisión, escribí a contacto@unfulanodev.com.ar. Los plazos de conservación y otros detalles legales deben confirmarse antes de publicar esta página como política definitiva.'],
+      },
+    ],
+    related: [
+      { href: '/contacto', label: 'Ir a contacto' },
+      { href: '/', label: 'Volver al inicio' },
+    ],
+    cta: { href: '/contacto', label: 'Consultar sobre datos' },
+  },
 ];
 
 module.exports = { PAGES };

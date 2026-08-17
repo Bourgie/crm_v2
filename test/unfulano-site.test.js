@@ -265,3 +265,49 @@ test('keeps all requested editorial articles as reviewable drafts', () => {
     assert.equal(article.schemaType, 'Article');
   }
 });
+
+test('publishes accessible home landmarks, labels and progressive FAQ behavior', () => {
+  const outputDir = createOutputDir();
+
+  buildUnfulanoSite({ outputDir });
+
+  const home = fs.readFileSync(path.join(outputDir, 'index.html'), 'utf8');
+  assert.match(home, /<html class="no-js" lang="es">/);
+  assert.match(home, /href="#contenido">Saltar al contenido/);
+  assert.match(home, /<main id="contenido">/);
+  assert.match(home, /aria-controls="navLinks"/);
+  assert.match(home, /<label class="sr-only" for="lead-nombre">/);
+  assert.match(home, /<label class="sr-only" for="lead-email">/);
+  assert.match(home, /<label class="sr-only" for="lead-telefono">/);
+  assert.match(home, /<label class="sr-only" for="lead-mensaje">/);
+  assert.match(home, /id="form-status" role="status" aria-live="polite"/);
+  assert.match(home, /\.no-js \.faq-answer/);
+  assert.match(home, /:focus-visible/);
+  assert.doesNotMatch(home, /<noscript><img src="https:\/\/app\.flexcrm\.com\.ar\/api\/landing\/pixel/);
+});
+
+test('publishes Cloudflare security headers compatible with the approved form integration', () => {
+  const outputDir = createOutputDir();
+
+  buildUnfulanoSite({ outputDir });
+
+  const headers = fs.readFileSync(path.join(outputDir, '_headers'), 'utf8');
+  assert.match(headers, /Strict-Transport-Security/);
+  assert.match(headers, /X-Content-Type-Options: nosniff/);
+  assert.match(headers, /Referrer-Policy: strict-origin-when-cross-origin/);
+  assert.match(headers, /Permissions-Policy/);
+  assert.match(headers, /frame-ancestors 'none'/);
+  assert.match(headers, /connect-src[^\n]*https:\/\/app\.flexcrm\.com\.ar/);
+  assert.match(headers, /form-action[^\n]*https:\/\/app\.flexcrm\.com\.ar/);
+});
+
+test('keeps the preliminary privacy page available but out of the indexable sitemap', () => {
+  const outputDir = createOutputDir();
+
+  buildUnfulanoSite({ outputDir });
+
+  const privacy = fs.readFileSync(path.join(outputDir, 'privacidad.html'), 'utf8');
+  const sitemap = fs.readFileSync(path.join(outputDir, 'sitemap.xml'), 'utf8');
+  assert.match(privacy, /<meta name="robots" content="noindex, nofollow, noarchive">/);
+  assert.doesNotMatch(sitemap, /\/privacidad/);
+});

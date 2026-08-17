@@ -11,6 +11,7 @@ const routes = [
   ...PAGES.map((page) => ({
     path: page.path,
     status: page.status,
+    indexable: page.indexable !== false,
     lastmod: page.lastmod,
     kind: page.kind,
   })),

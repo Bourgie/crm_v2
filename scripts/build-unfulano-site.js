@@ -67,7 +67,7 @@ function buildUnfulanoSite({ outputDir = DEFAULT_OUTPUT_DIR } = {}) {
     throw new Error('Home template is missing the JSON-LD marker');
   }
   const renderedHome = homeHtml.replace('<!-- UNFULANO_JSON_LD -->', serializeJsonLdScript(homeJsonLd()));
-  const publishedRoutes = routes.filter((route) => route.status === 'published');
+  const publishedRoutes = routes.filter((route) => route.status === 'published' && route.indexable !== false);
 
   const temporaryDir = `${path.resolve(outputDir)}.tmp-${process.pid}-${Date.now()}`;
   assertSafeOutputDir(temporaryDir);

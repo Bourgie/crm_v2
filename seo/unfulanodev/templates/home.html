@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="es">
+<html class="no-js" lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -79,6 +79,7 @@
   .nav-toggle{display:none; background:none; border:1.5px solid var(--line); border-radius:10px; padding:7px 11px; font-size:1.1rem; cursor:pointer; color:var(--ink); line-height:1;}
   @media (max-width:700px){
     nav.links{display:none; position:absolute; top:100%; left:0; right:0; background:var(--bg); flex-direction:column; align-items:flex-start; padding:16px 24px 24px; gap:16px; border-bottom:1px solid var(--line);}
+    .no-js nav.links{display:flex;}
     nav.links.open{display:flex;}
     .nav-toggle{display:inline-block;}
     nav.links a::after{display:none;}
@@ -176,6 +177,7 @@
   .faq-answer{padding:0 20px 0; max-height:0; overflow:hidden; transition:max-height .35s ease, padding .35s ease;}
   .faq-answer-inner{padding-bottom:18px; font-size:.9rem; color:var(--ink-soft); line-height:1.65;}
   .faq-q.open .faq-answer{max-height:300px;}
+  .no-js .faq-answer{max-height:none; padding-bottom:18px;}
 
   /* ---------- CTA ---------- */
   .cta-section{text-align:center; padding:80px 0;}
@@ -224,12 +226,14 @@
   /* Skip link */
   .skip-link{position:absolute; top:-100px; left:12px; z-index:100; background:var(--ink); color:#fff; padding:10px 20px; border-radius:8px; font-weight:600; font-size:.9rem; text-decoration:none;}
   .skip-link:focus{top:12px;}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0;}
+  a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible{outline:3px solid var(--mustard)!important;outline-offset:3px;}
 
   .btn[disabled]{opacity:.6; cursor:not-allowed;}
 </style>
 </head>
 <body>
-<a class="skip-link" href="#contacto">Saltar al contenido</a>
+<a class="skip-link" href="#contenido">Saltar al contenido</a>
 
 <svg style="display:none" xmlns="http://www.w3.org/2000/svg">
   <symbol id="paw" viewBox="0 0 24 20">
@@ -243,10 +247,10 @@
 <header>
   <div class="wrap navrow">
     <a class="brand" href="#"><svg class="paw" style="width:18px;height:16px;color:var(--coral)"><use href="#paw"/></svg> un <span class="hl">fulano</span> dev</a>
-    <button class="nav-toggle" id="navToggle" aria-label="Abrir menú" aria-expanded="false">
+    <button class="nav-toggle" id="navToggle" aria-label="Abrir menú" aria-controls="navLinks" aria-expanded="false">
       <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="5" x2="15" y2="5"/><line x1="3" y1="9" x2="15" y2="9"/><line x1="3" y1="13" x2="15" y2="13"/></svg>
     </button>
-    <nav class="links" id="navLinks">
+    <nav class="links" id="navLinks" aria-label="Navegacion principal">
       <a href="#para-quien">Para quién es</a>
       <a href="#planes">Planes</a>
       <a href="#portfolio">Portfolio</a>
@@ -256,6 +260,8 @@
     </nav>
   </div>
 </header>
+
+<main id="contenido">
 
 <!-- HERO -->
 <section class="hero wrap">
@@ -646,13 +652,19 @@
   <div class="wrap">
     <h2 class="section-title reveal" style="text-align:center;">Dejame tu consulta</h2>
     <p class="section-desc reveal" style="text-align:center;margin-left:auto;margin-right:auto;">Contame tu idea y revisamos juntos el alcance del proyecto.</p>
+    <noscript><p class="section-desc" style="text-align:center;margin-left:auto;margin-right:auto;">Si el formulario no funciona sin JavaScript, podés escribir por WhatsApp.</p></noscript>
     <form id="landing-form" action="https://app.flexcrm.com.ar/api/landing/lead" method="POST" class="reveal" style="max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:14px;">
       <input type="hidden" name="pagina" value="unfulanodev" />
-      <input type="text" name="nombre" required placeholder="Tu nombre *" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:none;transition:border .2s;" />
-      <input type="email" name="email" placeholder="tu@email.com" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:none;transition:border .2s;" />
-      <input type="tel" name="telefono" placeholder="Tu WhatsApp o teléfono" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:none;transition:border .2s;" />
-      <textarea name="mensaje" required rows="4" placeholder="Contame de qué es tu negocio y qué necesitás *" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:none;resize:vertical;transition:border .2s;"></textarea>
+      <label class="sr-only" for="lead-nombre">Tu nombre</label>
+      <input id="lead-nombre" type="text" name="nombre" required placeholder="Tu nombre *" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:2px solid transparent;transition:border .2s;" />
+      <label class="sr-only" for="lead-email">Email</label>
+      <input id="lead-email" type="email" name="email" placeholder="tu@email.com" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:2px solid transparent;transition:border .2s;" />
+      <label class="sr-only" for="lead-telefono">WhatsApp o telefono</label>
+      <input id="lead-telefono" type="tel" name="telefono" placeholder="Tu WhatsApp o teléfono" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:2px solid transparent;transition:border .2s;" />
+      <label class="sr-only" for="lead-mensaje">Consulta</label>
+      <textarea id="lead-mensaje" name="mensaje" required rows="4" placeholder="Contame de qué es tu negocio y qué necesitás *" style="padding:14px 18px;border-radius:12px;border:1.5px solid var(--line);font-family:var(--font-body);font-size:.95rem;background:var(--card);color:var(--ink);outline:2px solid transparent;resize:vertical;transition:border .2s;"></textarea>
       <button type="submit" class="btn btn-primary" style="width:100%;text-align:center;">Enviar consulta</button>
+      <p id="form-status" role="status" aria-live="polite" style="font-size:.8rem;color:var(--ink-soft);text-align:center;min-height:1.2em;"></p>
       <p style="font-size:.8rem;color:var(--ink-soft);text-align:center;">O por WhatsApp al <a href="https://wa.me/5493517424391" target="_blank" rel="noopener" style="color:var(--coral);font-weight:600;">+54 9 351 742-4391</a></p>
     </form>
   </div>
@@ -670,6 +682,8 @@
   </div>
 </section>
 
+ </main>
+
 <!-- FOOTER -->
 <footer>
   <div class="wrap">
@@ -681,12 +695,14 @@
       <a href="mailto:contacto@unfulanodev.com.ar">contacto@unfulanodev.com.ar</a>
       <a href="https://flexcrm.com.ar" target="_blank" rel="noopener">FlexCRM</a>
       <a href="https://app.flexcrm.com.ar" target="_blank" rel="noopener">Acceso Clientes</a>
+      <a href="/privacidad">Privacidad</a>
     </div>
     <p class="foot-demos">© 2026 un fulano dev · Todos los sitios del portfolio son demos con contenido de ejemplo.</p>
   </div>
 </footer>
 
 <script>
+  document.documentElement.classList.remove('no-js');
   document.documentElement.classList.add('js');
 
   // Cookie consent
@@ -698,6 +714,8 @@
     b.id = 'cookie-banner';
     b.setAttribute('role', 'dialog');
     b.setAttribute('aria-label', 'Consentimiento de cookies');
+    b.setAttribute('aria-modal', 'true');
+    b.setAttribute('tabindex', '-1');
     b.innerHTML = '<div class="cb-inner"><span>Medimos visitas y eventos para mejorar el sitio. El servicio puede recibir datos técnicos de la visita. No usamos cookies de publicidad ni compartimos tus datos. Los datos del formulario solo se envían si vos los completás.</span><div class="cb-btns"><button class="cb-accept">Aceptar</button><button class="cb-reject">Rechazar</button></div></div>';
     document.body.appendChild(b);
     b.querySelector('.cb-accept').addEventListener('click', function(){ localStorage.setItem(CONSENT_KEY, 'accepted'); b.remove(); });
@@ -750,11 +768,13 @@
       e.stopPropagation();
       var open = navLinks.classList.toggle('open');
       navToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      navToggle.setAttribute('aria-label', open ? 'Cerrar menú' : 'Abrir menú');
     });
     document.addEventListener('click', function(e){
       if (!e.target.closest('header') && navLinks.classList.contains('open')){
         navLinks.classList.remove('open');
         navToggle.setAttribute('aria-expanded', 'false');
+        navToggle.setAttribute('aria-label', 'Abrir menú');
       }
     });
   }
@@ -780,9 +800,11 @@
     form.addEventListener('submit', function(e) {
       e.preventDefault();
       var btn = this.querySelector('button[type=submit]');
+      var status = document.getElementById('form-status');
       var origText = btn.textContent;
       btn.textContent = 'Enviando...';
       btn.disabled = true;
+      if (status) status.textContent = 'Enviando consulta...';
 
       var fd = new FormData(this);
       var utm = window.__landingUtm || {};
@@ -805,16 +827,19 @@
           if (r.ok) {
             btn.textContent = '✓ Enviado';
             btn.style.background = 'var(--olive)';
+            if (status) status.textContent = 'Consulta enviada.';
             setTimeout(function(){ window.location.href = '/gracias'; }, 800);
           } else {
             btn.textContent = 'Error. Intentar de nuevo';
             btn.disabled = false;
+            if (status) status.textContent = 'No se pudo enviar. Revisá los datos o escribí por WhatsApp.';
             setTimeout(function(){ btn.textContent = origText; }, 3000);
           }
         })
         .catch(function() {
           btn.textContent = 'Error de red';
           btn.disabled = false;
+          if (status) status.textContent = 'No se pudo conectar. Escribí por WhatsApp si querés continuar.';
           setTimeout(function(){ btn.textContent = origText; }, 3000);
         });
     });
@@ -822,12 +847,16 @@
 
   // Reveal animations
   var reveals = document.querySelectorAll('.reveal');
-  var observer = new IntersectionObserver(function(entries){
-    entries.forEach(function(entry){
-      if (entry.isIntersecting){ entry.target.classList.add('revealed'); observer.unobserve(entry.target); }
-    });
-  }, {threshold:0.1, rootMargin:'0px 0px -40px 0px'});
-  reveals.forEach(function(el){ observer.observe(el); });
+  if ('IntersectionObserver' in window) {
+    var observer = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if (entry.isIntersecting){ entry.target.classList.add('revealed'); observer.unobserve(entry.target); }
+      });
+    }, {threshold:0.1, rootMargin:'0px 0px -40px 0px'});
+    reveals.forEach(function(el){ observer.observe(el); });
+  } else {
+    reveals.forEach(function(el){ el.classList.add('revealed'); });
+  }
 
   showBanner();
 </script>
