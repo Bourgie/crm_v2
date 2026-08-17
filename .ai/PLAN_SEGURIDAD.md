@@ -95,7 +95,7 @@ Objetivo: Corregir fuga de contexto entre empresas.
 
 - [ ] 4.2 Compresión Brotli/Gzip para assets estáticos
   - Agregar middleware `compression` en Express
-  - O configurar a nivel Railway/reverse-proxy
+  - O configurar a nivel Fly.io/reverse-proxy
 
 **Impacto:** Mejora UX y performance de carga.  
 **Esfuerzo:** ~1 h.

@@ -167,5 +167,5 @@ These are project-specific checks added to the standard review:
 - [ ] Audit log table has no size limit — risk of unbounded growth
 - [ ] Error stack traces only shown in development (`server.js:314`)
 - [ ] Graceful shutdown on SIGTERM/SIGINT with 10s timeout (`server.js:353-367`)
-- [ ] `trust proxy` is set for Railway reverse proxy (`server.js:20`)
+- [ ] `trust proxy` is set for Fly.io/reverse proxy (`server.js:28`)
 - [ ] No `X-Powered-By` header (Helmet removes it)

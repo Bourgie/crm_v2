@@ -53,7 +53,7 @@ allowed-tools: Read, Grep, Glob, Bash, Edit, Write
 | `SA_SECRET` | Firma de JWT de superadmin | `openssl rand -hex 64` |
 | `CONFIG_ENCRYPTION_KEY` | AES-256-GCM para secrets en DB | `openssl rand -hex 32` |
 
-Todas van en `.env` (producción: Railway variables de entorno).
+Todas van en `.env` localmente y como secrets de Fly.io en producción. Cloudflare Pages no debe recibir secrets del backend; solo variables públicas de build si fueran necesarias.
 
 ## Scripts
 

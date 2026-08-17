@@ -112,5 +112,5 @@ App.jsx                     ← Routes + React.lazy code-splitting
 
 ## CI/CD
 - Build: `npm run build:react` → Vite genera chunks en `public/app/`
-- Deploy: Railway (ver `railway.json`)
+- Deploy: Cloudflare Pages para marketing y Fly.io para app/admin (ver `fly.toml` y `Dockerfile`)
 - Pre-merge: ejecutar checklist en `.ai/PLAN_SEGURIDAD.md`

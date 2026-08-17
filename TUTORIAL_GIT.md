@@ -57,10 +57,10 @@ Usa estos prefijos para mantener ordenado el historial:
 ## Flujo visual
 
 ```
-[Tu PC]                          [GitHub]                         [Railway]
+[Tu PC]                          [GitHub]                    [Cloudflare Pages / Fly.io]
   git add .                          |                                |
   git commit -m "..."                |                                |
-  git push ----------------------> repo actualizado -----------> deploy automatico
+  git push ----------------------> repo actualizado -----------> deploy en cada destino
 ```
 
 ---

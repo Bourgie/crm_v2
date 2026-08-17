@@ -10,7 +10,7 @@ y evolucionó a producto comercial multi-rubro. Una DB SQLite por empresa, separ
 - **Auth**: JWT (payload: id, empresa, rol, suc_id) + bcrypt
 - **Seguridad**: Helmet + express-rate-limit
 - **Email**: Nodemailer / SMTP (opcional, para reset de contraseña)
-- **Deploy**: Railway
+- **Deploy**: Cloudflare Pages (marketing) + Fly.io (app y admin)
 - **Export/Import**: SheetJS (xlsx) — en todos los módulos principales
 
 ## Estructura de directorios clave

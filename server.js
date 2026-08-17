@@ -24,7 +24,7 @@ const PORT = process.env.PORT || 3000;
 // ── Purga de archivos huérfanos de empresas eliminadas (auto-reparación del borrado a cero) ──
 try { require('./lib/purgeEmpresa').purgeOrphanTenantDBs(); } catch(e) { console.error('[Startup] purgeOrphanTenantDBs:', e.message); }
 
-// ── Trust proxy (Railway / reverse proxy) ──
+// ── Trust proxy (Fly.io / reverse proxy) ──
 app.set('trust proxy', 1);
 
 // ── HTTPS redirect in production ──
@@ -113,7 +113,6 @@ const ALLOWED_ORIGINS = [
   'https://unfulanodev.com.ar', 'https://www.unfulanodev.com.ar',
   'https://flexcrm.com.ar', 'https://www.flexcrm.com.ar',
   'https://app.flexcrm.com.ar', 'https://admin.flexcrm.com.ar',
-  'https://flexcrm.up.railway.app',
 ];
 
 if (process.env.ALLOWED_ORIGINS) {

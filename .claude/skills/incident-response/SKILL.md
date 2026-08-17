@@ -12,7 +12,7 @@ Playbook de respuesta a incidentes. Activar cuando:
 - Hay un pico de intentos de login fallidos (fuerza bruta)
 - Se sospecha que una cuenta fue comprometida
 - Aparecen registros de auditoria sospechosos
-- Railway o el proveedor de hosting reporta actividad inusual
+- Fly.io, Cloudflare o el proveedor de hosting reporta actividad inusual
 
 ## Niveles de severidad
 
@@ -81,7 +81,7 @@ Playbook de respuesta a incidentes. Activar cuando:
 ### Si CONFIG_ENCRYPTION_KEY fue comprometida:
 1. Generar nueva clave: `openssl rand -hex 32`
 2. Ejecutar `node scripts/rotate-encryption-key.js` para re-encriptar todos los secrets en DB
-3. Actualizar `.env` en todos los entornos (local, staging, Railway)
+3. Actualizar `.env` en todos los entornos (local, staging, Fly.io)
 4. Forzar re-deploy
 
 ---
@@ -120,7 +120,7 @@ Playbook de respuesta a incidentes. Activar cuando:
    ```bash
    grep -rn "rateLimit\|limiter" server.js routes/
    ```
-2. **BLOQUEAR** IPs sospechosas temporalmente (via Railway firewall o nginx)
+2. **BLOQUEAR** IPs sospechosas temporalmente mediante los controles del proveedor activo (Fly.io/Cloudflare) o nginx
 3. **AUMENTAR** rate limits si es necesario (pero mantener proteccion)
 4. **ANALIZAR** patron: `.isSuspicious()` en `lib/suspicious-activity.js` ya detecta esto
 5. **REVISAR** si el ataque es dirigido (una empresa especifica) o generico

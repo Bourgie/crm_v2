@@ -30,7 +30,7 @@ También podés invocarlos explícitamente:
 # Invocar un agente específico
 "Usá el code-reviewer para revisar routes/caja.js"
 "Quiero que el tenant-auditor audite el módulo nuevo"
-"Corré el deploy-checker antes de subir a Railway"
+"Corré el deploy-checker antes de desplegar en Fly.io y Cloudflare Pages"
 
 # O dejar que Claude Code elija el agente correcto
 "Hay un bug en el módulo Caja, el cobro no se registra"
@@ -48,7 +48,7 @@ También podés invocarlos explícitamente:
 | `pendientes-flow` | Sonnet 4.6 | Bugs en el módulo Pendientes |
 | `excel-importer` | Haiku 4.5 | Problemas con import/export Excel |
 | `seed-builder` | Haiku 4.5 | Actualizar o reparar seed_demo.js |
-| `deploy-checker` | Haiku 4.5 | Antes de hacer deploy a Railway |
+| `deploy-checker` | Haiku 4.5 | Antes de desplegar en Fly.io y Cloudflare Pages |
 | `tenant-auditor` | Sonnet 4.6 | Auditoría de seguridad multi-tenant |
 
 ## Paralelismo recomendado

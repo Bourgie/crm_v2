@@ -71,7 +71,7 @@ git diff main -- db_sqlite.js | head -30
 git diff main | grep "^\+" | grep "process\.env\." | grep -v "//"
 ```
 - Si hay nuevas variables: ¿están documentadas? ¿están en .env.example?
-- Variables requeridas en Railway: JWT_SECRET, NODE_ENV, PORT
+- Variables de producción en Fly.io: JWT_SECRET, NODE_ENV, PORT
 
 ### 8. Archivos sensibles modificados
 
@@ -86,7 +86,7 @@ git diff main --name-only | grep -E "db_master|middleware/auth|middleware/tenant
 git diff main -- package.json | grep "^\+" | grep -v "version\|name\|description"
 ```
 - Nuevas deps en `devDependencies`: verificar que no son necesarias en producción
-- Nuevas deps en `dependencies`: verificar que son compatibles con Railway
+- Nuevas deps en `dependencies`: verificar que son compatibles con la imagen Docker y Fly.io
 
 ### 10. Tamaño del bundle
 
