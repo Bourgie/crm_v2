@@ -148,6 +148,45 @@ describe('Backend Integration Tests', async () => {
     })
   })
 
+  // ── SEO ─────────────────────────────────────────────────────
+  describe('SEO', () => {
+    it('GET /sitemap.xml returns dynamic sitemap', async () => {
+      const res = await request('GET', '/sitemap.xml')
+      assert.strictEqual(res.status, 200)
+      assert.ok(res.raw.includes('<urlset'))
+      assert.ok(res.raw.includes('https://flexcrm.com.ar/'))
+      assert.ok(res.raw.includes('<lastmod>'))
+    })
+
+    it('GET /robots.txt includes AI crawlers', async () => {
+      const res = await request('GET', '/robots.txt')
+      assert.strictEqual(res.status, 200)
+      for (const bot of ['GPTBot', 'OAI-SearchBot', 'ClaudeBot', 'PerplexityBot', 'Google-Extended']) {
+        assert.ok(res.raw.includes(bot), `robots.txt debe mencionar a ${bot}`)
+      }
+      assert.ok(res.raw.includes('Sitemap: https://flexcrm.com.ar/sitemap.xml'))
+    })
+
+    it('GET /llms.txt returns markdown for LLMs', async () => {
+      const res = await request('GET', '/llms.txt')
+      assert.strictEqual(res.status, 200)
+      assert.ok(res.raw.includes('# FlexCRM'))
+      assert.ok(res.raw.includes('USD 15/mes'))
+    })
+
+    it('GET /llms-full.txt returns extended docs', async () => {
+      const res = await request('GET', '/llms-full.txt')
+      assert.strictEqual(res.status, 200)
+      assert.ok(res.raw.includes('Módulos principales'))
+    })
+
+    it('GET / exposes IndexNow key file', async () => {
+      const res = await request('GET', '/flexcrm-indexnow-key.txt')
+      assert.strictEqual(res.status, 200)
+      assert.ok(res.raw.includes('flexcrm-indexnow-key'))
+    })
+  })
+
   // ── Version ─────────────────────────────────────────────────
   describe('Version', () => {
     it('GET /api/version returns version number', async () => {

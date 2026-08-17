@@ -9,17 +9,34 @@
 <meta property="og:description" content="Ventas, caja, stock y clientes en un solo lugar. Pensado para el retail argentino.">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://flexcrm.com.ar">
-<meta property="og:image" content="https://flexcrm.com.ar/fc-og.svg">
+<meta property="og:image" content="https://flexcrm.com.ar/fc-og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
 <meta property="og:locale" content="es_AR">
 <meta property="og:site_name" content="FlexCRM">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="FlexCRM — El CRM multi-rubro para tu negocio">
 <meta name="twitter:description" content="Ventas, caja, stock y clientes. Multi-sucursal, multi-rubro. Probá gratis.">
-<meta name="twitter:image" content="https://flexcrm.com.ar/fc-og.svg">
+<meta name="twitter:image" content="https://flexcrm.com.ar/fc-og.png">
 <meta name="robots" content="index, follow">
 <meta name="keywords" content="CRM, punto de venta, gestión de stock, facturación, multi-sucursal, PyME, Argentina">
 <meta name="author" content="FlexCRM">
 <link rel="canonical" href="https://flexcrm.com.ar/">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Organization",
+  "name": "FlexCRM",
+  "url": "https://flexcrm.com.ar",
+  "logo": "https://flexcrm.com.ar/fc-og.png",
+  "email": "contacto@unfulanodev.com.ar",
+  "description": "CRM multi-rubro para PyMEs argentinas: ventas, caja, stock, clientes y facturación ARCA. Multi-sucursal.",
+  "sameAs": [
+    "https://wa.me/5493517424391",
+    "https://unfulanodev.com.ar"
+  ]
+}
+</script>
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -28,13 +45,33 @@
   "url": "https://flexcrm.com.ar",
   "applicationCategory": "BusinessApplication",
   "operatingSystem": "Web",
-  "description": "CRM multi-rubro con ventas, caja, stock y clientes. Multi-sucursal.",
+  "description": "CRM multi-rubro con ventas, caja, stock y clientes. Multi-sucursal. Facturación ARCA integrada.",
   "offers": {
-    "@type": "Offer",
-    "price": "15.00",
+    "@type": "AggregateOffer",
     "priceCurrency": "USD",
-    "description": "Plan Básico desde USD 15/mes"
+    "lowPrice": "0",
+    "highPrice": "90",
+    "offerCount": "4",
+    "offers": [
+      { "@type": "Offer", "name": "Demo gratis", "price": "0", "priceCurrency": "USD", "description": "14 días gratis, todos los módulos, hasta 5 usuarios, 1 sucursal. Sin tarjeta." },
+      { "@type": "Offer", "name": "Básico", "price": "15", "priceCurrency": "USD", "description": "Hasta 3 usuarios, 1 sucursal. POS, Caja, Clientes, Ventas, Productos, Stock, Cuenta Corriente." },
+      { "@type": "Offer", "name": "Pro", "price": "40", "priceCurrency": "USD", "description": "Hasta 10 usuarios, 3 sucursales. Presupuestos, Pendientes, Reportes avanzados, Facturación ARCA." },
+      { "@type": "Offer", "name": "Enterprise", "price": "90", "priceCurrency": "USD", "description": "Usuarios y sucursales ilimitados. Lista de regalos, Pipeline, Chat entre sucursales, Webhooks + API." }
+    ]
   }
+}
+</script>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "FAQPage",
+  "mainEntity": [
+    { "@type": "Question", "name": "¿Qué es FlexCRM?", "acceptedAnswer": { "@type": "Answer", "text": "FlexCRM es un CRM multi-rubro para PyMEs argentinas: ventas, caja, stock, clientes, cuenta corriente y facturación ARCA en un solo lugar. Funciona en el navegador, sin instalación, y soporta múltiples sucursales." } },
+    { "@type": "Question", "name": "¿Cuánto cuesta FlexCRM?", "acceptedAnswer": { "@type": "Answer", "text": "Hay una demo gratis de 14 días sin tarjeta. El plan Básico cuesta USD 15/mes (3 usuarios, 1 sucursal), el Pro USD 40/mes (10 usuarios, 3 sucursales, facturación ARCA) y el Enterprise USD 90/mes (usuarios y sucursales ilimitados)." } },
+    { "@type": "Question", "name": "¿Funciona para mi rubro?", "acceptedAnswer": { "@type": "Answer", "text": "FlexCRM es multi-rubro: indumentaria, panadería, ferretería, farmacia y más. Stock con variantes (talle, color, sabor) y se adapta a lo que vendés." } },
+    { "@type": "Question", "name": "¿Puedo manejar varias sucursales?", "acceptedAnswer": { "@type": "Answer", "text": "Sí. Según el plan podés manejar hasta 3 sucursales (Pro) o ilimitadas (Enterprise), con stock y caja independientes por local y transferencias entre sucursales." } },
+    { "@type": "Question", "name": "¿Incluye facturación electrónica de AFIP?", "acceptedAnswer": { "@type": "Answer", "text": "Sí, desde el plan Pro. Factura electrónica A, B y C integrada con ARCA/AFIP, sin sistemas externos." } }
+  ]
 }
 </script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect x='4' y='6' width='24' height='20' rx='4' fill='%236366f1'/><rect x='10' y='12' width='12' height='3' rx='1' fill='white' opacity='0.6'/><rect x='10' y='17' width='8' height='2' rx='1' fill='white' opacity='0.4'/></svg>">
@@ -117,6 +154,12 @@ nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; backdrop-filter:
 .plan ul { text-align: left; margin-bottom: 24px; font-size: .9rem; color: var(--gray); line-height: 2; }
 .plan ul li::before { content: '✓ '; color: #22c55e; font-weight: 700; }
 
+/* FAQ */
+.faq-list { max-width: 700px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+.faq-list details { background: var(--card); border: 1px solid rgba(0,0,0,.06); border-radius: var(--radius); padding: 18px 22px; }
+.faq-list summary { font-weight: 700; cursor: pointer; font-size: .98rem; }
+.faq-list details p { margin-top: 10px; font-size: .92rem; color: var(--gray); line-height: 1.6; }
+
 /* FORM */
 .form-section { padding: 60px 0; }
 .contact-form { max-width: 480px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
@@ -151,6 +194,7 @@ button[disabled]{opacity:.6; cursor:not-allowed;}
   <div class="nav-links">
     <a href="#features" class="hide-mob">Funcionalidades</a>
     <a href="#plans">Planes</a>
+    <a href="#faq" class="hide-mob">FAQ</a>
     <a href="#contacto">Contacto</a>
     <a class="nav-btn" href="https://app.flexcrm.com.ar/app/login">Ingresar</a>
   </div>
@@ -267,6 +311,34 @@ button[disabled]{opacity:.6; cursor:not-allowed;}
       </ul>
       <a href="https://app.flexcrm.com.ar/app/signup" class="btn btn-secondary" style="width:100%;text-align:center">Comenzar</a>
     </div>
+  </div>
+</div></section>
+
+<!-- FAQ -->
+<section class="sec" id="faq"><div class="wrap">
+  <h2>Preguntas frecuentes</h2>
+  <p style="text-align:center;">Todo lo que necesitás saber antes de empezar.</p>
+  <div class="faq-list">
+    <details>
+      <summary>¿Qué es FlexCRM?</summary>
+      <p>FlexCRM es un CRM multi-rubro para PyMEs argentinas: ventas, caja, stock, clientes, cuenta corriente y facturación ARCA en un solo lugar. Funciona en el navegador, sin instalación, y soporta múltiples sucursales.</p>
+    </details>
+    <details>
+      <summary>¿Cuánto cuesta FlexCRM?</summary>
+      <p>Hay una demo gratis de 14 días sin tarjeta. El plan Básico cuesta USD 15/mes (3 usuarios, 1 sucursal), el Pro USD 40/mes (10 usuarios, 3 sucursales, facturación ARCA) y el Enterprise USD 90/mes (usuarios y sucursales ilimitados).</p>
+    </details>
+    <details>
+      <summary>¿Funciona para mi rubro?</summary>
+      <p>FlexCRM es multi-rubro: indumentaria, panadería, ferretería, farmacia y más. Stock con variantes (talle, color, sabor) y se adapta a lo que vendés.</p>
+    </details>
+    <details>
+      <summary>¿Puedo manejar varias sucursales?</summary>
+      <p>Sí. Según el plan podés manejar hasta 3 sucursales (Pro) o ilimitadas (Enterprise), con stock y caja independientes por local y transferencias entre sucursales.</p>
+    </details>
+    <details>
+      <summary>¿Incluye facturación electrónica de AFIP?</summary>
+      <p>Sí, desde el plan Pro. Factura electrónica A, B y C integrada con ARCA/AFIP, sin sistemas externos.</p>
+    </details>
   </div>
 </div></section>
 

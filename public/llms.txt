@@ -1,0 +1,25 @@
+# FlexCRM
+
+> CRM multi-rubro para PyMEs de Argentina. Ventas, caja, stock, clientes y facturación ARCA (AFIP) en un solo lugar. Multi-sucursal, multi-empresa, sin instalación.
+
+FlexCRM es un SaaS de gestión comercial que funciona en el navegador: punto de venta, caja con arqueo de efectivo/débito/crédito/QR/transferencias, control de stock con variantes (talle, color, sabor), fichas de clientes con cuenta corriente y saldo a favor, fidelización por puntos, presupuestos, pedidos pendientes, reportes con KPIs y factura electrónica ARCA (A, B y C) integrada con AFIP. Datos aislados por empresa (multi-tenant), roles por usuario, 2FA.
+
+## Links
+- [Sitio oficial](https://flexcrm.com.ar)
+- [Probar gratis / registrarse](https://app.flexcrm.com.ar/app/signup)
+- [Ingresar](https://app.flexcrm.com.ar/app/login)
+
+## Precios (facturación mensual, sin compromiso, soporte por WhatsApp incluido)
+- Demo gratis: $0 por 14 días — todos los módulos, hasta 5 usuarios, 1 sucursal, sin tarjeta
+- Básico: USD 15/mes — hasta 3 usuarios, 1 sucursal, POS, Caja, Clientes, Ventas, Productos, Stock, Cuenta Corriente
+- Pro: USD 40/mes — hasta 10 usuarios, 3 sucursales, Presupuestos, Pendientes, Transferencias entre sucursales, Reportes avanzados, Facturación ARCA, soporte prioritario
+- Enterprise: USD 90/mes — usuarios y sucursales ilimitados, Lista de regalos, Pipeline comercial, Chat entre sucursales, Webhooks + API, soporte dedicado
+
+## Contacto
+- WhatsApp: +54 9 351 742-4391
+- Email: contacto@unfulanodev.com.ar
+- Creado por [Un Fulano Dev](https://unfulanodev.com.ar)
+
+## Notas
+- Producto argentino, orientado a retail y PyMEs (indumentaria, panadería, ferretería, farmacia).
+- Sin límites artificiales en los módulos contratados.

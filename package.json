@@ -16,6 +16,7 @@
     "test:watch": "cd frontend && npm run test:watch",
     "test:coverage": "cd frontend && npm run test:coverage",
     "doctor": "npx react-doctor@latest",
+    "indexnow": "node scripts/indexnow.js",
     "build": "cd frontend && npm install && npm run build"
   },
   "dependencies": {

@@ -1,3 +1,32 @@
+# FlexCRM — robots.txt
+# Todos los crawlers pueden indexar el sitio público.
+# Las rutas privadas (API, admin) quedan bloqueadas.
+
 User-Agent: *
 Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /superadmin.html
+
+# ── Crawlers de buscadores IA (todos permitidos, salvo rutas privadas) ──
+User-Agent: GPTBot
+User-Agent: OAI-SearchBot
+User-Agent: ChatGPT-User
+User-Agent: ClaudeBot
+User-Agent: Claude-SearchBot
+User-Agent: Claude-User
+User-Agent: PerplexityBot
+User-Agent: Perplexity-User
+User-Agent: Google-Extended
+User-Agent: Applebot-Extended
+User-Agent: Bytespider
+User-Agent: Amazonbot
+User-Agent: cohere-ai
+User-Agent: MistralBot
+User-Agent: meta-externalagent
+Allow: /
+Disallow: /api/
+Disallow: /admin
+Disallow: /superadmin.html
+
 Sitemap: https://flexcrm.com.ar/sitemap.xml

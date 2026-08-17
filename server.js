@@ -211,6 +211,25 @@ const signupLimiter = rateLimit({
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// ── SEO: sitemap dinámico (debe ir ANTES de express.static) ──
+const SEO_SITE = process.env.SEO_SITE_URL || 'https://flexcrm.com.ar';
+app.get('/sitemap.xml', (req, res) => {
+  const hoy = new Date().toISOString().slice(0, 10);
+  const urls = [
+    { loc: `${SEO_SITE}/`, prio: '1.0' },
+  ];
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${urls.map((u) => `  <url>
+    <loc>${u.loc}</loc>
+    <lastmod>${hoy}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>${u.prio}</priority>
+  </url>`).join('\n')}
+</urlset>`;
+  res.type('application/xml').send(xml);
+});
+
 // ── Static files ──
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -479,6 +498,13 @@ if (require.main === module) {
     console.log(`  → Admin:   http://localhost:${PORT}/admin`);
     console.log(`  → Entorno: ${process.env.NODE_ENV || 'development'}`);
     console.log('');
+
+    // Notificar a buscadores (IndexNow) para re-indexado automático
+    try {
+      require('./scripts/indexnow').ping();
+    } catch (e) {
+      console.log('[IndexNow] no disponible:', e.message);
+    }
   });
 
   function gracefulShutdown(signal) {
