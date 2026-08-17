@@ -172,11 +172,13 @@ describe('Dashboard: objetivos por sucursal', () => {
     const diasDelMes = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()
     const factor = diasDelMes / Math.max(1, now.getDate())
     const s1 = r.body.sucursales.find(s => s.id === 's1')
+    const s2 = r.body.sucursales.find(s => s.id === 's2')
     assert.strictEqual(s1.proyeccion, Math.round(30000 * factor))
+    assert.strictEqual(s2.proyeccion, Math.round(20000 * factor))
     assert.strictEqual(s1.proyeccion_cumplimiento, Math.round((s1.proyeccion / s1.objetivo) * 100))
     assert.strictEqual(typeof s1.proyectado_cumple, 'boolean')
     const t = r.body.total
-    assert.strictEqual(t.proyeccion, Math.round(50000 * factor))
+    assert.strictEqual(t.proyeccion, s1.proyeccion + s2.proyeccion, 'total = suma de proyecciones por sucursal')
   })
 
   it('devuelve sin_objetivo cuando ninguna sucursal tiene objetivo', async () => {
