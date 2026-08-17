@@ -362,7 +362,7 @@ export function Privacidad() {
         <Section number="5" title="TRANSFERENCIA INTERNACIONAL">
           <P>
             Los datos se almacenan en servidores cloud provistos por{' '}
-            <strong>Railway</strong>, cuyos centros de datos pueden estar
+            <strong>Fly.io</strong>, cuyos centros de datos pueden estar
             ubicados fuera del territorio argentino.
           </P>
           <P>
