@@ -3,6 +3,8 @@ const path = require('node:path');
 
 const { SITE_URL, routes } = require('../seo/unfulanodev/routes');
 const { homeJsonLd, serializeJsonLdScript } = require('../seo/unfulanodev/schema');
+const { PAGES } = require('../seo/unfulanodev/pages');
+const { pageFileName, renderPage } = require('../seo/unfulanodev/renderer');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_OUTPUT_DIR = path.join(REPO_ROOT, 'dist', 'unfulanodev');
@@ -29,6 +31,16 @@ function buildSitemap(publishedRoutes) {
   });
 
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${entries.join('\n')}\n</urlset>\n`;
+}
+
+function buildPageRedirects(pages) {
+  return pages
+    .filter((page) => page.status === 'published')
+    .map((page) => {
+      const physicalPath = `/${pageFileName(page.path)}`;
+      return `${physicalPath} ${page.path} 301\n${page.path} ${physicalPath} 200`;
+    })
+    .join('\n');
 }
 
 function assertSafeOutputDir(outputDir) {
@@ -64,6 +76,14 @@ function buildUnfulanoSite({ outputDir = DEFAULT_OUTPUT_DIR } = {}) {
     fs.mkdirSync(temporaryDir, { recursive: true });
     fs.cpSync(STATIC_DIR, temporaryDir, { recursive: true });
     fs.writeFileSync(path.join(temporaryDir, 'index.html'), renderedHome);
+    for (const page of PAGES.filter((item) => item.status === 'published')) {
+      const pagePath = path.join(temporaryDir, pageFileName(page.path));
+      fs.mkdirSync(path.dirname(pagePath), { recursive: true });
+      fs.writeFileSync(pagePath, renderPage(page));
+    }
+    const redirectsPath = path.join(temporaryDir, '_redirects');
+    const redirects = fs.readFileSync(redirectsPath, 'utf8').trimEnd();
+    fs.writeFileSync(redirectsPath, `${redirects}\n${buildPageRedirects(PAGES)}\n`);
     fs.writeFileSync(path.join(temporaryDir, 'sitemap.xml'), buildSitemap(publishedRoutes));
 
     fs.rmSync(outputDir, { recursive: true, force: true });

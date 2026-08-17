@@ -29,28 +29,28 @@ const SERVICES = [
   {
     slug: 'desarrollo-web',
     path: '/desarrollo-web',
-    url: `${SITE_URL}/#para-quien`,
+    url: `${SITE_URL}/desarrollo-web`,
     name: 'Desarrollo web',
     description: 'Landing pages y sitios web para presentar un negocio de forma clara y profesional.',
   },
   {
     slug: 'tiendas-online',
     path: '/tiendas-online',
-    url: `${SITE_URL}/#para-quien`,
+    url: `${SITE_URL}/tiendas-online`,
     name: 'Tiendas online',
     description: 'Tiendas online con catálogo, carrito y cobros según el alcance de cada proyecto.',
   },
   {
     slug: 'sistemas-a-medida',
     path: '/sistemas-a-medida',
-    url: `${SITE_URL}/#para-quien`,
+    url: `${SITE_URL}/sistemas-a-medida`,
     name: 'Sistemas a medida',
     description: 'Sistemas de gestión adaptados al flujo de trabajo de un negocio.',
   },
   {
     slug: 'crm',
     path: '/crm',
-    url: `${SITE_URL}/#para-quien`,
+    url: `${SITE_URL}/crm`,
     name: 'CRM',
     description: 'Herramientas CRM y de gestión para ordenar clientes, ventas y operaciones.',
   },
@@ -140,6 +140,57 @@ function homeJsonLd() {
   };
 }
 
+function pageJsonLd(page) {
+  const pageId = `${SITE_URL}${page.path}#webpage`;
+  const service = SERVICES.find((item) => item.slug === page.serviceSlug);
+  const graph = [
+    organizationNode(),
+    {
+      '@type': 'WebSite',
+      '@id': WEBSITE_ID,
+      name: 'Un Fulano Dev',
+      url: `${SITE_URL}/`,
+      inLanguage: 'es-AR',
+      publisher: { '@id': ORGANIZATION_ID },
+    },
+    {
+      '@type': 'WebPage',
+      '@id': pageId,
+      url: `${SITE_URL}${page.path}`,
+      name: page.title,
+      description: page.description,
+      isPartOf: { '@id': WEBSITE_ID },
+      about: { '@id': ORGANIZATION_ID },
+      inLanguage: 'es-AR',
+    },
+    {
+      '@type': 'BreadcrumbList',
+      '@id': `${SITE_URL}${page.path}#breadcrumb`,
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Inicio', item: `${SITE_URL}/` },
+        { '@type': 'ListItem', position: 2, name: page.breadcrumb, item: `${SITE_URL}${page.path}` },
+      ],
+    },
+  ];
+
+  if (service) graph.push(serviceNode(service));
+  if (page.faq?.length) {
+    graph.push({
+      '@type': 'FAQPage',
+      '@id': `${SITE_URL}${page.path}#faq`,
+      url: `${SITE_URL}${page.path}#faq`,
+      isPartOf: { '@id': pageId },
+      mainEntity: page.faq.map((item) => ({
+        '@type': 'Question',
+        name: item.name,
+        acceptedAnswer: { '@type': 'Answer', text: item.text },
+      })),
+    });
+  }
+
+  return { '@context': 'https://schema.org', '@graph': graph };
+}
+
 function serializeJsonLdScript(value) {
   const json = JSON.stringify(value, null, 2)
     .replaceAll('<', '\\u003c')
@@ -150,8 +201,12 @@ function serializeJsonLdScript(value) {
 
 module.exports = {
   FAQ_ITEMS,
+  SITE_URL,
   SERVICES,
   homeJsonLd,
+  pageJsonLd,
   serializeJsonLdScript,
+  organizationNode,
   serviceId,
+  serviceNode,
 };

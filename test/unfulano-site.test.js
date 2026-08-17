@@ -34,7 +34,7 @@ test('publishes only canonical Un Fulano URLs in the sitemap', () => {
   const sitemap = fs.readFileSync(path.join(outputDir, 'sitemap.xml'), 'utf8');
   assert.match(sitemap, /<loc>https:\/\/unfulanodev\.com\.ar<\/loc>/);
   assert.doesNotMatch(sitemap, /flexcrm|unfulano-landing\.html|\.html/);
-  assert.equal((sitemap.match(/<loc>/g) || []).length, 1);
+  assert.equal((sitemap.match(/<loc>/g) || []).length, 5);
 });
 
 test('publishes search-friendly crawler policy for the Un Fulano site', () => {
@@ -70,6 +70,9 @@ test('publishes complete canonical metadata for the home page', () => {
   assert.match(home, /<meta name="twitter:image:alt" content="[^"]+">/);
   assert.match(home, /<link rel="icon" type="image\/svg\+xml" href="\/favicon\.svg">/);
   assert.match(home, /<link rel="manifest" href="\/manifest\.webmanifest">/);
+  assert.match(home, /href="\/desarrollo-web"/);
+  assert.match(home, /href="\/tiendas-online"/);
+  assert.match(home, /href="\/crm"/);
   assert.doesNotMatch(home, /meta name="keywords"/);
   assert.equal((home.match(/<h1\b/g) || []).length, 1);
 });
@@ -128,4 +131,27 @@ test('rejects output paths outside the dedicated dist directory', () => {
     () => buildUnfulanoSite({ outputDir: path.resolve(__dirname, '..', 'public') }),
     /Output directory must be inside/,
   );
+});
+
+test('builds canonical service pages with one H1 and page-level metadata', () => {
+  const outputDir = createOutputDir();
+  const servicePaths = [
+    '/desarrollo-web',
+    '/tiendas-online',
+    '/sistemas-a-medida',
+    '/crm',
+  ];
+
+  buildUnfulanoSite({ outputDir });
+
+  for (const route of servicePaths) {
+    const file = path.join(outputDir, `${route.slice(1)}.html`);
+    assert.ok(fs.existsSync(file), `missing generated page for ${route}`);
+    const html = fs.readFileSync(file, 'utf8');
+    assert.match(html, new RegExp(`<link rel="canonical" href="https://unfulanodev\\.com\\.ar${route}">`));
+    assert.match(html, /<meta property="og:type" content="website">/);
+    assert.equal((html.match(/<h1\b/g) || []).length, 1);
+    assert.match(html, /BreadcrumbList/);
+    assert.match(html, /"@type": "Service"/);
+  }
 });
