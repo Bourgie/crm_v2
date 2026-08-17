@@ -156,6 +156,153 @@ const PAGES = [
     ],
     cta: { href: '/#contacto', label: 'Hablar sobre un CRM' },
   },
+  {
+    path: '/desarrollo-web-catamarca',
+    kind: 'local',
+    breadcrumb: 'Desarrollo web en Catamarca',
+    status: 'published',
+    lastmod: '2026-08-17',
+    title: 'Desarrollo web en Catamarca | Un Fulano Dev',
+    description: 'Desarrollo web, paginas web y diseño web para negocios de Catamarca, Argentina.',
+    h1: 'Desarrollo web en Catamarca para negocios',
+    intro: 'Trabajo desde Catamarca con una mirada practica: entender que necesita tu negocio y convertirlo en una web que la gente pueda usar.',
+    sections: [
+      {
+        heading: 'Paginas web que explican lo que haces',
+        paragraphs: [
+          'Una pagina web puede servir para presentar servicios, mostrar productos, recibir consultas y darle a tu negocio un lugar propio mas alla de las redes sociales.',
+        ],
+        bullets: ['Landing pages para una propuesta concreta', 'Sitios institucionales con varias secciones', 'Integracion con WhatsApp, email y redes', 'Contenido pensado para personas de Catamarca y de otras zonas'],
+      },
+      {
+        heading: 'Diseño web y desarrollo en un mismo proyecto',
+        paragraphs: [
+          'La estructura visual y la parte tecnica tienen que trabajar juntas. Por eso se revisa que informacion hace falta, como se navega y cual es el siguiente paso para quien visita la pagina.',
+        ],
+      },
+      {
+        heading: 'Una charla antes de empezar',
+        paragraphs: [
+          'Contame de tu rubro, tus clientes y lo que hoy te cuesta explicar. Con eso se puede definir una primera etapa sin llenar formularios interminables.',
+        ],
+      },
+    ],
+    related: [
+      { href: '/desarrollo-web', label: 'Ver desarrollo web' },
+      { href: '/tiendas-online-catamarca', label: 'Ver tiendas online en Catamarca' },
+      { href: '/sistemas-a-medida', label: 'Ver software a medida' },
+    ],
+    cta: { href: '/#contacto', label: 'Consultar por una pagina web' },
+  },
+  {
+    path: '/tiendas-online-catamarca',
+    kind: 'local',
+    breadcrumb: 'Tiendas online en Catamarca',
+    status: 'published',
+    lastmod: '2026-08-17',
+    title: 'Tiendas online en Catamarca | Un Fulano Dev',
+    description: 'Tiendas online para catalogos, pedidos y ventas por internet desde Catamarca, Argentina.',
+    h1: 'Tiendas online en Catamarca',
+    intro: 'Si tenes productos para mostrar y pedidos que ordenar, una tienda online puede convertirse en un canal propio para vender.',
+    sections: [
+      {
+        heading: 'Pensada para la forma de vender de tu negocio',
+        paragraphs: [
+          'No todos los negocios venden igual. Se conversa si necesitas catalogo, carrito, consultas por WhatsApp, cobros online, entregas o retiro, y se define el alcance a partir de eso.',
+        ],
+        bullets: ['Catalogos de productos y categorias', 'Variantes, precios e informacion util', 'Pedidos y consultas desde la web', 'Integracion de cobros segun el proyecto', 'Base para administrar el contenido'],
+      },
+      {
+        heading: 'Vender desde Catamarca y llegar mas lejos',
+        paragraphs: [
+          'Una tienda online puede atender consultas locales y tambien mostrar tu propuesta a personas de otras ciudades. La comunicacion, los envios y los medios de pago se definen con datos reales del negocio.',
+        ],
+      },
+      {
+        heading: 'Empezar por un catalogo posible',
+        paragraphs: [
+          'No hace falta cargar todo de una vez. Se puede planificar una primera version con los productos y procesos mas importantes, y ampliar despues.',
+        ],
+      },
+    ],
+    related: [
+      { href: '/tiendas-online', label: 'Ver tiendas online' },
+      { href: '/desarrollo-web-catamarca', label: 'Ver desarrollo web en Catamarca' },
+      { href: '/#portfolio', label: 'Explorar demos' },
+    ],
+    cta: { href: '/#contacto', label: 'Hablar sobre una tienda' },
+  },
+  {
+    path: '/sobre-nosotros',
+    kind: 'about',
+    breadcrumb: 'Sobre Un Fulano Dev',
+    status: 'published',
+    lastmod: '2026-08-17',
+    title: 'Sobre Un Fulano Dev | Desarrollo web desde Catamarca',
+    description: 'Conoce la forma de trabajo de Un Fulano Dev, un servicio de desarrollo web desde Catamarca, Argentina.',
+    h1: 'Sobre Un Fulano Dev',
+    intro: 'Un Fulano Dev es una forma directa de trabajar en desarrollo web: hablas con la persona que piensa y construye el proyecto.',
+    sections: [
+      {
+        heading: 'Una comunicacion sin vueltas',
+        paragraphs: [
+          'La idea es entender el negocio antes de hablar de herramientas. Se explica lo necesario en lenguaje claro y se revisa el alcance antes de empezar.',
+        ],
+      },
+      {
+        heading: 'Que se puede construir',
+        paragraphs: [
+          'El trabajo incluye paginas web, tiendas online, sistemas a medida y herramientas de gestion. Cada proyecto se define segun el problema y la etapa del negocio.',
+        ],
+      },
+      {
+        heading: 'Una relacion de trabajo clara',
+        paragraphs: [
+          'No se publican reseñas, resultados o nombres de clientes sin autorizacion. El portfolio muestra demos y ejemplos de trabajo para explicar posibilidades.',
+        ],
+      },
+    ],
+    related: [
+      { href: '/desarrollo-web-catamarca', label: 'Desarrollo web en Catamarca' },
+      { href: '/sistemas-a-medida', label: 'Sistemas a medida' },
+      { href: '/#portfolio', label: 'Ver portfolio' },
+    ],
+    cta: { href: '/#contacto', label: 'Contar mi proyecto' },
+  },
+  {
+    path: '/contacto',
+    kind: 'contact',
+    breadcrumb: 'Contacto',
+    status: 'published',
+    lastmod: '2026-08-17',
+    title: 'Contacto | Un Fulano Dev',
+    description: 'Contacta a Un Fulano Dev para hablar sobre una pagina web, tienda online, sistema o CRM.',
+    h1: 'Hablemos de tu proyecto',
+    intro: 'La mejor forma de empezar es contar que haces, que queres resolver y que te gustaria que pase con tu web.',
+    sections: [
+      {
+        heading: 'Por WhatsApp',
+        paragraphs: ['Si preferis una conversacion directa, podes escribir por WhatsApp y contarme de que se trata.'],
+        links: [{ href: 'https://wa.me/5493517424391', label: 'Escribir por WhatsApp' }],
+      },
+      {
+        heading: 'Por email',
+        paragraphs: ['Tambien podes enviar una consulta por email con la informacion que ya tengas.'],
+        links: [{ href: 'mailto:contacto@unfulanodev.com.ar', label: 'Enviar un email' }],
+      },
+      {
+        heading: 'Que conviene contar',
+        paragraphs: ['No hace falta preparar un documento. Con estos datos alcanza para una primera charla:'],
+        bullets: ['De que es tu negocio', 'Que queres mostrar o mejorar', 'Si necesitas una web, una tienda o un sistema', 'Como te gustaria que te contacten'],
+      },
+    ],
+    related: [
+      { href: '/desarrollo-web', label: 'Desarrollo web' },
+      { href: '/tiendas-online', label: 'Tiendas online' },
+      { href: '/crm', label: 'CRM' },
+    ],
+    cta: { href: '/#contacto', label: 'Usar el formulario de la home' },
+  },
 ];
 
 module.exports = { PAGES };

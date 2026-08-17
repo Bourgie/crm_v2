@@ -34,7 +34,7 @@ test('publishes only canonical Un Fulano URLs in the sitemap', () => {
   const sitemap = fs.readFileSync(path.join(outputDir, 'sitemap.xml'), 'utf8');
   assert.match(sitemap, /<loc>https:\/\/unfulanodev\.com\.ar<\/loc>/);
   assert.doesNotMatch(sitemap, /flexcrm|unfulano-landing\.html|\.html/);
-  assert.equal((sitemap.match(/<loc>/g) || []).length, 5);
+  assert.equal((sitemap.match(/<loc>/g) || []).length, 9);
 });
 
 test('publishes search-friendly crawler policy for the Un Fulano site', () => {
@@ -153,5 +153,27 @@ test('builds canonical service pages with one H1 and page-level metadata', () =>
     assert.equal((html.match(/<h1\b/g) || []).length, 1);
     assert.match(html, /BreadcrumbList/);
     assert.match(html, /"@type": "Service"/);
+  }
+});
+
+test('builds local, about and contact pages with unique page content', () => {
+  const outputDir = createOutputDir();
+  const pagePaths = [
+    '/desarrollo-web-catamarca',
+    '/tiendas-online-catamarca',
+    '/sobre-nosotros',
+    '/contacto',
+  ];
+
+  buildUnfulanoSite({ outputDir });
+
+  for (const route of pagePaths) {
+    const file = path.join(outputDir, `${route.slice(1)}.html`);
+    assert.ok(fs.existsSync(file), `missing generated page for ${route}`);
+    const html = fs.readFileSync(file, 'utf8');
+    assert.match(html, new RegExp(`<link rel="canonical" href="https://unfulanodev\\.com\\.ar${route}">`));
+    assert.equal((html.match(/<h1\b/g) || []).length, 1);
+    assert.match(html, /Catamarca/);
+    assert.match(html, /BreadcrumbList/);
   }
 });

@@ -80,8 +80,8 @@ function renderPage(page) {
       <nav aria-label="Navegacion principal">
         <a href="/desarrollo-web">Servicios</a>
         <a href="/#portfolio">Portfolio</a>
-        <a href="/#como-trabajo">Sobre el proyecto</a>
-        <a class="nav-cta" href="/#contacto">Contacto</a>
+        <a href="/sobre-nosotros">Sobre el proyecto</a>
+        <a class="nav-cta" href="/contacto">Contacto</a>
       </nav>
     </div>
   </header>
@@ -104,7 +104,7 @@ function renderPage(page) {
     <div class="page-wrap">
       <strong>Un Fulano Dev</strong>
       <span>Desarrollo web y software desde Catamarca, Argentina.</span>
-      <a href="/#contacto">Contacto</a>
+      <a href="/contacto">Contacto</a>
     </div>
   </footer>
 </body>
