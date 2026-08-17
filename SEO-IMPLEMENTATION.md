@@ -82,4 +82,4 @@ La integracion aislada se ejecuta con:
 npm run indexnow:unfulano
 ```
 
-Requiere `UNFULANO_INDEXNOW_KEY`. El build genera `indexnow-key.txt` solamente cuando la variable esta configurada. Nunca se debe subir una clave de otro sitio.
+Requiere `UNFULANO_INDEXNOW_KEY`. El build genera `/<clave>.txt` solamente cuando la variable esta configurada. Nunca se debe subir una clave de otro sitio.

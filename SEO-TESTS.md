@@ -6,7 +6,7 @@
 npm run test:unfulano
 ```
 
-Estado actual: 19 tests aprobados.
+Estado actual: 21 tests aprobados.
 
 ## Cobertura
 
