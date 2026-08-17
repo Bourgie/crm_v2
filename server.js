@@ -210,9 +210,65 @@ const signupLimiter = rateLimit({
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// ── X-Robots-Tag: hosts no públicos (app/admin/fly.dev) nunca indexables ──
+app.use((req, res, next) => {
+  const host = (req.hostname || '').toLowerCase();
+  if (host.startsWith('app.') || host.startsWith('admin.') || host.endsWith('.fly.dev')) {
+    res.set('X-Robots-Tag', 'noindex, nofollow');
+  }
+  next();
+});
+
+// ── robots.txt específico por tipo de host ──
+const MARKETING_ROBOTS = `# FlexCRM — robots.txt
+# Todos los crawlers pueden indexar el sitio público de marketing.
+
+User-Agent: *
+Allow: /
+
+User-Agent: GPTBot
+User-Agent: OAI-SearchBot
+User-Agent: ChatGPT-User
+User-Agent: ClaudeBot
+User-Agent: Claude-SearchBot
+User-Agent: Claude-User
+User-Agent: PerplexityBot
+User-Agent: Perplexity-User
+User-Agent: Google-Extended
+User-Agent: Applebot-Extended
+User-Agent: Bytespider
+User-Agent: Amazonbot
+User-Agent: cohere-ai
+User-Agent: MistralBot
+User-Agent: meta-externalagent
+Allow: /
+
+Sitemap: https://flexcrm.com.ar/sitemap.xml
+`;
+
+const PRIVATE_ROBOTS = `# FlexCRM — robots.txt (host privado)
+# La app y el admin no deben indexarse. Se deja el shell rastreable
+# para que los buscadores puedan ver la directiva noindex.
+
+User-Agent: *
+Allow: /app/
+Disallow: /api/
+Disallow: /admin
+Disallow: /superadmin.html
+`;
+
+app.get('/robots.txt', (req, res) => {
+  const host = (req.hostname || '').toLowerCase();
+  const esPrivado = host.startsWith('app.') || host.startsWith('admin.') || host.endsWith('.fly.dev');
+  res.type('text/plain').send(esPrivado ? PRIVATE_ROBOTS : MARKETING_ROBOTS);
+});
+
 // ── SEO: sitemap dinámico (debe ir ANTES de express.static) ──
+// Solo se sirve para hosts de marketing/desarrollo; nunca para app/admin/fly.dev.
 const SEO_SITE = process.env.SEO_SITE_URL || 'https://flexcrm.com.ar';
-app.get('/sitemap.xml', (req, res) => {
+app.get('/sitemap.xml', (req, res, next) => {
+  const host = (req.hostname || '').toLowerCase();
+  if (host.startsWith('app.') || host.startsWith('admin.') || host.endsWith('.fly.dev')) return next();
   const hoy = new Date().toISOString().slice(0, 10);
   const urls = [
     { loc: `${SEO_SITE}/`, prio: '1.0' },
@@ -229,6 +285,14 @@ ${urls.map((u) => `  <url>
   res.type('application/xml').send(xml);
 });
 
+// El hostname operativo de Fly nunca debe exponer la landing de marketing
+// (debe ir antes de express.static para ganarle al archivo estático)
+app.get('/landing.html', (req, res) => {
+  const host = (req.hostname || '').toLowerCase();
+  if (host.endsWith('.fly.dev')) return res.redirect(301, 'https://flexcrm.com.ar/');
+  res.sendFile(path.join(__dirname, 'public', 'landing.html'));
+});
+
 // ── Static files ──
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -237,6 +301,7 @@ app.get('/', (req, res) => {
   const host = (req.hostname || '').toLowerCase();
   if (host.startsWith('app.')) return res.redirect('/app/login');
   if (host.startsWith('admin.')) return res.redirect('/admin');
+  if (host.endsWith('.fly.dev')) return res.redirect(301, 'https://flexcrm.com.ar/');
   res.sendFile(path.join(__dirname, 'public', 'landing.html'));
 });
 const reactDir = path.join(__dirname, 'public', 'app');
@@ -451,10 +516,17 @@ app.get('/:codigo', (req, res, next) => {
   next();
 });
 
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'landing.html')));
+// ── Rutas legales públicas (React SPA) ──
+const PUBLIC_SPA_ROUTES = ['/terminos-y-condiciones', '/politica-de-privacidad', '/politica-de-cookies'];
+if (fs.existsSync(reactIndex)) {
+  for (const ruta of PUBLIC_SPA_ROUTES) {
+    app.get(ruta, (req, res) => res.sendFile(reactIndex));
+  }
+}
+
+// ── Soft-404: rutas desconocidas devuelven 404 real, no el shell de la app ──
 app.get('*', (req, res) => {
-  if (fs.existsSync(reactIndex)) return res.sendFile(reactIndex);
-  res.redirect('/app/dashboard');
+  res.status(404).sendFile(path.join(__dirname, 'public', '404.html'));
 });
 
 // ── Error handler ──

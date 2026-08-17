@@ -187,6 +187,65 @@ describe('Backend Integration Tests', async () => {
     })
   })
 
+  // ── SEO por host ────────────────────────────────────────────
+  describe('SEO por host', () => {
+    it('robots.txt del host app es privado y no publica el sitemap', async () => {
+      const res = await request('GET', '/robots.txt', { headers: { Host: 'app.flexcrm.com.ar' } })
+      assert.strictEqual(res.status, 200)
+      assert.ok(res.raw.includes('Disallow: /api/'))
+      assert.ok(!res.raw.includes('Sitemap:'), 'el host privado no debe publicar el sitemap de marketing')
+    })
+
+    it('robots.txt del hostname de Fly es privado', async () => {
+      const res = await request('GET', '/robots.txt', { headers: { Host: 'crm-v2.fly.dev' } })
+      assert.strictEqual(res.status, 200)
+      assert.ok(res.raw.includes('Disallow: /api/'))
+      assert.ok(!res.raw.includes('Sitemap:'))
+    })
+
+    it('robots.txt del host de marketing permite crawlers IA y referencia el sitemap', async () => {
+      const res = await request('GET', '/robots.txt', { headers: { Host: 'flexcrm.com.ar' } })
+      assert.strictEqual(res.status, 200)
+      assert.ok(res.raw.includes('GPTBot'))
+      assert.ok(res.raw.includes('Sitemap: https://flexcrm.com.ar/sitemap.xml'))
+    })
+
+    it('el sitemap no se sirve en hosts privados', async () => {
+      const res = await request('GET', '/sitemap.xml', { headers: { Host: 'app.flexcrm.com.ar' } })
+      assert.strictEqual(res.status, 404)
+      const res2 = await request('GET', '/sitemap.xml', { headers: { Host: 'crm-v2.fly.dev' } })
+      assert.strictEqual(res2.status, 404)
+    })
+
+    it('el root del hostname de Fly redirige al marketing canónico', async () => {
+      const res = await request('GET', '/', { headers: { Host: 'crm-v2.fly.dev' } })
+      assert.strictEqual(res.status, 301)
+      assert.strictEqual(res.headers.location, 'https://flexcrm.com.ar/')
+    })
+
+    it('la landing no se expone en el hostname de Fly', async () => {
+      const res = await request('GET', '/landing.html', { headers: { Host: 'crm-v2.fly.dev' } })
+      assert.strictEqual(res.status, 301)
+      assert.strictEqual(res.headers.location, 'https://flexcrm.com.ar/')
+    })
+
+    it('los hosts privados envían X-Robots-Tag noindex', async () => {
+      const res = await request('GET', '/app/login', { headers: { Host: 'app.flexcrm.com.ar' } })
+      assert.strictEqual(res.status, 200)
+      assert.strictEqual(res.headers['x-robots-tag'], 'noindex, nofollow')
+    })
+
+    it('rutas desconocidas devuelven 404 real (sin soft-404 del shell)', async () => {
+      const res = await request('GET', '/pagina-que-no-existe-xyz')
+      assert.strictEqual(res.status, 404)
+    })
+
+    it('las rutas legales públicas siguen funcionando', async () => {
+      const res = await request('GET', '/terminos-y-condiciones', { headers: { Host: 'app.flexcrm.com.ar' } })
+      assert.strictEqual(res.status, 200)
+    })
+  })
+
   // ── Version ─────────────────────────────────────────────────
   describe('Version', () => {
     it('GET /api/version returns version number', async () => {
@@ -618,9 +677,17 @@ describe('Backend Integration Tests', async () => {
 
   // ── Open Redirect Prevention ─────────────────────────────────
   describe('Open Redirect', () => {
-    it('/:codigo with valid company code redirects to login', async () => {
-      const res = await request('GET', '/demo')
-      assert.ok([200, 302].includes(res.status), `Expected 200 or 302, got ${res.status}`)
+    it('/:codigo con empresa existente redirige al login', async () => {
+      const { createEmpresa } = require('../db_master')
+      createEmpresa({ codigo: 'opentest', nombre: 'Open Test', plan_id: null, admin_email: 'open@opentest.test' })
+      const res = await request('GET', '/opentest')
+      assert.strictEqual(res.status, 302)
+      assert.ok(res.headers.location.includes('/app/login'))
+    })
+
+    it('/:codigo con empresa inexistente devuelve 404 (sin soft-404)', async () => {
+      const res = await request('GET', '/empresa-inexistente-xyz')
+      assert.strictEqual(res.status, 404)
     })
 
     it('/:codigo with path traversal is rejected by regex', async () => {

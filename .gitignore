@@ -6,3 +6,4 @@ node_modules/
 *.db-wal
 public/app/assets/
 .agent-skills/
+dist/marketing/

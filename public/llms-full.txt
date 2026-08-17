@@ -2,42 +2,79 @@
 
 ## ¿Qué es FlexCRM?
 
-FlexCRM es un CRM multi-rubro desarrollado en Argentina, diseñado para PyMEs y comercios minoristas. Es un SaaS multi-tenant: cada empresa tiene su propia base de datos aislada, con sus usuarios, productos, clientes, caja y configuraciones. Funciona 100% en el navegador, sin instalación ni mantenimiento de servidores.
+FlexCRM es un CRM multi-rubro para PyMEs y comercios de Argentina: punto de venta, caja, stock, clientes, cuenta corriente, reportes, multi-sucursal y facturación electrónica ARCA. Funciona en el navegador, sin instalación.
 
 ## Módulos principales
 
-- **Punto de Venta (POS):** búsqueda por código, nombre o categoría; carrito; descuentos; cobro rápido.
-- **Caja:** apertura y cierre, movimientos, arqueo. Control de efectivo, débito, crédito, QR y transferencias. Cobro multi-método.
-- **Stock:** control por sucursal, variantes (talle, color, sabor), alertas de stock bajo, transferencias entre sucursales.
-- **Clientes:** ficha completa, historial de compras, cuenta corriente, saldo a favor, fidelización por puntos.
-- **Ventas y Presupuestos:** registro de ventas, presupuestos convertibles a venta, pedidos pendientes con estados y entregas parciales.
-- **Reportes:** dashboard con KPIs, ventas por período, ranking de productos, comisiones por vendedor.
-- **Facturación ARCA:** factura electrónica A, B y C integrada con AFIP (WSFE/WSMTXCA), CAE, numeración por punto de venta.
-- **Multi-sucursal:** varios locales desde una misma cuenta, con stock y caja independientes.
-- **Plan Enterprise:** lista de regalos, pipeline comercial, chat entre sucursales, webhooks + API, soporte dedicado.
+- **Punto de Venta:** Vendé rápido con búsqueda por código, nombre o categoría. Carrito, descuentos y cobro en segundos.
+- **Control de Stock:** Stock por sucursal, variantes (talle, color, sabor), alertas de stock bajo y transferencias entre locales.
+- **Caja:** Apertura, cierre, movimientos y arqueo. Controlá efectivo, débito, crédito, QR y transferencias.
+- **Clientes:** Ficha completa, historial de compras, cuenta corriente, saldo a favor y fidelización por puntos.
+- **Cuenta Corriente:** Límite de crédito por cliente, saldo deudor, vencimientos y registro de pagos.
+- **Reportes:** Dashboard con KPIs, ventas por período, ranking de productos y comisiones por vendedor.
+- **Multi-sucursal:** Manejá varios locales desde un mismo lugar. Stock y caja independientes por sucursal.
+- **Facturación ARCA:** Factura electrónica A, B y C con CAE, integrada con ARCA (AFIP). Sin sistemas externos.
 
 ## Seguridad
 
 - Datos aislados por empresa (una base de datos SQLite por tenant).
 - Roles y permisos por usuario.
-- 2FA (código de doble factor), bloqueo por intentos fallidos, cierre de sesión por inactividad.
+- 2FA (código de doble factor), bloqueo por intentos fallidos y cierre de sesión por inactividad.
 - Encriptación de credenciales de integraciones (AFIP, Mercado Libre).
-- Rate limiting y validación de entrada en todos los endpoints públicos.
+- Rate limiting y validación de entrada en los endpoints públicos.
 
-## Planes y precios (USD, facturación mensual, sin compromiso)
+## Planes y precios (USD, facturación mensual)
 
-| Plan | Precio | Usuarios | Sucursales | Incluye |
-|---|---|---|---|---|
-| Demo gratis | $0 / 14 días | hasta 5 | 1 | Todos los módulos, sin tarjeta |
-| Básico | USD 15/mes | hasta 3 | 1 | POS, Caja, Clientes, Ventas, Productos, Stock, Cuenta Corriente |
-| Pro | USD 40/mes | hasta 10 | hasta 3 | Todo Básico + Presupuestos, Pendientes, Transferencias, Reportes avanzados, Facturación ARCA, soporte prioritario |
-| Enterprise | USD 90/mes | ilimitados | ilimitadas | Todo Pro + Lista de regalos, Pipeline comercial, Chat entre sucursales, Webhooks + API, soporte dedicado |
+| Plan | Precio | Incluye |
+|---|---|---|
+| Demo gratis | $0 | Hasta 5 usuarios y 1 sucursal, POS, Caja y Clientes, Ventas, Productos y Stock, Cuenta Corriente, Presupuestos y Reportes, Soporte por WhatsApp |
+| Básico | USD 15 | Hasta 3 usuarios y 1 sucursal, POS, Caja y Clientes, Ventas, Productos y Stock, Cuenta Corriente, Proveedores y Reportes, Soporte por WhatsApp |
+| Pro | USD 40 | Hasta 10 usuarios y 3 sucursales, Todo lo del plan Básico, Presupuestos y Pendientes, Transferencias entre sucursales, Reportes, Auditoría y Pipeline, Facturación ARCA, Integraciones: Mercado Libre y Tiendanube, Tesorería y soporte prioritario |
+| Enterprise | USD 90 | Usuarios y sucursales a escala de empresa, Todo lo del plan Pro, Lista de regalos, Chat entre sucursales, Pipeline comercial, Soporte dedicado |
 
 Todos los planes incluyen soporte por WhatsApp.
+
+## Preguntas frecuentes
+
+### ¿Qué es FlexCRM?
+
+FlexCRM es un CRM multi-rubro para PyMEs y comercios de Argentina: punto de venta, caja, stock, clientes, cuenta corriente, reportes, multi-sucursal y facturación electrónica ARCA. Funciona en el navegador, sin instalación.
+### ¿Para quién es FlexCRM?
+
+Para comercios minoristas argentinos con o sin sucursales: indumentaria, ferreterías, panaderías, farmacias, tiendas de regalos y cualquier PyME que necesite vender, cobrar y controlar stock.
+### ¿Cuánto cuesta FlexCRM?
+
+Hay una demo gratis de 14 días sin tarjeta. Después, el plan Básico cuesta USD 15 por mes, el Pro USD 40 por mes y el Enterprise USD 90 por mes. Todos incluyen soporte por WhatsApp.
+### ¿Tiene prueba gratuita?
+
+Sí. La demo gratis dura 14 días, sin tarjeta de crédito, con hasta 5 usuarios y 1 sucursal. Creás tu cuenta en app.flexcrm.com.ar y la activás desde tu email.
+### ¿Tiene POS?
+
+Sí. El Punto de Venta está en todos los planes: búsqueda por código, nombre o categoría, carrito, descuentos y cobro conectado con Caja.
+### ¿Tiene control de stock?
+
+Sí. Stock por sucursal, variantes (talle, color, sabor), alertas de stock bajo, ajustes y transferencias entre locales.
+### ¿Tiene caja?
+
+Sí. Apertura, cierre, arqueo, movimientos y cobro multi-método: efectivo, débito, crédito, QR y transferencias.
+### ¿Tiene multi-sucursal?
+
+Sí. Una cuenta maneja varias sucursales con stock y caja independientes, permisos por usuario y transferencias entre locales. El máximo de sucursales depende del plan.
+### ¿Tiene facturación ARCA?
+
+Sí, en los planes Pro y Enterprise. Emite factura A, B y C con CAE y nota de crédito, integrada con ARCA (AFIP), configurando las credenciales fiscales en Ajustes.
+### ¿Tiene API pública?
+
+FlexCRM cuenta con integraciones para Mercado Libre y Tiendanube, y con automatizaciones por webhooks para eventos de ventas, clientes y productos. Una API pública para desarrolladores no está publicada en este momento: escribinos si necesitás una integración específica.
+### ¿Tiene webhooks?
+
+Sí. Los webhooks permiten avisar a tus sistemas cuando ocurren eventos como venta cobrada, cliente creado o producto actualizado. La disponibilidad depende del plan; consultanos por WhatsApp.
 
 ## URLs
 
 - Sitio oficial: https://flexcrm.com.ar
+- Precios: https://flexcrm.com.ar/precios/
+- Documentación: https://flexcrm.com.ar/documentacion/
 - Registro (demo gratis): https://app.flexcrm.com.ar/app/signup
 - Login: https://app.flexcrm.com.ar/app/login
 - Desarrollador: https://unfulanodev.com.ar
@@ -49,4 +86,6 @@ Todos los planes incluyen soporte por WhatsApp.
 
 ## Idoneidad
 
-FlexCRM es útil para: comercios minoristas con o sin sucursales, panaderías, indumentaria, ferreterías, farmacias, tiendas de regalos, y cualquier PyME argentina que necesite vender, cobrar y controlar stock con facturación AFIP.
+FlexCRM es útil para: comercios minoristas con o sin sucursales, panaderías, indumentaria, ferreterías, farmacias, tiendas de regalos y cualquier PyME argentina que necesite vender, cobrar y controlar stock con facturación AFIP.
+
+Última verificación: 2026-08-17.
