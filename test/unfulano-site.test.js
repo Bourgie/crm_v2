@@ -365,10 +365,25 @@ test('builds an IndexNow payload only for indexable Un Fulano URLs', async () =>
   assert.ok(payload.urlList.includes('https://unfulanodev.com.ar/portfolio'));
   assert.ok(!payload.urlList.includes('https://unfulanodev.com.ar/privacidad'));
 
+  const previousKey = process.env.UNFULANO_INDEXNOW_KEY;
+  delete process.env.UNFULANO_INDEXNOW_KEY;
   let calls = 0;
-  const skipped = await ping({ fetchImpl: async () => { calls += 1; } });
+  let skipped;
+  try {
+    skipped = await ping({ fetchImpl: async () => { calls += 1; } });
+  } finally {
+    if (previousKey !== undefined) process.env.UNFULANO_INDEXNOW_KEY = previousKey;
+  }
   assert.equal(skipped.skipped, true);
   assert.equal(calls, 0);
+});
+
+test('fails when an IndexNow endpoint responds with a non-2xx status', async () => {
+  const { ping } = require('../scripts/indexnow-unfulano');
+  await assert.rejects(
+    ping({ key: 'test-indexnow-key', fetchImpl: async () => ({ ok: false, status: 500 }) }),
+    /HTTP 500/,
+  );
 });
 
 test('writes the IndexNow key at the location advertised by the payload', () => {

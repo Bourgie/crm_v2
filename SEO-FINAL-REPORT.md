@@ -43,7 +43,7 @@ Landing estatica con metadata parcial, rutas de servicios inexistentes, demos ro
 npm run test:unfulano
 ```
 
-Resultado actual: 21 tests aprobados.
+Resultado actual: 22 tests aprobados.
 
 ```text
 npm run build:unfulano
