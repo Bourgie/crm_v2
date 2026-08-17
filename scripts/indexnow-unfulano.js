@@ -2,6 +2,16 @@ const { SITE_URL, routes } = require('../seo/unfulanodev/routes');
 
 const ENDPOINTS = ['https://api.indexnow.org/indexnow', 'https://www.bing.com/indexnow'];
 
+function normalizeKey(rawKey) {
+  const key = String(rawKey || '').trim();
+  if (!/^[A-Za-z0-9_-]{1,128}$/.test(key)) throw new Error('UNFULANO_INDEXNOW_KEY must contain only letters, numbers, hyphens or underscores');
+  return key;
+}
+
+function indexNowKeyFileName(key) {
+  return `${normalizeKey(key)}.txt`;
+}
+
 function indexableUrls() {
   return routes
     .filter((route) => route.status === 'published' && route.indexable !== false)
@@ -10,11 +20,11 @@ function indexableUrls() {
 
 function buildPayload(key) {
   if (!key) throw new Error('UNFULANO_INDEXNOW_KEY is required to build an IndexNow payload');
-  const siteKey = String(key).trim();
+  const siteKey = normalizeKey(key);
   return {
     host: new URL(SITE_URL).host,
     key: siteKey,
-    keyLocation: `${SITE_URL}/${siteKey}.txt`,
+    keyLocation: `${SITE_URL}/${indexNowKeyFileName(siteKey)}`,
     urlList: indexableUrls(),
   };
 }
@@ -34,6 +44,7 @@ async function ping({ key = process.env.UNFULANO_INDEXNOW_KEY, fetchImpl = globa
       headers: { 'Content-Type': 'application/json; charset=utf-8' },
       body,
     });
+    if (!response.ok) throw new Error(`${endpoint} returned HTTP ${response.status}`);
     results.push({ endpoint, status: response.status });
   }
   return { skipped: false, results, urlCount: payload.urlList.length };
@@ -48,4 +59,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { buildPayload, indexableUrls, ping };
+module.exports = { buildPayload, indexNowKeyFileName, indexableUrls, ping };

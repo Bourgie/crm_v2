@@ -707,9 +707,15 @@
 
   // Cookie consent
   var CONSENT_KEY = 'ufd_consent';
-  function hasConsent() { return localStorage.getItem(CONSENT_KEY) === 'accepted'; }
+  function getConsentValue() {
+    try { return window.localStorage.getItem(CONSENT_KEY); } catch (e) { return null; }
+  }
+  function setConsentValue(value) {
+    try { window.localStorage.setItem(CONSENT_KEY, value); } catch (e) {}
+  }
+  function hasConsent() { return getConsentValue() === 'accepted'; }
   function showBanner() {
-    if (localStorage.getItem(CONSENT_KEY)) return;
+    if (getConsentValue()) return;
     var b = document.createElement('div');
     b.id = 'cookie-banner';
     b.setAttribute('role', 'dialog');
@@ -718,12 +724,16 @@
     b.setAttribute('tabindex', '-1');
     b.innerHTML = '<div class="cb-inner"><span>Medimos visitas y eventos para mejorar el sitio. El servicio puede recibir datos técnicos de la visita. No usamos cookies de publicidad ni compartimos tus datos. Los datos del formulario solo se envían si vos los completás.</span><div class="cb-btns"><button class="cb-accept">Aceptar</button><button class="cb-reject">Rechazar</button></div></div>';
     document.body.appendChild(b);
-    b.querySelector('.cb-accept').addEventListener('click', function(){ localStorage.setItem(CONSENT_KEY, 'accepted'); b.remove(); });
-    b.querySelector('.cb-reject').addEventListener('click', function(){ localStorage.setItem(CONSENT_KEY, 'rejected'); b.remove(); });
+    b.querySelector('.cb-accept').addEventListener('click', function(){ setConsentValue('accepted'); b.remove(); });
+    b.querySelector('.cb-reject').addEventListener('click', function(){ setConsentValue('rejected'); b.remove(); });
   }
 
   // Pixel: gated by consent
   var PIXEL_URL = 'https://app.flexcrm.com.ar/api/landing/pixel';
+  function getReferrerOrigin() {
+    if (!document.referrer) return 'directo';
+    try { return new URL(document.referrer).origin; } catch (e) { return 'externo'; }
+  }
   function sendPixel(extra) {
     if (!hasConsent()) return;
     var p = 'unfulanodev';
@@ -735,7 +745,7 @@
       sp.forEach(function(v, k) { if (TRACKED_QUERY_KEYS.indexOf(k) !== -1) params.set(k, v); });
       utm = { utm_source: sp.get('utm_source')||'', utm_medium: sp.get('utm_medium')||'', utm_campaign: sp.get('utm_campaign')||'' };
     }
-    params.set('ref', document.referrer || 'directo');
+    params.set('ref', getReferrerOrigin());
     if (extra) { for (var k in extra) { params.set(k, extra[k]); } }
     params.set('tipo', extra && extra.tipo === 'clic' ? 'clic' : 'pv');
     var img = new Image();
@@ -808,7 +818,7 @@
 
       var fd = new FormData(this);
       var utm = window.__landingUtm || {};
-      var ref = document.referrer || '';
+      var ref = getReferrerOrigin();
       fd.set('pagina', 'unfulanodev');
       fd.set('ref', ref);
       fd.set('utm_source', utm.utm_source || '');

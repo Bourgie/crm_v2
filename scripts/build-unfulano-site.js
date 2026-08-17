@@ -5,6 +5,7 @@ const { SITE_URL, routes } = require('../seo/unfulanodev/routes');
 const { homeJsonLd, serializeJsonLdScript } = require('../seo/unfulanodev/schema');
 const { PAGES } = require('../seo/unfulanodev/pages');
 const { pageFileName, renderPage } = require('../seo/unfulanodev/renderer');
+const { indexNowKeyFileName } = require('./indexnow-unfulano');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_OUTPUT_DIR = path.join(REPO_ROOT, 'dist', 'unfulanodev');
@@ -38,7 +39,8 @@ function buildPageRedirects(pages) {
     .filter((page) => page.status === 'published')
     .map((page) => {
       const physicalPath = `/${pageFileName(page.path)}`;
-      return `${physicalPath} ${page.path} 301\n${page.path} ${physicalPath} 200`;
+      const slashRedirect = `${page.path}/ ${page.path} 301`;
+      return `${physicalPath} ${page.path} 301\n${slashRedirect}\n${page.path} ${physicalPath} 200`;
     })
     .join('\n');
 }
@@ -77,7 +79,8 @@ function buildUnfulanoSite({ outputDir = DEFAULT_OUTPUT_DIR } = {}) {
     fs.cpSync(STATIC_DIR, temporaryDir, { recursive: true });
     fs.writeFileSync(path.join(temporaryDir, 'index.html'), renderedHome);
     if (process.env.UNFULANO_INDEXNOW_KEY) {
-      fs.writeFileSync(path.join(temporaryDir, 'indexnow-key.txt'), `${process.env.UNFULANO_INDEXNOW_KEY.trim()}\n`);
+      const key = process.env.UNFULANO_INDEXNOW_KEY.trim();
+      fs.writeFileSync(path.join(temporaryDir, indexNowKeyFileName(key)), `${key}\n`);
     }
     for (const page of PAGES.filter((item) => item.status === 'published')) {
       const pagePath = path.join(temporaryDir, pageFileName(page.path));

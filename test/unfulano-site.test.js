@@ -6,11 +6,19 @@ const test = require('node:test');
 const { buildUnfulanoSite } = require('../scripts/build-unfulano-site');
 const { routes } = require('../seo/unfulanodev/routes');
 
+const temporaryOutputDirectories = [];
+
 function createOutputDir() {
   const outputRoot = path.resolve(__dirname, '..', 'dist');
   fs.mkdirSync(outputRoot, { recursive: true });
-  return fs.mkdtempSync(path.join(outputRoot, 'unfulano-site-'));
+  const outputDir = fs.mkdtempSync(path.join(outputRoot, 'unfulano-site-'));
+  temporaryOutputDirectories.push(outputDir);
+  return outputDir;
 }
+
+test.after(() => {
+  for (const directory of temporaryOutputDirectories) fs.rmSync(directory, { recursive: true, force: true });
+});
 
 function listHtmlFiles(directory) {
   return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
@@ -309,6 +317,17 @@ test('publishes Cloudflare security headers compatible with the approved form in
   assert.match(headers, /form-action[^\n]*https:\/\/app\.flexcrm\.com\.ar/);
 });
 
+test('publishes explicit canonical redirects for legacy and slash variants', () => {
+  const outputDir = createOutputDir();
+
+  buildUnfulanoSite({ outputDir });
+
+  const redirects = fs.readFileSync(path.join(outputDir, '_redirects'), 'utf8');
+  assert.match(redirects, /\/index\.html \/ 301/);
+  assert.match(redirects, /\/unfulano-landing\.html \/ 301/);
+  assert.match(redirects, /\/desarrollo-web\/ \/desarrollo-web 301/);
+});
+
 test('keeps the preliminary privacy page available but out of the indexable sitemap', () => {
   const outputDir = createOutputDir();
 
@@ -350,4 +369,19 @@ test('builds an IndexNow payload only for indexable Un Fulano URLs', async () =>
   const skipped = await ping({ fetchImpl: async () => { calls += 1; } });
   assert.equal(skipped.skipped, true);
   assert.equal(calls, 0);
+});
+
+test('writes the IndexNow key at the location advertised by the payload', () => {
+  const outputDir = createOutputDir();
+  const previousKey = process.env.UNFULANO_INDEXNOW_KEY;
+  process.env.UNFULANO_INDEXNOW_KEY = 'test-indexnow-key';
+  try {
+    buildUnfulanoSite({ outputDir });
+  } finally {
+    if (previousKey === undefined) delete process.env.UNFULANO_INDEXNOW_KEY;
+    else process.env.UNFULANO_INDEXNOW_KEY = previousKey;
+  }
+
+  const keyFile = path.join(outputDir, 'test-indexnow-key.txt');
+  assert.equal(fs.readFileSync(keyFile, 'utf8').trim(), 'test-indexnow-key');
 });
