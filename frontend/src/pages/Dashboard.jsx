@@ -6,6 +6,7 @@ import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
 const VentasBarChart = lazy(() => import('../components/VentasBarChart'))
+const ObjetivosSucChart = lazy(() => import('../components/ObjetivosSucChart'))
 
 const fmt = (n) => '$' + (Number(n) || 0).toLocaleString('es-AR', { maximumFractionDigits: 0 })
 const localDate = (d) => { const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+day; }
@@ -40,10 +41,14 @@ export function Dashboard() {
     setLoading(true)
     try {
       const d = await api('GET', `/dashboard?suc_id=${sucSesion || ''}&fecha=${fechaTareas}`)
-      setData({ dash: d })
+      let objetivosSuc = null
+      if (me?.rol === 'admin') {
+        try { objetivosSuc = await api('GET', '/dashboard/objetivos-sucs') } catch { /* sin objetivos */ }
+      }
+      setData({ dash: d, objetivosSuc })
     } catch { /* offline or error */ }
     finally { setLoading(false) }
-  }, [sucSesion, fechaTareas])
+  }, [sucSesion, fechaTareas, me?.rol])
 
   useEffect(() => { load() }, [load])
 
@@ -267,6 +272,19 @@ export function Dashboard() {
           {['admin', 'supervisor'].includes(me?.rol) && (
             <button type="button" className="btn btn-primary btn-sm" onClick={() => navigate('/app/config')}>Definir objetivo</button>
           )}
+        </div>
+      )}
+
+      {/* Objetivos por sucursal (solo admin) */}
+      {me?.rol === 'admin' && (
+        <div className="card" style={{ marginBottom: 16 }}>
+          <div className="card-header">
+            <h3>🏢 Objetivos por sucursal</h3>
+            <button type="button" className="btn btn-sm btn-secondary" onClick={() => navigate('/app/config')}>⚙ Definir objetivos</button>
+          </div>
+          <Suspense fallback={<div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>}>
+            <ObjetivosSucChart data={raw?.objetivosSuc} fmt={fmt} onConfig={() => navigate('/app/config')} />
+          </Suspense>
         </div>
       )}
 

@@ -9,6 +9,7 @@ module.exports = defineConfig({
       'test/backend.test.js',
       'test/treasury.test.js',
       'test/security-tenant.test.js',
+      'test/dashboard-objetivos.test.js',
       'test/integration-center/**',
       'node_modules/**',
     ],

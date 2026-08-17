@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
-const { authMiddleware, permiteSucursal } = require('../middleware/auth');
+const { authMiddleware, requireRol, permiteSucursal } = require('../middleware/auth');
 router.use(authMiddleware);
 
 // null = admin (sin restricción) · [] = sin sucursales · [ids] = permitidas
@@ -334,6 +334,72 @@ router.get('/reporte-sucs', (req,res) => {
     };
   });
   res.json(rows);
+});
+
+// Objetivos por sucursal (solo admin): objetivo, cumplimiento, año anterior y proyección
+router.get('/objetivos-sucs', requireRol('admin'), (req, res) => {
+  const db = _getDB(req);
+  const now = new Date();
+  const mes = now.toISOString().substr(0, 7);
+  const anioAnterior = new Date(now); anioAnterior.setFullYear(anioAnterior.getFullYear() - 1);
+  const mesAnioAnterior = anioAnterior.toISOString().substr(0, 7);
+
+  const cfg = db.getConfig();
+  const objetivos = cfg.objetivos_mensuales || {};
+  const objGlobal = parseFloat(objetivos[mes + '_global']) || 0;
+
+  const sucs = db.find('sucursales', { activo: true });
+  const ventasMes = db.where('ventas', v => !v.anulada && v.fecha && v.fecha.substr(0, 7) === mes);
+  const ventasAnioAnt = db.where('ventas', v => !v.anulada && v.fecha && v.fecha.substr(0, 7) === mesAnioAnterior);
+
+  const diasDelMes = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  const factorProy = diasDelMes / Math.max(1, now.getDate());
+
+  const rows = sucs.map(s => {
+    const objPropio = parseFloat(objetivos[mes + '_' + s.id]) || 0;
+    const usandoGlobal = objPropio === 0 && objGlobal > 0;
+    const objetivo = objPropio || objGlobal;
+    const ventas = ventasMes.filter(v => v.suc_id === s.id).reduce((a, v) => a + v.total, 0);
+    const ventasAnt = ventasAnioAnt.filter(v => v.suc_id === s.id).reduce((a, v) => a + v.total, 0);
+    const proyeccion = Math.round(ventas * factorProy);
+    return {
+      id: s.id,
+      nombre: s.nombre,
+      objetivo,
+      ventas_mes: ventas,
+      cumplimiento: objetivo > 0 ? Math.round((ventas / objetivo) * 100) : null,
+      ventas_anio_anterior: ventasAnt,
+      delta_anio_anterior: ventasAnt > 0 ? Math.round(((ventas - ventasAnt) / ventasAnt) * 100) : null,
+      proyeccion,
+      proyeccion_cumplimiento: objetivo > 0 ? Math.round((proyeccion / objetivo) * 100) : null,
+      proyectado_cumple: objetivo > 0 ? proyeccion >= objetivo : null,
+      sin_objetivo: objetivo === 0,
+      usando_global: usandoGlobal,
+    };
+  });
+
+  const totalObjetivo = objGlobal || rows.reduce((a, r) => a + (r.usando_global ? 0 : r.objetivo), 0);
+  const totalVentas = rows.reduce((a, r) => a + r.ventas_mes, 0);
+  const totalVentasAnt = rows.reduce((a, r) => a + r.ventas_anio_anterior, 0);
+  const totalProy = rows.reduce((a, r) => a + r.proyeccion, 0);
+
+  res.json({
+    mes,
+    mes_anio_anterior: mesAnioAnterior,
+    sucursales: rows,
+    total: {
+      nombre: 'Total',
+      objetivo: totalObjetivo,
+      ventas_mes: totalVentas,
+      cumplimiento: totalObjetivo > 0 ? Math.round((totalVentas / totalObjetivo) * 100) : null,
+      ventas_anio_anterior: totalVentasAnt,
+      delta_anio_anterior: totalVentasAnt > 0 ? Math.round(((totalVentas - totalVentasAnt) / totalVentasAnt) * 100) : null,
+      proyeccion: totalProy,
+      proyeccion_cumplimiento: totalObjetivo > 0 ? Math.round((totalProy / totalObjetivo) * 100) : null,
+      proyectado_cumple: totalObjetivo > 0 ? totalProy >= totalObjetivo : null,
+      sin_objetivo: totalObjetivo === 0,
+    },
+  });
 });
 
 module.exports = router;
