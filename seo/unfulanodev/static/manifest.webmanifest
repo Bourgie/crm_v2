@@ -1,0 +1,19 @@
+{
+  "name": "Un Fulano Dev",
+  "short_name": "Un Fulano Dev",
+  "description": "Desarrollo web y software a medida desde Catamarca, Argentina.",
+  "lang": "es-AR",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F9F6F0",
+  "theme_color": "#E85B4F",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

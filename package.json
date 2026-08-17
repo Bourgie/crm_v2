@@ -14,6 +14,8 @@
     "test:watch": "cd frontend && npm run test:watch",
     "test:coverage": "cd frontend && npm run test:coverage",
     "doctor": "npx react-doctor@latest",
+    "build:unfulano": "node scripts/build-unfulano-site.js",
+    "test:unfulano": "node --test test/unfulano-site.test.js",
     "build": "cd frontend && npm install && npm run build"
   },
   "dependencies": {
