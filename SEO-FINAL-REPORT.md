@@ -70,7 +70,7 @@ Bloques de respuesta directa en HTML y `llms-full.txt` para: qué es, para quié
 4. Backlog del blog: 17 títulos anunciados, 3 publicados.
 5. Medición/consentimiento del pixel first-party (ver `SEO-MONITORING.md`).
 6. Vulnerabilidades npm preexistentes (ver audit; fuera del alcance SEO).
-7. Rotar el token de API de Cloudflare que quedó expuesto en el chat de la sesión (higiene).
+7. ~~Rotar el token de API de Cloudflare que quedó expuesto~~ Hecho: token rotado (2026-08-17), build automático verificado con el token nuevo y pipeline push→deploy confirmado end-to-end.
 
 ## Estado de verificación (2026-08-17)
 

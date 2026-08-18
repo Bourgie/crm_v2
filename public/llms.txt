@@ -1,6 +1,6 @@
 # FlexCRM
 
-> FlexCRM es un CRM multi-rubro para PyMEs y comercios de Argentina: punto de venta, caja, stock, clientes, cuenta corriente, reportes, multi-sucursal y facturación electrónica ARCA. Probá gratis 14 días.
+> FlexCRM es el sistema de gestión y CRM multi-rubro para PyMEs y comercios de Argentina: punto de venta, caja, stock, clientes, cuenta corriente, reportes, multi-sucursal y facturación electrónica ARCA. Probá gratis 14 días.
 
 FlexCRM es un SaaS de gestión comercial argentino que funciona en el navegador: punto de venta, caja con arqueo, control de stock con variantes, clientes con cuenta corriente y puntos, presupuestos, pedidos pendientes, reportes y factura electrónica ARCA (A, B y C) en planes Pro y Enterprise. Multi-sucursal, multi-rubro, datos aislados por empresa.
 
@@ -27,4 +27,4 @@ FlexCRM es un SaaS de gestión comercial argentino que funciona en el navegador:
 - Producto argentino, orientado a retail y PyMEs (indumentaria, panadería, ferretería, farmacia).
 - La facturación ARCA está disponible en planes Pro y Enterprise y requiere configuración fiscal.
 - FlexCRM no tiene API pública para desarrolladores; cuenta con integraciones (Mercado Libre, Tiendanube) y webhooks de eventos.
-- Última verificación de esta información: 2026-08-17.
+- Última verificación de esta información: 2026-08-18.

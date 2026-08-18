@@ -88,4 +88,4 @@ Sí. Los webhooks permiten avisar a tus sistemas cuando ocurren eventos como ven
 
 FlexCRM es útil para: comercios minoristas con o sin sucursales, panaderías, indumentaria, ferreterías, farmacias, tiendas de regalos y cualquier PyME argentina que necesite vender, cobrar y controlar stock con facturación AFIP.
 
-Última verificación: 2026-08-17.
+Última verificación: 2026-08-18.
