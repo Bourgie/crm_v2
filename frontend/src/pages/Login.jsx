@@ -249,7 +249,8 @@ export function Login() {
     const sucData = await sucR.json().catch(() => [])
     const allSucsLogin = Array.isArray(sucData) ? sucData : (sucData.data || [])
 
-    const permisos = data.user.suc_sesiones_permitidas
+    const esAdmin = data.user.rol === 'admin' || (Array.isArray(data.user.roles) && data.user.roles.includes('admin'))
+    const permisos = esAdmin ? null : data.user.suc_sesiones_permitidas
     const permitidas = Array.isArray(permisos) && permisos.length
       ? allSucsLogin.filter((s) => permisos.includes(s.id))
       : allSucsLogin
