@@ -82,6 +82,7 @@ export function POS() {
   const [obs, setObs] = useState('')
   const [procesando, setProcesando] = useState(false)
   const [escaneando, setEscaneando] = useState(false)
+  const [verMasFavs, setVerMasFavs] = useState(5)
 
   const searchRef = useRef(null)
 
@@ -97,22 +98,27 @@ export function POS() {
 
   const lista = cliente?.lista || 1
 
+  const buscando = search.trim() !== ''
+
+  const favoritos = allProds.filter((p) => p.activo !== false && p.favorito)
+
   const prodsFiltrados = allProds
     .filter((p) => {
       if (p.activo === false) return false
-      if (esMovil && p.favorito) return false
-      if (!search) return true
-      const q = search.toLowerCase()
-      return (p.nombre + ' ' + (p.sku || '') + ' ' + (p.talle || '') + ' ' + (p.categoria || '')).toLowerCase().includes(q)
+      if (buscando) {
+        const q = search.toLowerCase()
+        return (p.nombre + ' ' + (p.sku || '') + ' ' + (p.talle || '') + ' ' + (p.categoria || '')).toLowerCase().includes(q)
+      }
+      return p.favorito
     })
     .sort((a, b) => {
-      if (!esMovil) {
+      if (!buscando) {
         if (a.favorito && !b.favorito) return -1
         if (!a.favorito && b.favorito) return 1
       }
       return (a.nombre || '').localeCompare(b.nombre || '')
     })
-    .slice(0, 60)
+    .slice(0, buscando ? 60 : verMasFavs)
 
   const cliResults = buscadorCli.length >= 2
     ? allClis.filter((c) => (c.nombre + ' ' + (c.apellido || '') + ' ' + (c.tel || '')).toLowerCase().includes(buscadorCli.toLowerCase())).slice(0, 7)
@@ -122,7 +128,7 @@ export function POS() {
     const precio = precioLista(prod, lista)
     const stock = getStock(prod)
     if (stock <= 0) {
-      toast('⚠️ Sin stock — se generará pedido pendiente al registrar', '')
+      toast('⚠️ Se está cargando al carrito un producto sin stock', '')
     } else if (cant > stock) {
       toast(`⚠️ Pediste ${cant}, hay ${stock}. Se generará pedido por la diferencia.`, '')
     } else if (stock < 3) {
@@ -252,17 +258,31 @@ export function POS() {
           )}
         </div>
 
-        {/* Grilla — se oculta en móvil con items, pero reaparece al escribir */}
-        {!(esMovil && cart.length > 0 && !search) && (
+        {/* Grilla — escritorio: solo favoritos (5 + ver más); móvil: solo resultados de búsqueda */}
+        {(buscando || !esMovil) && (
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {prodsFiltrados.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}><div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div><div>{search ? `Sin resultados para "${search}"` : 'Sin productos cargados'}</div></div>
+            <div style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}><div style={{ fontSize: 32, marginBottom: 8 }}>🔍</div><div>{buscando ? `Sin resultados para "${search}"` : 'No tenés favoritos — usá la búsqueda para agregar productos'}</div></div>
           ) : (
-            <div className="pos-product-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 8 }}>
-              {prodsFiltrados.map((p) => <ProdTile key={p.id + (p.talle || '')} prod={p} lista={lista} onClick={addToCart} />)}
-            </div>
+            <>
+              <div className="pos-product-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(148px, 1fr))', gap: 8 }}>
+                {prodsFiltrados.map((p) => <ProdTile key={p.id + (p.talle || '')} prod={p} lista={lista} onClick={addToCart} />)}
+              </div>
+              {!esMovil && !buscando && favoritos.length > verMasFavs && (
+                <div style={{ textAlign: 'center', marginTop: 10 }}>
+                  <button type="button" onClick={() => setVerMasFavs(v => v + 5)} className="btn btn-secondary btn-sm" style={{ fontSize: 12 }}>
+                    Ver más ({favoritos.length - verMasFavs} más)
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
+        )}
+        {esMovil && !buscando && (
+          <div style={{ textAlign: 'center', padding: '24px 12px', color: 'var(--mu)', fontSize: 13 }}>
+            🔍 Buscá un producto o escaneá el código para agregar al carrito
+          </div>
         )}
       </div>
 

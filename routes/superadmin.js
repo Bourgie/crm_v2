@@ -569,17 +569,19 @@ router.get('/empresas', superAuth, (req, res) => {
   const planes = getPlanes();
   const empresas = getEmpresas().map(e => {
     const plan = planes.find(p=>p.id===e.plan_id) || planes.find(p=>p.codigo==='basic') || {};
-    let usuarios=0, ventas=0, clientes=0, sucursales=0;
+    let usuarios=0, ventas=0, clientes=0, sucursales=0, email_verificado=null;
     try {
       const db = getEmpresaDB(e.codigo);
       usuarios = db.find('usuarios').filter(u=>u.activo!==false).length;
       ventas = db.all('ventas').filter(v=>!v.anulada).length;
       clientes = db.find('clientes').filter(c=>c.activo!==false).length;
       sucursales = db.find('sucursales').filter(s=>s.activo!==false).length;
+      const adminUser = db.find('usuarios').find(u => u.email && u.rol === 'admin');
+      email_verificado = adminUser ? adminUser.email_verificado : null;
     } catch(err) {}
     const hoy = new Date().toISOString().substr(0,10);
     const diasVenc = e.vencimiento ? Math.ceil((new Date(e.vencimiento)-new Date())/86400000) : null;
-    return {...e, plan_nombre:plan.nombre||e.plan_id||'—', usuarios, ventas, clientes, sucursales, dias_vencimiento:diasVenc};
+    return {...e, plan_nombre:plan.nombre||e.plan_id||'—', usuarios, ventas, clientes, sucursales, dias_vencimiento:diasVenc, email_verificado};
   });
   res.json(empresas);
 });

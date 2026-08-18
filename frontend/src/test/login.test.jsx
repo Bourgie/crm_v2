@@ -96,6 +96,23 @@ describe('Login page', () => {
     })
   })
 
+  it('admin with explicit sucursal list still sees all sucursales', async () => {
+    mockLoginSuccess({ id: 'u1', nombre: 'Admin', rol: 'admin', suc_sesiones_permitidas: ['s1'] }, [
+      { id: 's1', nombre: 'Centro' },
+      { id: 's2', nombre: 'Norte' },
+    ])
+    renderLogin()
+    const user = userEvent.setup()
+    await user.type(screen.getByPlaceholderText(/tu usuario/i), 'admin')
+    await user.type(screen.getByPlaceholderText(/tu contraseña/i), '123456')
+    await user.click(screen.getByRole('button', { name: /ingresar/i }))
+    await waitFor(() => {
+      expect(screen.getByText('Centro')).toBeInTheDocument()
+      expect(screen.getByText('Norte')).toBeInTheDocument()
+      expect(screen.getByText(/seleccioná tu sucursal/i)).toBeInTheDocument()
+    })
+  })
+
   it('sets token in auth store on successful login', async () => {
     mockLoginSuccess()
     renderLogin()

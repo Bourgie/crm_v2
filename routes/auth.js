@@ -570,6 +570,29 @@ router.post('/activar-cuenta', async (req, res) => {
     empDB.audit(null, null, 'legal', 'activar_cuenta',
       'Cuenta activada por ' + (row.email || row.usuario_id) + ' con aceptación de términos', null);
 
+    // Welcome email (best-effort — nunca bloquea la respuesta)
+    try {
+      const { getGlobalConfig } = require('../db_master');
+      const { decryptValue } = require('../lib/crypto-utils');
+      let h = getGlobalConfig('smtp_host'), p = parseInt(getGlobalConfig('smtp_port'))||465;
+      let u = getGlobalConfig('smtp_user'), ep = getGlobalConfig('smtp_pass');
+      let pass = ep ? decryptValue(ep) : '';
+      if (!h || !u || !pass) {
+        const { getNotificationSMTP } = require('../lib/send-email');
+        const envSmtp = getNotificationSMTP();
+        if (envSmtp.host) { h = envSmtp.host; p = envSmtp.port; u = envSmtp.user; pass = envSmtp.pass; }
+      }
+      if (h && u && pass) {
+        const { sendEmail, getRemitente } = require('../lib/send-email');
+        const { welcomeEmail } = require('../lib/email-templates');
+        const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
+        const tutorialesUrl = process.env.TUTORIALES_URL || `${appUrl}/tutoriales`;
+        const rem = getRemitente();
+        await sendEmail(h, p, u, pass, rem.formatted, row.email, '¡Bienvenido a FlexCRM! 🚀', welcomeEmail(empDB.getConfig('nombre') || empresa, empresa, row.usuario || '', appUrl, tutorialesUrl)).catch(()=>{});
+        console.log('[ActivarCuenta] Welcome email to:', row.email);
+      }
+    } catch(e) { console.error('[ActivarCuenta] Welcome email error:', e.message); }
+
     res.json({ ok: true, mensaje: 'Cuenta activada correctamente. Ya podés iniciar sesión.' });
   } catch(e) {
     console.error('[ActivarCuenta] Error:', e.message);
@@ -1096,6 +1119,29 @@ router.get('/verify-email/:token', async (req, res) => {
 
     const user = empDB.findOne('usuarios', found.usuario_id);
     if (user) {
+      // Welcome email (best-effort — nunca bloquea el redirect)
+      try {
+        const { getGlobalConfig } = require('../db_master');
+        const { decryptValue } = require('../lib/crypto-utils');
+        let h = getGlobalConfig('smtp_host'), p = parseInt(getGlobalConfig('smtp_port'))||465;
+        let u = getGlobalConfig('smtp_user'), ep = getGlobalConfig('smtp_pass');
+        let pass = ep ? decryptValue(ep) : '';
+        if (!h || !u || !pass) {
+          const { getNotificationSMTP } = require('../lib/send-email');
+          const envSmtp = getNotificationSMTP();
+          if (envSmtp.host) { h = envSmtp.host; p = envSmtp.port; u = envSmtp.user; pass = envSmtp.pass; }
+        }
+        if (h && u && pass) {
+          const { sendEmail, getRemitente } = require('../lib/send-email');
+          const { welcomeEmail } = require('../lib/email-templates');
+          const appUrl = process.env.APP_URL || 'https://app.flexcrm.com.ar';
+          const tutorialesUrl = process.env.TUTORIALES_URL || `${appUrl}/tutoriales`;
+          const rem = getRemitente();
+          await sendEmail(h, p, u, pass, rem.formatted, user.email, '¡Bienvenido a FlexCRM! 🚀', welcomeEmail(empDB.getConfig('nombre') || foundCodigo, foundCodigo, user.usuario || '', appUrl, tutorialesUrl)).catch(()=>{});
+          console.log('[Verify] Welcome email to:', user.email);
+        }
+      } catch(e) { console.error('[Verify] Welcome email error:', e.message); }
+
       const accessToken = jwt.sign({ id: user.id, rol: user.rol, empresa: foundCodigo, nombre: user.nombre }, getSecret(), { expiresIn: '24h' });
       res.redirect('/app/login?verified=ok&token=' + encodeURIComponent(accessToken));
     } else {

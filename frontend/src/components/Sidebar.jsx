@@ -47,11 +47,12 @@ export function Sidebar({ mobile, onClose }) {
     navigate('/app/login')
   }
 
-  // Sucursales permitidas para este usuario
+  // Sucursales permitidas para este usuario (admin = todas, igual que el backend)
   const sucPermitidas = (() => {
     const all = Array.isArray(allSucs) ? allSucs : []
-    const userPerm = Array.isArray(me?.suc_sesiones_permitidas) ? me.suc_sesiones_permitidas : []
-    if (!userPerm.length) return all
+    const isAdmin = me?.rol === 'admin' || (Array.isArray(me?.roles) && me.roles.includes('admin'))
+    const userPerm = isAdmin ? null : (Array.isArray(me?.suc_sesiones_permitidas) ? me.suc_sesiones_permitidas : [])
+    if (!userPerm || !userPerm.length) return all
     return all.filter(s => userPerm.includes(s.id))
   })()
   const sucActual = (allSucs || []).find(s => s.id === sucSesion)

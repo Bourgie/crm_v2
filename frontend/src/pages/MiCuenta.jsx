@@ -21,6 +21,8 @@ export function MiCuenta() {
   const [sesiones, setSesiones] = useState([])
   const [historial, setHistorial] = useState([])
   const [loadingSesiones, setLoadingSesiones] = useState(true)
+  const [verMasSesiones, setVerMasSesiones] = useState(5)
+  const [verMasHistorial, setVerMasHistorial] = useState(5)
 
   useEffect(() => {
     reloadConsent()
@@ -325,7 +327,7 @@ export function MiCuenta() {
         </div>
         {loadingSesiones ? <span style={{ fontSize: 12, color: 'var(--mu)' }}>Cargando...</span>
         : sesiones.length === 0 ? <span style={{ fontSize: 12, color: 'var(--mu)' }}>Sin sesiones registradas.</span>
-        : sesiones.map(s => (
+        : sesiones.slice(0, verMasSesiones).map(s => (
           <div key={s.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid var(--bd)', fontSize: 12 }}>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -345,17 +347,25 @@ export function MiCuenta() {
             )}
           </div>
         ))}
+        {sesiones.length > verMasSesiones && (
+          <button type="button" className="btn btn-sm btn-secondary" style={{ fontSize: 11, marginTop: 8 }}
+            onClick={() => setVerMasSesiones(v => v + 5)}>Ver más ({sesiones.length - verMasSesiones} más)</button>
+        )}
       </div>
 
       <div className="card" style={{ marginBottom: 16 }}>
         <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>📋 Últimos ingresos</div>
         {historial.length === 0 ? <span style={{ fontSize: 12, color: 'var(--mu)' }}>Sin registros.</span>
-        : historial.map((h, i) => (
+        : historial.slice(0, verMasHistorial).map((h, i) => (
           <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid var(--bd)', fontSize: 12 }}>
             <span style={{ fontFamily: 'monospace', fontSize: 11 }}>{h.ip || '—'}</span>
             <span style={{ color: 'var(--mu)', fontSize: 11 }}>{h.fecha ? new Date(h.fecha).toLocaleString('es-AR') : ''}</span>
           </div>
         ))}
+        {historial.length > verMasHistorial && (
+          <button type="button" className="btn btn-sm btn-secondary" style={{ fontSize: 11, marginTop: 8 }}
+            onClick={() => setVerMasHistorial(v => v + 5)}>Ver más ({historial.length - verMasHistorial} más)</button>
+        )}
       </div>
     </div>
   )

@@ -640,6 +640,29 @@ try { sqlite.exec("CREATE UNIQUE INDEX IF NOT EXISTS uq_clientes_tel ON clientes
 sqlite.prepare("DELETE FROM schema_version").run();
 sqlite.prepare("INSERT INTO schema_version(version) VALUES(?)").run(CURRENT_SCHEMA_VERSION);
 
+// Migración (always-run, idempotente): DBs viejas guardaron email_verificado en el blob data,
+// donde pisaba la columna real (DEFAULT 1) en cada lectura. Promover a columna real con la regla:
+// token de verificación sin usar → 0 (no verificado); sin tokens pendientes → 1. Luego limpiar el blob.
+try {
+  const dirty = sqlite.prepare("SELECT COUNT(*) AS n FROM usuarios WHERE data LIKE '%email_verificado%'").get();
+  if (dirty.n > 0) {
+    const users = sqlite.prepare("SELECT id, data FROM usuarios").all();
+    const countUnused = sqlite.prepare("SELECT COUNT(*) AS n FROM email_tokens WHERE usuario_id=? AND usado=0");
+    const setReal = sqlite.prepare("UPDATE usuarios SET email_verificado=? WHERE id=?");
+    const setData = sqlite.prepare("UPDATE usuarios SET data=? WHERE id=?");
+    for (const u of users) {
+      if (!u.data) continue;
+      let data;
+      try { data = JSON.parse(u.data); } catch(e) { continue; }
+      if (!data || typeof data.email_verificado === 'undefined') continue;
+      const pendientes = countUnused.get(u.id).n;
+      setReal.run(pendientes > 0 ? 0 : 1, u.id);
+      delete data.email_verificado;
+      setData.run(JSON.stringify(data), u.id);
+    }
+  }
+} catch(e) { console.error('[DB] Migracion email_verificado (blob):', e.message); }
+
 // Legal consent table — creada siempre (no version-gated) para DBs existentes
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS consentimientos_empresa (id TEXT PRIMARY KEY, empresa_codigo TEXT NOT NULL, tipo TEXT NOT NULL, version TEXT NOT NULL, aceptado_por TEXT NOT NULL, ip TEXT, user_agent TEXT, creado TEXT NOT NULL)"); } catch(e) {}
 try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_consentimiento_empresa ON consentimientos_empresa(empresa_codigo, tipo)"); } catch(e) {}
@@ -1001,7 +1024,7 @@ function expandRow(row) {
 // Column definitions per table (for separating known cols from extra data)
 const COLS = {
   sucursales:['id','nombre','dir','ciudad','tel','email','responsable','activo'],
-  usuarios:['id','nombre','usuario','email','password','rol','roles','suc_id','suc_sesiones_permitidas','activo','creado'],
+  usuarios:['id','nombre','usuario','email','password','rol','roles','suc_id','suc_sesiones_permitidas','activo','creado','email_verificado','must_change_password','password_changed_at'],
   vendedores:['id','nombre','apellido','dni','tel','email','rol','suc_id','suc_nombre','usuario_id','comision','activo'],
   clientes:['id','nombre','apellido','dni','tel','email','ciudad','bebe_nac','notas','lista','limite_credito','puntos','suc_origen','activo','creado','condicion_fiscal'],
   productos:['id','nombre','sku','codigo_barras','categoria','talle','color','temporada','costo','precio_l1','precio_l2','precio_l3','unidad','stock_min','stock_max','favorito','activo'],

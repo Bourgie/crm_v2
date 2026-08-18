@@ -1047,7 +1047,7 @@ export default function Superadmin() {
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table>
-                  <thead><tr><th>Empresa</th><th>Código</th><th>Plan</th><th>Vencimiento</th><th>Usuarios</th><th>Suc.</th><th>Estado</th><th>Acciones</th></tr></thead>
+                  <thead><tr><th>Empresa</th><th>Código</th><th>Plan</th><th>Vencimiento</th><th>Usuarios</th><th>Suc.</th><th>Mail</th><th>Estado</th><th>Acciones</th></tr></thead>
                   <tbody>
                     {empresas.map(e => {
                       const plan = planes.find(p => p.id === e.plan_id)
@@ -1058,6 +1058,11 @@ export default function Superadmin() {
                         <td style={{ color: e.vencimiento && e.vencimiento < new Date().toISOString().substr(0, 10) ? 'var(--bad)' : 'var(--tx)' }} data-label="Vencimiento">{e.vencimiento || '—'}</td>
                         <td data-label="Usuarios">{e.usuarios_max || '∞'}</td>
                         <td data-label="Suc.">{e.sucursales_max || '∞'}</td>
+                        <td data-label="Mail">{e.email_verificado === 1 || e.email_verificado === true
+                          ? <span className="badge badge-green" style={{ fontSize: 11 }}>✅ Verificado</span>
+                          : e.email_verificado === 0 || e.email_verificado === false
+                            ? <span className="badge badge-red" style={{ fontSize: 11 }}>❌ Pendiente</span>
+                            : <span style={{ fontSize: 11, color: 'var(--mu)' }}>—</span>}</td>
                         <td data-label="Estado"><span className={`badge ${e.activo ? 'badge-green' : 'badge-red'}`} style={{ fontSize: 11 }}>{e.activo ? 'Activo' : 'Suspendido'}</span></td>
                         <td style={{ whiteSpace: 'nowrap' }} data-label="Acciones">
                           <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEmpresaDetail(e)} title="Ver detalle completo">👁️</button>
