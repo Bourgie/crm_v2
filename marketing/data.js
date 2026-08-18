@@ -18,7 +18,7 @@ const SITE = {
   locale: 'es_AR',
   ogImage: '/fc-og.png',
   description:
-    'FlexCRM es un CRM multi-rubro para PyMEs y comercios de Argentina: punto de venta, caja, stock, clientes, cuenta corriente, reportes, multi-sucursal y facturación electrónica ARCA. Probá gratis 14 días.',
+    'FlexCRM es el sistema de gestión y CRM multi-rubro para PyMEs y comercios de Argentina: punto de venta, caja, stock, clientes, cuenta corriente, reportes, multi-sucursal y facturación electrónica ARCA. Probá gratis 14 días.',
 };
 
 const PLANS = [
