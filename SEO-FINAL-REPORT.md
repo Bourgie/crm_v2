@@ -64,13 +64,20 @@ Bloques de respuesta directa en HTML y `llms-full.txt` para: qué es, para quié
 
 ## Problemas pendientes
 
-1. Cloudflare Pages debe reconectarse a este repo con build `npm run build:marketing` y output `dist/marketing` (el live actual sigue sin reflejar el repo).
-2. Revisar el bloqueo administrado de bots IA de Cloudflare.
-3. Aprobar la matriz comercial real de planes (precios usados: defaults del código).
-4. Casos de éxito: estructura lista, sin casos publicados (no hay datos autorizados).
-5. Backlog del blog: 17 títulos anunciados, 3 publicados.
-6. Medición/consentimiento del pixel first-party (ver `SEO-MONITORING.md`).
-7. Vulnerabilidades npm preexistentes (ver audit; fuera del alcance SEO).
+1. Decidir la política de bots IA en Cloudflare (Security → Bots → AI Scrapers and Crawlers): el managed de Cloudflare bloquea ClaudeBot/GPTBot/etc. pese a que nuestro robots.txt los permite. Decisión comercial; si se elige permitirlos, cambiar a Allow.
+2. Aprobar la matriz comercial real de planes (precios usados: defaults del código).
+3. Casos de éxito: estructura lista, sin casos publicados (no hay datos autorizados).
+4. Backlog del blog: 17 títulos anunciados, 3 publicados.
+5. Medición/consentimiento del pixel first-party (ver `SEO-MONITORING.md`).
+6. Vulnerabilidades npm preexistentes (ver audit; fuera del alcance SEO).
+7. Rotar el token de API de Cloudflare que quedó expuesto en el chat de la sesión (higiene).
+
+## Estado de verificación (2026-08-17)
+
+- Cloudflare Pages conectado a `Bourgie/crm_v2` (rama `master`), build `npm run build:marketing`, assets vía `wrangler.toml` → `dist/marketing`. Live verificado: sitemap 200 (32 URLs), páginas nuevas 200, llms.txt 200, headers propios aplicados.
+- Google Search Console: verificado por DNS TXT (registro presente en DNS, confirmado).
+- Bing Webmaster: sitio importado desde Search Console; sitemap enviado.
+- IndexNow: 32 URLs notificadas (202 en indexnow.org, 200 en Bing) con `npm run indexnow` (ahora lee el sitemap del artefacto).
 
 ## Configuración Google/Bing
 
