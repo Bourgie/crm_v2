@@ -771,7 +771,7 @@ describe('Backend Integration Tests', async () => {
         rol: 'vendedor', activo: true,
       })
       app = express()
-      app.use(express.json())
+      app.use(express.json({ limit: '2mb' }))
       app.use((req, res, next) => { req.db = tempDb; next() })
       app.use('/productos', productosRouter)
       app.use('/clientes', clientesRouter)
@@ -879,6 +879,118 @@ describe('Backend Integration Tests', async () => {
         headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
       })
       assert.strictEqual(res.status, 400)
+    })
+
+    it('más de 10.000 filas devuelve 400', async () => {
+      const productos = Array.from({ length: 10001 }, (_, i) => ({
+        nombre: `Producto ${i}`, precio_l1: 100,
+      }))
+      const res = await localRequest('POST', '/productos/importar', {
+        body: { productos },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(res.status, 400)
+      assert.ok(res.body.error.includes('10.000'))
+    })
+
+    it('dedupe por código de barras actualiza en vez de duplicar', async () => {
+      const res = await localRequest('POST', '/productos/importar', {
+        body: { productos: [{ nombre: 'Prod Barras', codigo_barras: '779999999', precio_l1: 500 }] },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(res.body.creados, 1)
+
+      const re = await localRequest('POST', '/productos/importar', {
+        body: { productos: [{ nombre: 'Prod Barras v2', codigo_barras: '779999999', precio_l1: 600 }] },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(re.body.actualizados, 1)
+      assert.strictEqual(re.body.creados, 0)
+      const p = tempDb.find('productos', { codigo_barras: '779999999' })[0]
+      assert.strictEqual(p.precio_l1, 600)
+    })
+
+    it('dedupe_nombre: true actualiza productos con el mismo nombre (sin SKU)', async () => {
+      const res = await localRequest('POST', '/productos/importar', {
+        body: { productos: [{ nombre: 'Nombre Sin Sku', precio_l1: 100 }] },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(res.body.creados, 1)
+
+      const re = await localRequest('POST', '/productos/importar', {
+        body: { productos: [{ nombre: 'Nombre Sin Sku', precio_l1: 250 }], dedupe_nombre: true },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(re.body.actualizados, 1)
+      assert.strictEqual(re.body.creados, 0)
+      const p = tempDb.find('productos', { nombre: 'Nombre Sin Sku' })[0]
+      assert.strictEqual(p.precio_l1, 250)
+    })
+
+    it('saltar_duplicados: true evita duplicar por nombre dentro del archivo', async () => {
+      const res = await localRequest('POST', '/productos/importar', {
+        body: {
+          productos: [
+            { nombre: 'Dupe En Archivo', precio_l1: 100 },
+            { nombre: 'Dupe En Archivo', precio_l1: 200 },
+          ],
+          saltar_duplicados: true,
+        },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(res.body.creados, 1)
+      assert.strictEqual(res.body.duplicados_saltados, 1)
+      const matches = tempDb.find('productos', { nombre: 'Dupe En Archivo' })
+      assert.strictEqual(matches.length, 1)
+    })
+
+    it('sin dedupe_nombre ni saltar_duplicados se permite crear duplicados por nombre', async () => {
+      const res = await localRequest('POST', '/productos/importar', {
+        body: { productos: [{ nombre: 'Dupe Permitido', precio_l1: 100 }] },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(res.body.creados, 1)
+      const re = await localRequest('POST', '/productos/importar', {
+        body: { productos: [{ nombre: 'Dupe Permitido', precio_l1: 150 }] },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(re.body.creados, 1)
+      assert.strictEqual(tempDb.find('productos', { nombre: 'Dupe Permitido' }).length, 2)
+    })
+
+    it('activar/desactivar por fila: Mostrar en tienda No → activo false', async () => {
+      const res = await localRequest('POST', '/productos/importar', {
+        body: { productos: [
+          { nombre: 'Oculto', sku: 'SKU-OCULTO', precio_l1: 100, activo: false },
+          { nombre: 'Visible', sku: 'SKU-VISIBLE', precio_l1: 100, activo: true },
+        ] },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(res.body.creados, 2)
+      assert.strictEqual(tempDb.find('productos', { sku: 'SKU-OCULTO' })[0].activo, false)
+      assert.strictEqual(tempDb.find('productos', { sku: 'SKU-VISIBLE' })[0].activo, true)
+    })
+
+    it('nombre demasiado largo → error de fila sin abortar el resto', async () => {
+      const res = await localRequest('POST', '/productos/importar', {
+        body: { productos: [
+          { nombre: 'X'.repeat(300), sku: 'SKU-LARGO', precio_l1: 100 },
+          { nombre: 'Nombre Ok', sku: 'SKU-OK', precio_l1: 100 },
+        ] },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(res.body.creados, 1)
+      assert.strictEqual(res.body.errores, 1)
+      assert.ok(res.body.errores_detalle[0].error.includes('largo'))
+    })
+
+    it('tipo inválido de nombre (objeto) → error de fila', async () => {
+      const res = await localRequest('POST', '/productos/importar', {
+        body: { productos: [{ nombre: { evil: true }, sku: 'SKU-OBJ', precio_l1: 100 }] },
+        headers: { Authorization: 'Bearer ' + tokenFor('u-test-admin') },
+      })
+      assert.strictEqual(res.body.errores, 1)
+      assert.strictEqual(res.body.creados, 0)
     })
   })
 

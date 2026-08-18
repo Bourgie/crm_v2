@@ -138,41 +138,68 @@ router.post('/', requireRol('admin','supervisor'), validate(productoSchema), (re
 });
 
 // ── Importación masiva desde Excel ──
+// Dedupe: por SKU → código de barras → nombre exacto (si dedupe_nombre).
+// Seguridad: máx 10.000 filas, caps de longitud por campo, type-check de nombre.
 router.post('/importar', requireRol('admin','supervisor'), (req,res) => {
   const db = _getDB(req);
-  const lista = Array.isArray(req.body.productos) ? req.body.productos : (Array.isArray(req.body) ? req.body : null);
+  const lista = Array.isArray(req.body.productos) ? req.body.productos : null;
   if (!lista) return res.status(400).json({error:'productos requerido'});
-  let creados = 0, actualizados = 0, errores = 0;
+  if (lista.length > 10000) return res.status(400).json({error:'Máximo 10.000 productos por importación'});
+  const dedupeNombre = !!req.body.dedupe_nombre;
+  const saltarDuplicados = !!req.body.saltar_duplicados;
+  const CAPS = { nombre: 250, sku: 64, codigo_barras: 64, categoria: 120, talle: 50, color: 50, temporada: 50, unidad: 20 };
+  const cortar = (v, max) => String(v).slice(0, max);
+  const findActive = rows => rows.find(p => p.activo !== false);
+  let creados = 0, actualizados = 0, errores = 0, duplicados_saltados = 0;
   const errores_detalle = [];
+  const vistosArchivo = new Set();
   lista.forEach((item, idx) => {
     const fila = idx + 2;
     try {
-      const nombre = item.nombre != null ? String(item.nombre).trim() : '';
+      if (item === null || typeof item !== 'object') throw new Error('Fila inválida');
+      const nombre = (typeof item.nombre === 'string' || typeof item.nombre === 'number') ? String(item.nombre).trim() : '';
       if (!nombre) { errores++; errores_detalle.push({fila, sku: item.sku || '', error:'Nombre obligatorio'}); return; }
+      if (nombre.length > CAPS.nombre) { errores++; errores_detalle.push({fila, sku: item.sku || '', error:'Nombre demasiado largo (máx ' + CAPS.nombre + ')'}); return; }
       const precio_l1 = parseFloat(item.precio_l1);
       if (!(precio_l1 > 0)) { errores++; errores_detalle.push({fila, sku: item.sku || '', error:'Precio L1 obligatorio'}); return; }
-      const sku = item.sku != null ? String(item.sku).trim() : '';
+      if (!Number.isFinite(precio_l1) || precio_l1 > 999999999) { errores++; errores_detalle.push({fila, sku: item.sku || '', error:'Precio inválido'}); return; }
+      const sku = item.sku != null ? cortar(String(item.sku).trim(), CAPS.sku) : '';
+      const codigo_barras = item.codigo_barras != null ? cortar(String(item.codigo_barras).trim(), CAPS.codigo_barras) : '';
       const data = {
         nombre,
         sku,
-        categoria: item.categoria != null ? String(item.categoria) : '',
-        talle: item.talle != null ? String(item.talle) : '',
-        color: item.color != null ? String(item.color) : '',
+        codigo_barras,
+        categoria: item.categoria != null ? cortar(String(item.categoria), CAPS.categoria) : '',
+        talle: item.talle != null ? cortar(String(item.talle), CAPS.talle) : '',
+        color: item.color != null ? cortar(String(item.color), CAPS.color) : '',
+        temporada: item.temporada != null ? cortar(String(item.temporada), CAPS.temporada) : '',
         costo: parseFloat(item.costo) || 0,
         precio_l1,
         precio_l2: parseFloat(item.precio_l2) || precio_l1,
         precio_l3: parseFloat(item.precio_l3) || precio_l1,
         stock_min: parseInt(item.stock_min) || 0,
+        activo: item.activo !== false,
       };
-      const existing = sku ? db.find('productos',{sku}).find(p => p.activo !== false) : null;
+      let existing = null;
+      if (sku) existing = findActive(db.find('productos',{sku}));
+      if (!existing && codigo_barras) existing = findActive(db.find('productos',{codigo_barras}));
+      const nombreKey = nombre.toLowerCase();
+      let byName = null;
+      if (!existing) byName = findActive(db.find('productos',{nombre}));
+      if (!existing && byName && dedupeNombre) existing = byName;
+      if (!existing && saltarDuplicados && (byName || vistosArchivo.has(nombreKey))) {
+        duplicados_saltados++;
+        return;
+      }
       if (existing) { db.update('productos', existing.id, data); actualizados++; }
-      else { db.insert('productos',{id:'p'+uid(),activo:true,stock_min:3,stock_max:20,favorito:false,...data}); creados++; }
+      else { db.insert('productos',{id:'p'+uid(),stock_min:3,stock_max:20,favorito:false,...data}); creados++; }
+      vistosArchivo.add(nombreKey);
     } catch(e) {
       errores++;
       errores_detalle.push({fila, sku: item.sku || '', error: (e && e.message) || 'Error'});
     }
   });
-  res.json({ creados, actualizados, errores, errores_detalle: errores_detalle.slice(0, 50) });
+  res.json({ creados, actualizados, errores, duplicados_saltados, errores_detalle: errores_detalle.slice(0, 50) });
 });
 
 router.put('/:id', requireRol('admin','supervisor'), (req,res) => {

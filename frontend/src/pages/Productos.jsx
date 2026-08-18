@@ -5,6 +5,8 @@ import { Modal } from '../components/Modal'
 import { ScannerModal } from '../components/ScannerModal'
 import { SearchBar, PageHeader, Field, ConfirmDialog, EmptyRow, Loader, Pagination } from '../components/UI'
 import { exportExcel, importExcel, pickFile } from '../utils/excel'
+import { rowsToProductos, analizarImport } from '../utils/importProductos'
+import { GuiaImportacion } from '../components/GuiaImportacion'
 import { fetchWithCache } from '../hooks/useOfflineCache'
 
 const PER_PAGE = 30
@@ -75,6 +77,9 @@ export function Productos() {
   const [sortBy, setSortBy] = useState('nombre')  // nombre, precio_asc, precio_desc, stock_asc, stock_desc, recientes
   const [bulkPriceModal, setBulkPriceModal] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [guia, setGuia] = useState(false)
+  const [importPreview, setImportPreview] = useState(null)  // {filas, crear, actualizar, duplicados, errores}
+  const [importOpts, setImportOpts] = useState({ dedupeNombre: false, saltarDuplicados: true })
   const [page, setPage] = useState(1)
   const [modal, setModal] = useState(null)
   const [stockModal, setStockModal] = useState(null)  // {prod, suc_id, actual}
@@ -141,30 +146,56 @@ export function Productos() {
       setImporting(true)
       const rows = await importExcel(file)
       if (!rows.length) { toast('Archivo vacío', 'err'); return }
-      const productos = rows.map(r => ({
-        nombre: String(r['Nombre'] || r['nombre'] || '').trim(),
-        sku: String(r['SKU'] || r['sku'] || '').trim(),
-        categoria: r['Categoría'] || r['categoria'] || '',
-        talle: r['Talle'] || r['talle'] || '',
-        color: r['Color'] || r['color'] || '',
-        precio_l1: parseFloat(r['Precio L1'] || r['precio_l1'] || 0) || 0,
-        precio_l2: parseFloat(r['Precio L2'] || r['precio_l2'] || 0) || 0,
-        precio_l3: parseFloat(r['Precio L3'] || r['precio_l3'] || 0) || 0,
-        costo: parseFloat(r['Costo'] || r['costo'] || 0) || 0,
-        stock_min: parseInt(r['Stock mín'] || r['stock_min'] || 0) || 0,
-      }))
-      const res = await api('POST', '/productos/importar', { productos })
-      const { creados = 0, actualizados = 0, errores = 0, errores_detalle = [] } = res || {}
+      const productos = rowsToProductos(rows)
+      if (!productos.length) { toast('No se encontraron productos válidos en el archivo', 'err'); return }
+      const analisis = analizarImport(productos, prods)
+      const total = analisis.crear.length + analisis.actualizar.length + analisis.duplicados.length
+      if (!total) {
+        toast(`Ninguna fila válida — ${analisis.errores.length} errores`, 'err')
+        return
+      }
+      setImportPreview({ ...analisis, filas: productos.length })
+    } catch (e) {
+      if (e.message !== 'Sin archivo') toast('Error: ' + e.message, 'err')
+    } finally { setImporting(false) }
+  }
+
+  async function confirmImport() {
+    const { crear, actualizar, duplicados } = importPreview
+    const { dedupeNombre, saltarDuplicados } = importOpts
+    let payload = [...crear, ...actualizar]
+    if (duplicados.length) {
+      if (dedupeNombre) payload = payload.concat(duplicados)
+      else if (!saltarDuplicados) payload = payload.concat(duplicados)
+    }
+    if (!payload.length) { toast('Nada para importar', 'warn'); setImportPreview(null); return }
+    setImporting(true)
+    try {
+      const res = await api('POST', '/productos/importar', {
+        productos: payload.map(({ _match, _motivo, ...p }) => p),
+        dedupe_nombre: dedupeNombre,
+        saltar_duplicados: saltarDuplicados,
+      })
+      const { creados = 0, actualizados = 0, errores = 0, duplicados_saltados = 0, errores_detalle = [] } = res || {}
       let msg = `📥 Importación: ${creados} creados, ${actualizados} actualizados`
+      if (duplicados_saltados) msg += `, ${duplicados_saltados} duplicados saltados`
       if (errores) {
         const detalle = errores_detalle.slice(0, 3).map(e => `Fila ${e.fila}: ${e.error}`).join(' — ')
         msg += `, ${errores} errores${detalle ? ' (' + detalle + ')' : ''}`
       }
       toast(msg, errores ? 'warn' : 'ok')
+      setImportPreview(null)
       load()
     } catch (e) {
-      if (e.message !== 'Sin archivo') toast('Error: ' + e.message, 'err')
+      toast('Error: ' + e.message, 'err')
     } finally { setImporting(false) }
+  }
+
+  function descargarPlantilla() {
+    const headers = ['Nombre', 'SKU', 'Categoría', 'Talle', 'Color', 'Precio L1', 'Precio L2', 'Precio L3', 'Costo', 'Stock mín', 'Activo']
+    const rows = [['Remera básica', 'REM-001', 'Remera', 'M', 'Blanco', 15000, 14000, 13000, 7000, 5, 'Sí']]
+    exportExcel('plantilla_productos', headers, rows, 'Productos')
+    toast('📥 Plantilla descargada', 'ok')
   }
 
 
@@ -413,6 +444,7 @@ export function Productos() {
         </select>
         <button type="button" className="btn btn-secondary btn-sm" onClick={() => setBulkPriceModal(true)} title="Actualizar precios masivos">📈 Precios</button>
         <button type="button" className="btn btn-secondary btn-sm" onClick={exportar}>📊 Excel</button>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setGuia(true)} title="Guía de importación/exportación">❓ Guía</button>
         <button type="button" className="btn btn-secondary btn-sm" onClick={importar} disabled={importing}>📥 Importar</button>
         <button type="button" className="btn btn-primary" onClick={openNew}>+ Nuevo</button>
       </PageHeader>
@@ -817,6 +849,24 @@ export function Productos() {
         />
       )}
 
+      {/* Modal: Guía de importación/exportación */}
+      {guia && (
+        <GuiaImportacion onClose={() => setGuia(false)} onDescargarPlantilla={descargarPlantilla} />
+      )}
+
+      {/* Modal: Previsualización de importación */}
+      {importPreview && (
+        <ImportPreviewModal
+          preview={importPreview}
+          opts={importOpts}
+          setOpts={setImportOpts}
+          importing={importing}
+          onCancel={() => setImportPreview(null)}
+          onConfirm={confirmImport}
+          onGuia={() => { setImportPreview(null); setGuia(true) }}
+        />
+      )}
+
       {/* Modal: Gestionar categorías */}
       <Modal open={catModal} onClose={() => setCatModal(false)} size="sm"
         title={catEdit ? 'Editar categoría' : '➕ Nueva categoría'}
@@ -860,6 +910,105 @@ export function Productos() {
 }
 
 // ── Modal de actualización masiva de precios ────────────────────
+function ImportPreviewModal({ preview, opts, setOpts, importing, onCancel, onConfirm, onGuia }) {
+  const { filas, crear, actualizar, duplicados, errores } = preview
+  const total = crear.length + actualizar.length + duplicados.length
+  const sum = (list, key) => list.reduce((a, p) => a + (p[key] || 0), 0)
+  const priceOf = (p) => p.precio_l1 != null ? '$' + Number(p.precio_l1).toLocaleString('es-AR') : '—'
+  const chip = (n, color, label) => (
+    <div style={{ flex: 1, textAlign: 'center', padding: '10px 6px', borderRadius: 8, background: 'var(--sf)', border: '1px solid var(--bd)' }}>
+      <div style={{ fontSize: 22, fontWeight: 800, color }}>{n}</div>
+      <div style={{ fontSize: 11, color: 'var(--mu)' }}>{label}</div>
+    </div>
+  )
+  const rowStyle = { fontSize: 12, padding: '5px 8px', borderBottom: '1px solid var(--bd)', display: 'flex', justifyContent: 'space-between', gap: 8 }
+
+  return (
+    <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}>
+      <div className="modal" style={{ maxWidth: 620, maxHeight: '88vh', display: 'flex', flexDirection: 'column' }}>
+        <div className="modal-header">
+          <h3>📥 Previsualización de importación</h3>
+          <button type="button" onClick={onCancel} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--mu)' }}>×</button>
+        </div>
+        <div className="modal-body" style={{ overflowY: 'auto' }}>
+          <div style={{ fontSize: 12, color: 'var(--mu)', marginBottom: 10 }}>
+            {filas} producto{filas !== 1 ? 's' : ''} detectado{filas !== 1 ? 's' : ''} en el archivo
+            {errores.length > 0 && <span style={{ color: 'var(--bad)' }}> · {errores.length} sin datos válidos</span>}
+          </div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+            {chip(crear.length, 'var(--ok)', 'Se crearán')}
+            {chip(actualizar.length, 'var(--blue, #6366f1)', 'Se actualizarán')}
+            {chip(duplicados.length, 'var(--warn)', 'Posibles duplicados')}
+          </div>
+
+          <div style={{ background: 'rgba(99,102,241,.06)', border: '1px solid rgba(99,102,241,.2)', borderRadius: 8, padding: '10px 14px', marginBottom: 12 }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer' }}>
+              <input type="checkbox" checked={opts.saltarDuplicados} onChange={e => setOpts(o => ({ ...o, saltarDuplicados: e.target.checked }))} style={{ width: 16, height: 16 }} />
+              Saltar posibles duplicados (mismo nombre)
+            </label>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, cursor: 'pointer', marginTop: 6 }}>
+              <input type="checkbox" checked={opts.dedupeNombre} onChange={e => setOpts(o => ({ ...o, dedupeNombre: e.target.checked }))} style={{ width: 16, height: 16 }} />
+              Actualizar productos existentes con el mismo nombre
+            </label>
+            <div style={{ fontSize: 11, color: 'var(--mu)', marginTop: 6 }}>
+              Mismo SKU o código de barras → se actualiza siempre. ¿Dudas? <a href="#" onClick={(e) => { e.preventDefault(); onGuia() }} style={{ color: 'var(--primary, #6366f1)' }}>Ver guía</a>
+            </div>
+          </div>
+
+          {duplicados.length > 0 && (
+            <div className="table-wrap" style={{ maxHeight: 160, overflowY: 'auto', marginBottom: 12 }}>
+              <table>
+                <thead><tr><th>Posibles duplicados</th><th>Motivo</th><th style={{ textAlign: 'right' }}>Precio</th></tr></thead>
+                <tbody>
+                  {duplicados.slice(0, 20).map((p, i) => (
+                    <tr key={i} style={{ fontSize: 12 }}>
+                      <td style={{ fontSize: 12 }}>{p.nombre}{p.sku ? <span style={{ color: 'var(--mu)', fontSize: 11 }}> · {p.sku}</span> : ''}</td>
+                      <td style={{ fontSize: 11, color: 'var(--mu)' }}>{p._motivo || 'Duplicado'}</td>
+                      <td style={{ textAlign: 'right', fontSize: 12 }}>{priceOf(p)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {duplicados.length > 20 && <div style={{ fontSize: 11, color: 'var(--mu)', padding: 6 }}>... y {duplicados.length - 20} más</div>}
+            </div>
+          )}
+
+          {errores.length > 0 && (
+            <div style={{ fontSize: 12, color: 'var(--bad)', background: 'rgba(239,68,68,.06)', border: '1px solid rgba(239,68,68,.2)', borderRadius: 8, padding: '10px 14px' }}>
+              <strong>{errores.length} filas sin datos válidos</strong> (no se importarán): {errores.slice(0, 5).map((e, i) => <div key={i} style={{ marginTop: 2 }}>· {e.nombre || '(sin nombre)'} — {e._motivo}</div>)}
+              {errores.length > 5 && <div style={{ marginTop: 2 }}>... y {errores.length - 5} más</div>}
+            </div>
+          )}
+
+          {crear.length > 0 && (
+            <div className="table-wrap" style={{ maxHeight: 160, overflowY: 'auto', marginTop: 12 }}>
+              <table>
+                <thead><tr><th>Se crearán</th><th>Categoría</th><th style={{ textAlign: 'right' }}>Precio L1</th></tr></thead>
+                <tbody>
+                  {crear.slice(0, 10).map((p, i) => (
+                    <tr key={i} style={{ fontSize: 12 }}>
+                      <td style={{ fontSize: 12 }}>{p.nombre}</td>
+                      <td style={{ fontSize: 11, color: 'var(--mu)' }}>{p.categoria || '—'}</td>
+                      <td style={{ textAlign: 'right', fontSize: 12 }}>{priceOf(p)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {crear.length > 10 && <div style={{ fontSize: 11, color: 'var(--mu)', padding: 6 }}>... y {crear.length - 10} más</div>}
+            </div>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button type="button" className="btn btn-secondary" onClick={onCancel}>Cancelar</button>
+          <button type="button" className="btn btn-primary" onClick={onConfirm} disabled={importing}>
+            {importing ? <><span className="spinner" style={{ width: 14, height: 14 }} /> Importando...</> : `✅ Importar (${total})`}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function BulkPriceModal({ categorias, prods, allSucs, sucSesion, api, toast, onClose, onDone }) {
   const [filtCat, setFiltCat] = useState('')
   const [filtSuc, setFiltSuc] = useState('')

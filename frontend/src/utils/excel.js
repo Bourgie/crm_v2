@@ -1,5 +1,33 @@
 import ExcelJS from 'exceljs'
 
+export const MAX_IMPORT_MB = 10
+const RESERVED_KEYS = new Set(['__proto__', 'constructor', 'prototype'])
+const ACCENTS = { á: 'a', é: 'e', í: 'i', ó: 'o', ú: 'u', ü: 'u', ñ: 'n' }
+
+// Normaliza un header: minúsculas, sin acentos, espacios simples. Ej: "Categoría " → "categoria"
+export function normalizeKey(h) {
+  if (h == null) return ''
+  const s = String(h).trim().toLowerCase().replace(/\s+/g, ' ')
+  return s.replace(/[áéíóúüñ]/g, c => ACCENTS[c] || c)
+}
+
+// Escapa valores que podrían interpretarse como fórmula al abrir el Excel exportado (CSV injection)
+function safeCell(v) {
+  if (typeof v !== 'string') return v
+  if (/^[=+\-@]/.test(v) || /[\t\r\n]/.test(v)) return "'" + v
+  return v
+}
+
+function cellText(cell) {
+  const v = cell && cell.value
+  if (v == null) return ''
+  if (typeof v !== 'object') return String(v)
+  if (v.result != null) return typeof v.result === 'object' ? (v.result.text != null ? String(v.result.text) : '') : String(v.result)
+  if (v.text != null) return String(v.text)
+  if (Array.isArray(v.richText)) return v.richText.map(t => (t && t.text != null ? t.text : '')).join('')
+  return ''
+}
+
 export async function exportExcel(filename, headers, rows, sheetName = 'Hoja1') {
   if (Array.isArray(headers) && headers.length > 0 && Array.isArray(headers[0])) {
     if (typeof rows === 'string') sheetName = rows
@@ -11,8 +39,8 @@ export async function exportExcel(filename, headers, rows, sheetName = 'Hoja1') 
   const workbook = new ExcelJS.Workbook()
   const worksheet = workbook.addWorksheet(sheetName)
 
-  worksheet.addRow(headers)
-  rows.forEach(row => worksheet.addRow(Array.isArray(row) ? row : [row]))
+  worksheet.addRow(headers.map(safeCell))
+  rows.forEach(row => worksheet.addRow((Array.isArray(row) ? row : [row]).map(safeCell)))
 
   worksheet.columns = headers.map(h => ({
     width: Math.max(String(h).length + 4, 12)
@@ -32,16 +60,23 @@ export async function exportExcel(filename, headers, rows, sheetName = 'Hoja1') 
 }
 
 export async function importExcel(file) {
+  if (file && file.size > MAX_IMPORT_MB * 1024 * 1024) {
+    throw new Error(`Archivo muy grande (máximo ${MAX_IMPORT_MB} MB)`)
+  }
   const workbook = new ExcelJS.Workbook()
   const arrayBuffer = await file.arrayBuffer()
-  await workbook.xlsx.load(arrayBuffer)
+  try {
+    await workbook.xlsx.load(arrayBuffer)
+  } catch {
+    throw new Error('Formato no soportado — usá un archivo .xlsx')
+  }
   const worksheet = workbook.worksheets[0]
   if (!worksheet) throw new Error('El archivo no contiene hojas')
 
   const headers = []
   const headerRow = worksheet.getRow(1)
   headerRow.eachCell((cell) => {
-    headers.push(cell.value ?? '')
+    headers.push(cellText(cell))
   })
 
   const rows = []
@@ -49,14 +84,17 @@ export async function importExcel(file) {
     if (rowNumber === 1) return
     const obj = {}
     row.eachCell((cell, colNumber) => {
-      obj[headers[colNumber - 1] || `col_${colNumber}`] = cell.value ?? ''
+      const rawKey = headers[colNumber - 1] ?? ''
+      const key = normalizeKey(rawKey) || `col_${colNumber}`
+      if (RESERVED_KEYS.has(key)) return
+      obj[key] = cellText(cell)
     })
     rows.push(obj)
   })
   return rows
 }
 
-export function pickFile(accept = '.xlsx,.xls,.csv') {
+export function pickFile(accept = '.xlsx,.xls') {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input')
     input.type = 'file'
