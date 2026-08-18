@@ -14,7 +14,7 @@ const SITE = {
   email: 'contacto@unfulanodev.com.ar',
   creatorName: 'Un Fulano Dev',
   creatorUrl: 'https://unfulanodev.com.ar',
-  updated: '2026-08-17',
+  updated: '2026-08-18',
   locale: 'es_AR',
   ogImage: '/fc-og.png',
   description:
