@@ -3,3 +3,6 @@ account_id = "f1037b39bba0a925baf1e864ceadb150"
 compatibility_date = "2026-08-01"
 
 assets = { directory = "./dist/marketing", not_found_handling = "404-page" }
+
+[build]
+command = "npm run build:marketing"
