@@ -250,6 +250,8 @@ export function Clientes() {
   const [segNota, setSegNota] = useState('')
   const [segTipo, setSegTipo] = useState('llamada')
   const [segProximo, setSegProximo] = useState('')
+  const [ctacteDesde, setCtacteDesde] = useState('')
+  const [ctacteHasta, setCtacteHasta] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -679,16 +681,36 @@ export function Clientes() {
                             </div>
                           </div>
                           <div style={{ display:'flex', gap:6, marginBottom:8, flexWrap:'wrap' }}>
-                            <button type="button" className="btn btn-secondary btn-sm" onClick={()=> window.open(`/api/ctacte/${ficha.id}/resumen-pdf`, '_blank')}>📄 Resumen PDF</button>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={()=> window.open(`/api/ctacte/${ficha.id}/resumen-pdf${ctacteDesde||ctacteHasta ? `?desde=${ctacteDesde}&hasta=${ctacteHasta}`:''}`, '_blank')}>📄 Resumen PDF</button>
                             <button type="button" className="btn btn-secondary btn-sm" onClick={()=> { const url=`${window.location.origin}/api/ctacte/${ficha.id}/resumen-pdf`; window.open(`https://wa.me/?text=${encodeURIComponent(`Resumen CtaCte ${ficha.nombre} — Saldo ${fmt(fichaData.ctacte.saldo||0)} — ${url}`)}`,'_blank') }}>💬 WhatsApp</button>
                             <button type="button" className="btn btn-secondary btn-sm" onClick={()=> { navigator.clipboard.writeText(`${window.location.origin}/api/ctacte/${ficha.id}/resumen-pdf`); toast('Link copiado','ok')}}>🔗 Copiar</button>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={()=> {
+                              const rows=(fichaData.ctacte.movimientos||[]).filter(m=>{ if(ctacteDesde && m.fecha.slice(0,10)<ctacteDesde) return false; if(ctacteHasta && m.fecha.slice(0,10)>ctacteHasta) return false; return true; });
+                              const headers=['Fecha','Concepto','Debe','Haber','Saldo'];
+                              const data=rows.map(m=>[new Date(m.fecha).toLocaleDateString('es-AR'), m.concepto||'', m.debe||0, m.haber||0, m.saldo||0]);
+                              exportExcel(`ctacte-${ficha.dni||ficha.id}`, headers, data, 'CtaCte'); toast('Excel exportado','ok');
+                            }}>📊 Excel</button>
                           </div>
+                          <div style={{ display:'flex', gap:6, marginBottom:8, flexWrap:'wrap' }}>
+                            <input type="date" value={ctacteDesde} onChange={e=> setCtacteDesde(e.target.value)} style={{ padding:'6px 8px', fontSize:12 }} placeholder="Desde" />
+                            <input type="date" value={ctacteHasta} onChange={e=> setCtacteHasta(e.target.value)} style={{ padding:'6px 8px', fontSize:12 }} placeholder="Hasta" />
+                            {(ctacteDesde||ctacteHasta) && <button type="button" className="btn btn-secondary btn-sm" onClick={()=> {setCtacteDesde(''); setCtacteHasta('')}}>Limpiar</button>}
+                          </div>
+                          {/* alerta promesa vencida */}
+                          {(() => {
+                            const hoy=new Date().toISOString().slice(0,10);
+                            const vencidas=fichaSeg.filter(s=>{ try{const d=JSON.parse(s.data||'{}'); return d.proximo_contacto && d.proximo_contacto < hoy }catch{return false}});
+                            return vencidas.length>0 ? <div style={{ background:'rgba(239,68,68,.08)', border:'1px solid var(--bad)', borderRadius:6, padding:'6px 10px', marginBottom:8, fontSize:12, color:'var(--bad)' }}>⚠️ {vencidas.length} promesa(s) vencida(s) — contactar urgente</div> : null;
+                          })()}
                           <div className="table-wrap" style={{ maxHeight: 280, overflowY:'auto' }}>
                             <table>
                               <thead><tr><th>Fecha</th><th>Concepto</th><th style={{textAlign:'right'}}>Debe</th><th style={{textAlign:'right'}}>Haber</th><th style={{textAlign:'right'}}>Saldo</th><th></th></tr></thead>
                               <tbody>
-                                {(fichaData.ctacte.movimientos||[]).length===0 ? <tr><td colSpan={6} style={{textAlign:'center', padding:16, color:'var(--mu)'}}>Sin movimientos</td></tr>
-                                : fichaData.ctacte.movimientos.slice(0,40).map((m,i)=>(
+                                {(() => {
+                                  const rows=(fichaData.ctacte.movimientos||[]).filter(m=>{ if(ctacteDesde && m.fecha.slice(0,10)<ctacteDesde) return false; if(ctacteHasta && m.fecha.slice(0,10)>ctacteHasta) return false; return true; });
+                                  if(rows.length===0) return <tr><td colSpan={6} style={{textAlign:'center', padding:16, color:'var(--mu)'}}>Sin movimientos en rango</td></tr>;
+                                  return rows.slice(0,40).map((m,i)=>(
+                                
                                   <tr key={i}>
                                     <td style={{fontSize:11}}>{new Date(m.fecha).toLocaleDateString('es-AR')}</td>
                                     <td style={{fontSize:12}}>{m.concepto||m.descripcion||''}</td>
@@ -697,7 +719,7 @@ export function Clientes() {
                                     <td style={{textAlign:'right', fontWeight:700, color: m.saldo>0?'var(--bad)':'var(--ok)'}}>{fmt(m.saldo ?? 0)}</td>
                                     <td><button type="button" className="btn btn-icon btn-sm" title="Imprimir comprobante" onClick={()=> window.open(`/api/ctacte/pago/${m.id}/comprobante-pdf`,'_blank')}>🖨️</button></td>
                                   </tr>
-                                ))}
+                                ))})()}
                               </tbody>
                             </table>
                           </div>
