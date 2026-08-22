@@ -55,7 +55,9 @@ CREATE TABLE IF NOT EXISTS clientes (
   id TEXT PRIMARY KEY, nombre TEXT, apellido TEXT, dni TEXT UNIQUE,
   tel TEXT UNIQUE, email TEXT UNIQUE, ciudad TEXT, bebe_nac TEXT, notas TEXT,
   lista INTEGER DEFAULT 1, limite_credito REAL DEFAULT 0,
+  es_ctacte INTEGER DEFAULT 0,
   puntos INTEGER DEFAULT 0, suc_origen TEXT,
+  suc_id TEXT,
   activo INTEGER DEFAULT 1, creado TEXT,
   condicion_fiscal TEXT DEFAULT 'cf',
   data TEXT DEFAULT '{}'
@@ -154,6 +156,10 @@ CREATE TABLE IF NOT EXISTS pendientes (
 try { sqlite.exec("ALTER TABLE pendientes ADD COLUMN concepto TEXT DEFAULT ''"); } catch(e) {}
 try { sqlite.exec("ALTER TABLE pendientes ADD COLUMN suc_cobro TEXT DEFAULT ''"); } catch(e) {}
 try { sqlite.exec("ALTER TABLE clientes ADD COLUMN condicion_fiscal TEXT DEFAULT 'cf'"); } catch(e) {}
+try { sqlite.exec("ALTER TABLE clientes ADD COLUMN es_ctacte INTEGER DEFAULT 0"); } catch(e) {}
+try { sqlite.exec("ALTER TABLE clientes ADD COLUMN limite_credito REAL DEFAULT 0"); } catch(e) {}
+try { sqlite.exec("ALTER TABLE clientes ADD COLUMN suc_id TEXT"); } catch(e) {}
+try { sqlite.exec("ALTER TABLE clientes ADD COLUMN suc_origen TEXT"); } catch(e) {}
 sqlite.exec(`
 CREATE TABLE IF NOT EXISTS pendiente_items (
   id TEXT PRIMARY KEY, pendiente_id TEXT, prod_id TEXT,
@@ -663,6 +669,31 @@ try {
   }
 } catch(e) { console.error('[DB] Migracion email_verificado (blob):', e.message); }
 
+// Migración clientes: promover es_ctacte / limite_ctacte / suc_id del blob data a columnas reales
+try {
+  const dirtyCli = sqlite.prepare("SELECT COUNT(*) AS n FROM clientes WHERE data LIKE '%es_ctacte%' OR data LIKE '%limite_ctacte%' OR data LIKE '%suc_id%'").get();
+  if (dirtyCli.n > 0) {
+    const rows = sqlite.prepare("SELECT id, es_ctacte, limite_credito, suc_id, suc_origen, data FROM clientes").all();
+    const upd = sqlite.prepare("UPDATE clientes SET es_ctacte=?, limite_credito=?, suc_id=?, suc_origen=?, data=? WHERE id=?");
+    for (const r of rows) {
+      if (!r.data) continue;
+      let data; try { data = JSON.parse(r.data); } catch { continue; }
+      let changed = false;
+      let newEs = r.es_ctacte;
+      let newLim = r.limite_credito;
+      let newSucId = r.suc_id;
+      let newSucOrigen = r.suc_origen;
+      if (typeof data.es_ctacte !== 'undefined') { newEs = data.es_ctacte ? 1 : 0; delete data.es_ctacte; changed = true; }
+      if (typeof data.limite_ctacte !== 'undefined' && data.limite_ctacte !== null && data.limite_ctacte !== '') {
+        const v = parseFloat(data.limite_ctacte); if (!isNaN(v)) newLim = v; delete data.limite_ctacte; changed = true;
+      }
+      if (typeof data.suc_id !== 'undefined' && data.suc_id) { newSucId = data.suc_id; delete data.suc_id; changed = true; }
+      // backward: suc_origen may hold suc_id value
+      if (changed) upd.run(newEs, newLim, newSucId, newSucOrigen, JSON.stringify(data), r.id);
+    }
+  }
+} catch(e) { console.error('[DB] Migracion clientes ctacte (blob):', e.message); }
+
 // Legal consent table — creada siempre (no version-gated) para DBs existentes
 try { sqlite.exec("CREATE TABLE IF NOT EXISTS consentimientos_empresa (id TEXT PRIMARY KEY, empresa_codigo TEXT NOT NULL, tipo TEXT NOT NULL, version TEXT NOT NULL, aceptado_por TEXT NOT NULL, ip TEXT, user_agent TEXT, creado TEXT NOT NULL)"); } catch(e) {}
 try { sqlite.exec("CREATE INDEX IF NOT EXISTS idx_consentimiento_empresa ON consentimientos_empresa(empresa_codigo, tipo)"); } catch(e) {}
@@ -1026,7 +1057,7 @@ const COLS = {
   sucursales:['id','nombre','dir','ciudad','tel','email','responsable','activo'],
   usuarios:['id','nombre','usuario','email','password','rol','roles','suc_id','suc_sesiones_permitidas','activo','creado','email_verificado','must_change_password','password_changed_at'],
   vendedores:['id','nombre','apellido','dni','tel','email','rol','suc_id','suc_nombre','usuario_id','comision','activo'],
-  clientes:['id','nombre','apellido','dni','tel','email','ciudad','bebe_nac','notas','lista','limite_credito','puntos','suc_origen','activo','creado','condicion_fiscal'],
+  clientes:['id','nombre','apellido','dni','tel','email','ciudad','bebe_nac','notas','lista','limite_credito','es_ctacte','puntos','suc_origen','suc_id','activo','creado','condicion_fiscal'],
   productos:['id','nombre','sku','codigo_barras','categoria','talle','color','temporada','costo','precio_l1','precio_l2','precio_l3','unidad','stock_min','stock_max','favorito','activo'],
   stock_suc:['prod_id','suc_id','cantidad'],
   stock_movimientos:['id','prod_id','nombre_prod','tipo','cantidad','stock_antes','stock_despues','motivo','usuario_id','usuario','fecha','suc_id'],

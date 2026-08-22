@@ -3,8 +3,20 @@ const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const _getDB = req => (req && req.db) || db;
 const { authMiddleware, requireRol } = require('../middleware/auth');
-const { validate, clienteSchema } = require('../middleware/validate');
+const { validate, clienteSchema, clienteUpdateSchema } = require('../middleware/validate');
 router.use(authMiddleware);
+
+// Guard: solo admin/sup puede habilitar ctacte o tocar límite
+function requireCtactePermiso(req, res, next) {
+  const wantsCtacte = req.body && (req.body.es_ctacte === true || req.body.es_ctacte === 1);
+  const wantsLimite = req.body && (req.body.limite_credito != null || req.body.limite_ctacte != null);
+  if (wantsCtacte || wantsLimite) {
+    const roles = Array.isArray(req.user.roles) ? req.user.roles : [req.user.rol];
+    const ok = roles.includes('admin') || roles.includes('supervisor') || req.user.rol === 'admin' || req.user.rol === 'supervisor';
+    if (!ok) return res.status(403).json({ error: 'No tenés permisos para habilitar o modificar cuenta corriente. Solo admin o supervisor.' });
+  }
+  next();
+}
 
 function calcScore(cli_id, db) {
   const ventas = db.where('ventas', v => v.cliente_id === cli_id && !v.anulada);
@@ -72,10 +84,23 @@ router.get('/:id', (req,res) => {
   res.json({...c, ventas, ctacte, pendientes, ...calcScore(req.params.id, db)});
 });
 
-router.post('/', validate(clienteSchema), (req,res) => {
+router.post('/', validate(clienteSchema), requireCtactePermiso, (req,res) => {
   const db = _getDB(req);
   if(!req.body.nombre) return res.status(400).json({error:'Nombre obligatorio'});
-  const { nombre, apellido, dni, tel, email, ciudad, bebe_nac, notas, lista, limite_credito, suc_origen, direccion, provincia, cp, fecha_nac, genero, categoria, vend_id, tipo_doc, web_id, puntos, condicion_fiscal } = req.body;
+  let { nombre, apellido, dni, tel, email, ciudad, bebe_nac, notas, lista, limite_credito, limite_ctacte, es_ctacte, suc_origen, suc_id, dir, direccion, provincia, cp, fecha_nac, genero, categoria, vend_id, tipo_doc, web_id, puntos, condicion_fiscal } = req.body;
+  // compat: suc_id ↔ suc_origen, dir ↔ direccion
+  const sucFinal = suc_id || suc_origen || req.user.suc_id || null;
+  if (!sucFinal) return res.status(400).json({ error: 'Sucursal requerida' });
+  const sucIdFinal = sucFinal;
+  const sucOrigenFinal = suc_origen || suc_id || sucFinal;
+  const direccionFinal = direccion || dir || '';
+  // mapear limite_ctacte → limite_credito
+  let limiteFinal = limite_credito;
+  if (limite_ctacte != null && limite_ctacte !== '') limiteFinal = parseFloat(limite_ctacte);
+  if (es_ctacte && (limiteFinal == null || isNaN(limiteFinal) || Number(limiteFinal) <= 0)) {
+    return res.status(400).json({ error: 'Límite requerido si habilita cuenta corriente' });
+  }
+  if (limiteFinal == null || isNaN(limiteFinal)) limiteFinal = es_ctacte ? 0 : 20000;
   if (dni) {
     const dniExiste = db.where('clientes', c => c.dni === dni && c.activo !== false && c.activo != 0)[0];
     if (dniExiste) return res.status(400).json({ error: 'El DNI/CUIT ya está registrado en otro cliente' });
@@ -88,7 +113,7 @@ router.post('/', validate(clienteSchema), (req,res) => {
     const telExiste = db.where('clientes', c => c.tel === tel && c.activo !== false && c.activo != 0)[0];
     if (telExiste) return res.status(400).json({ error: 'El teléfono ya está registrado en otro cliente' });
   }
-  const r = db.insert('clientes',{id:'c'+uid(),lista:lista??1,limite_credito:limite_credito??20000,activo:true,creado:new Date().toISOString(),nombre,apellido,dni,tel,email,ciudad,bebe_nac,notas,suc_origen,direccion,provincia,cp,fecha_nac,genero,categoria,vend_id,tipo_doc,web_id,puntos,condicion_fiscal:condicion_fiscal||'cf'});
+  const r = db.insert('clientes',{id:'c'+uid(),lista:lista??1,limite_credito:limiteFinal,es_ctacte:!!es_ctacte,activo:true,creado:new Date().toISOString(),nombre,apellido,dni,tel,email,ciudad,bebe_nac,notas,suc_origen:sucOrigenFinal,suc_id:sucIdFinal,direccion:direccionFinal,provincia,cp,fecha_nac,genero,categoria,vend_id,tipo_doc,web_id,puntos,condicion_fiscal:condicion_fiscal||'cf'});
   try { const { dispararWebhooks } = require('./webhooks'); dispararWebhooks(db, 'cliente.creado', { cliente_id: r.id, nombre: r.nombre, tel: r.tel, email: r.email }); } catch(e) {}
   res.json(r);
 });
@@ -128,7 +153,7 @@ router.post('/importar', (req,res) => {
   res.json({ creados, actualizados, errores, errores_detalle: errores_detalle.slice(0, 50) });
 });
 
-router.put('/:id', validate(clienteSchema), (req,res) => {
+router.put('/:id', validate(clienteUpdateSchema), requireCtactePermiso, (req,res) => {
   const db = _getDB(req);
   const { dni, email, tel } = req.body;
   if (dni) {
@@ -143,8 +168,37 @@ router.put('/:id', validate(clienteSchema), (req,res) => {
     const telExiste = db.where('clientes', c => c.tel === tel && c.id !== req.params.id && c.activo !== false && c.activo != 0)[0];
     if (telExiste) return res.status(400).json({ error: 'El teléfono ya está registrado en otro cliente' });
   }
-  const r=db.update('clientes',req.params.id,req.body);
-  if(r){db.audit(req.user, null, 'clientes', 'editar', 'Edit cliente '+req.params.id, req.params.id);res.json({ok:true});}else{res.status(404).json({error:'No encontrado'});}
+  // compat aliases → columnas reales
+  const body = { ...req.body };
+  if (body.limite_ctacte != null) { body.limite_credito = parseFloat(body.limite_ctacte); delete body.limite_ctacte; }
+  if (body.suc_id && !body.suc_origen) body.suc_origen = body.suc_id;
+  if (body.dir && !body.direccion) { body.direccion = body.dir; delete body.dir; }
+  // si intenta habilitar ctacte sin limite, validar contra existente
+  if (body.es_ctacte === true) {
+    const existing = db.findOne('clientes', req.params.id);
+    const lim = body.limite_credito != null ? body.limite_credito : existing?.limite_credito;
+    if (lim == null || isNaN(lim) || Number(lim) <= 0) return res.status(400).json({ error: 'Límite requerido si habilita cuenta corriente' });
+  }
+  const prev = db.findOne('clientes', req.params.id);
+  const r=db.update('clientes',req.params.id,body);
+  if(r){
+    // auditoría cambios sensibles ctacte
+    if (prev && (prev.es_ctacte !== r.es_ctacte || prev.limite_credito !== r.limite_credito)) {
+      db.audit(req.user, null, 'clientes', 'ctacte_edit', `CtaCte ${prev.es_ctacte?'Si':'No'}→${r.es_ctacte?'Si':'No'} | Límite $${prev.limite_credito||0}→$${r.limite_credito||0}`, req.params.id);
+    } else {
+      db.audit(req.user, null, 'clientes', 'editar', 'Edit cliente '+req.params.id, req.params.id);
+    }
+    res.json({ok:true});
+  } else { res.status(404).json({error:'No encontrado'}); }
+});
+
+// PATCH notas internas (no requiere validación completa, no borra puntos)
+router.patch('/:id/notas', authMiddleware, (req,res) => {
+  const db = _getDB(req);
+  const { notas } = req.body;
+  if (typeof notas !== 'string') return res.status(400).json({ error: 'Notas inválidas' });
+  const r = db.update('clientes', req.params.id, { notas });
+  if (r) { res.json({ ok:true }); } else res.status(404).json({ error:'No encontrado' });
 });
 router.delete('/:id', requireRol('admin','supervisor'), (req,res) => {
   const db = _getDB(req); db.softDel('clientes',req.params.id); res.json({ok:true}); });

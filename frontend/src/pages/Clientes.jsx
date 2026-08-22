@@ -19,6 +19,8 @@ function Badge({ estado }) {
 
 function ClienteForm({ form, setForm }) {
   const { allSucs } = useApp()
+  const { me } = useAuth()
+  const canEditCtacte = ['admin','supervisor'].includes(me?.rol) || (Array.isArray(me?.roles) && me.roles.some(r=> ['admin','supervisor'].includes(r)))
   const set = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.value }))
   const check = (f) => (e) => setForm((p) => ({ ...p, [f]: e.target.checked }))
 
@@ -52,9 +54,9 @@ function ClienteForm({ form, setForm }) {
             <option value={3}>Lista 3 (precio especial)</option>
           </select>
         </Field>
-        <Field label="Sucursal de origen">
-          <select value={form.suc_id || ''} onChange={set('suc_id')}>
-            <option value="">Sin asignar</option>
+        <Field label="Sucursal de origen" required>
+          <select value={form.suc_id || ''} onChange={set('suc_id')} required>
+            <option value="">Seleccionar sucursal *</option>
             {allSucs.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
           </select>
         </Field>
@@ -62,15 +64,15 @@ function ClienteForm({ form, setForm }) {
       <Field label="Notas">
         <textarea value={form.notas} onChange={set('notas')} rows={2} placeholder="Observaciones opcionales" style={{ resize: 'vertical' }} />
       </Field>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px', background: 'var(--sf)', borderRadius: 8, border: '1px solid var(--bd)' }}>
-        <input type="checkbox" id="es-ctacte" checked={!!form.es_ctacte} onChange={check('es_ctacte')} style={{ width: 16, height: 16 }} />
-        <label htmlFor="es-ctacte" style={{ cursor: 'pointer', fontSize: 13, textTransform: 'none', letterSpacing: 0, color: 'var(--tx)', fontWeight: 500, margin: 0 }}>
-          Habilitado para cuenta corriente
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px', background: 'var(--sf)', borderRadius: 8, border: '1px solid var(--bd)', opacity: canEditCtacte ? 1 : 0.7 }} title={!canEditCtacte ? 'Solo admin o supervisor puede habilitar cuenta corriente' : ''}>
+        <input type="checkbox" id="es-ctacte" checked={!!form.es_ctacte} onChange={check('es_ctacte')} disabled={!canEditCtacte} style={{ width: 16, height: 16 }} />
+        <label htmlFor="es-ctacte" style={{ cursor: canEditCtacte ? 'pointer' : 'not-allowed', fontSize: 13, textTransform: 'none', letterSpacing: 0, color: 'var(--tx)', fontWeight: 500, margin: 0 }}>
+          Habilitado para cuenta corriente {!canEditCtacte && <span style={{ fontSize:11, color:'var(--mu)' }}>(solo admin/sup)</span>}
         </label>
         {form.es_ctacte && (
           <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
-            <label style={{ fontSize: 12, color: 'var(--mu)', textTransform: 'none', margin: 0 }}>Límite $</label>
-            <input value={form.limite_ctacte} onChange={set('limite_ctacte')} type="number" placeholder="Sin límite" style={{ width: 100 }} />
+            <label style={{ fontSize: 12, color: 'var(--mu)', textTransform: 'none', margin: 0 }}>Límite $ *</label>
+            <input value={form.limite_ctacte} onChange={set('limite_ctacte')} type="number" placeholder="Requerido" required disabled={!canEditCtacte} style={{ width: 110, borderColor: !form.limite_ctacte ? 'var(--bad)' : 'var(--bd)' }} />
           </div>
         )}
       </div>
@@ -221,6 +223,7 @@ export function Clientes() {
   const { api } = useApi()
   const { toast } = useToast()
   const { me } = useAuth()
+  const { allSucs } = useApp()
   const navigate = useNavigate()
 
   const [clientes, setClientes] = useState([])
@@ -241,6 +244,12 @@ export function Clientes() {
   const [fichaData, setFichaData] = useState(null)
   const [fichaLoading, setFichaLoading] = useState(false)
   const [fichaTab, setFichaTab] = useState('historial')
+  const [fichaNotas, setFichaNotas] = useState('')
+  const [savingNotas, setSavingNotas] = useState(false)
+  const [fichaSeg, setFichaSeg] = useState([])
+  const [segNota, setSegNota] = useState('')
+  const [segTipo, setSegTipo] = useState('llamada')
+  const [segProximo, setSegProximo] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -318,16 +327,18 @@ export function Clientes() {
   }
 
   async function openFicha(cli) {
-    setFicha(cli); setFichaData(null); setFichaLoading(true); setFichaTab('historial')
+    setFicha(cli); setFichaNotas(cli.notas || ''); setFichaData(null); setFichaLoading(true); setFichaTab('historial')
     try {
-      const [stats, hist, ctacte, puntosMovs] = await Promise.all([
+      const [stats, hist, ctacte, puntosMovs, seg] = await Promise.all([
         api('GET', '/clientes/' + cli.id + '/stats').catch(() => ({})),
         api('GET', '/clientes/' + cli.id + '/historial').catch(() => []),
         api('GET', '/ctacte?cli_id=' + cli.id).catch(() => null),
         api('GET', '/clientes/' + cli.id + '/puntos').catch(() => ({ puntos: 0, movimientos: [] })),
+        api('GET', '/ctacte/seguimiento/' + cli.id).catch(()=> []),
       ])
       setFichaData({ stats, hist: Array.isArray(hist) ? hist : [], ctacte, puntosMovs: Array.isArray(puntosMovs?.movimientos) ? puntosMovs.movimientos : [] })
-    } catch { setFichaData({ stats: {}, hist: [], ctacte: null, puntosMovs: [] }) }
+      setFichaSeg(Array.isArray(seg) ? seg : [])
+    } catch { setFichaData({ stats: {}, hist: [], ctacte: null, puntosMovs: [] }); setFichaSeg([]) }
     finally { setFichaLoading(false) }
   }
 
@@ -338,21 +349,25 @@ export function Clientes() {
   function openEdit(c) {
     setForm({
       nombre: c.nombre || '', apellido: c.apellido || '', tel: c.tel || '',
-      email: c.email || '', dni: c.dni || '', dir: c.dir || '', notas: c.notas || '',
-      es_ctacte: !!c.es_ctacte, limite_ctacte: c.limite_ctacte || '',
-      lista: c.lista || 1, suc_id: c.suc_id || '',
+      email: c.email || '', dni: c.dni || '', dir: c.dir || c.direccion || '', notas: c.notas || '',
+      es_ctacte: !!c.es_ctacte, limite_ctacte: c.limite_ctacte ?? c.limite_credito ?? '',
+      lista: c.lista || 1, suc_id: c.suc_id || c.suc_origen || '',
+      condicion_fiscal: c.condicion_fiscal || 'cf',
     })
     setModal(c)
   }
 
   async function save() {
     if (!form.nombre.trim()) { toast('El nombre es obligatorio', 'err'); return }
+    if (!form.suc_id) { toast('Seleccioná la sucursal del cliente', 'err'); return }
+    if (form.es_ctacte && (!form.limite_ctacte || parseFloat(form.limite_ctacte) <= 0)) { toast('Límite requerido si habilita cuenta corriente', 'err'); return }
     setSaving(true)
     try {
       const body = {
         ...form,
         es_ctacte: !!form.es_ctacte,
         limite_ctacte: form.limite_ctacte ? parseFloat(form.limite_ctacte) : null,
+        suc_origen: form.suc_id || form.suc_origen,
       }
       if (modal === 'new') {
         await api('POST', '/clientes', body)
@@ -565,7 +580,8 @@ export function Clientes() {
                     {ficha.tel && <span>📱 {ficha.tel}</span>}
                     {ficha.email && <span>✉️ {ficha.email}</span>}
                     {ficha.dni && <span>🪪 {ficha.dni}</span>}
-                    {ficha.dir && <span>📍 {ficha.dir}</span>}
+                    {(ficha.dir || ficha.direccion) && <span>📍 {ficha.dir || ficha.direccion}</span>}
+                    <span>🏪 {allSucs.find(s=> s.id===(ficha.suc_id||ficha.suc_origen))?.nombre || ficha.suc_id || ficha.suc_origen || 'Sin sucursal'}</span>
                     <span>📋 Lista {ficha.lista || 1}</span>
                     {ficha.es_ctacte && <span className="badge badge-blue">Cta. Corriente</span>}
                   </div>
@@ -646,38 +662,46 @@ export function Clientes() {
                     <div>
                       {fichaData.ctacte ? (
                         <>
-                          <div className="grid-2" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+                          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:10 }}>
                             <div style={{ background: 'var(--sf)', borderRadius: 8, padding: '8px 12px', textAlign: 'center' }}>
                               <div style={{ fontSize: 10, color: 'var(--mu)' }}>Saldo actual</div>
-                              <div style={{ fontWeight: 800, fontSize: 18, color: fichaData.ctacte.saldo > 0 ? 'var(--bad)' : 'var(--ok)' }}>
-                                {fmt(fichaData.ctacte.saldo || 0)}
-                              </div>
+                              <div style={{ fontWeight: 800, fontSize: 16, color: fichaData.ctacte.saldo > 0 ? 'var(--bad)' : 'var(--ok)' }}>{fmt(fichaData.ctacte.saldo || 0)}</div>
                             </div>
                             <div style={{ background: 'var(--sf)', borderRadius: 8, padding: '8px 12px', textAlign: 'center' }}>
                               <div style={{ fontSize: 10, color: 'var(--mu)' }}>Límite</div>
-                              <div style={{ fontWeight: 800, fontSize: 18 }}>{ficha.limite_ctacte ? fmt(ficha.limite_ctacte) : 'Sin límite'}</div>
+                              <div style={{ fontWeight: 800, fontSize: 16 }}>{(ficha.limite_credito ?? ficha.limite_ctacte) ? fmt(ficha.limite_credito ?? ficha.limite_ctacte) : 'Sin límite'}</div>
+                            </div>
+                            <div style={{ background: 'var(--sf)', borderRadius: 8, padding: '8px 12px', textAlign: 'center' }}>
+                              <div style={{ fontSize: 10, color: 'var(--mu)' }}>Disponible</div>
+                              <div style={{ fontWeight: 800, fontSize: 16, color: (ficha.limite_credito??ficha.limite_ctacte) ? ((ficha.limite_credito??ficha.limite_ctacte) - (fichaData.ctacte.saldo||0) < 0 ? 'var(--bad)' : 'var(--ok)') : 'var(--mu)' }}>
+                                {(ficha.limite_credito ?? ficha.limite_ctacte) ? fmt(Math.max(0,(ficha.limite_credito??ficha.limite_ctacte)-(fichaData.ctacte.saldo||0))) : '—'}
+                              </div>
                             </div>
                           </div>
-                          <div style={{ maxHeight: 260, overflowY: 'auto' }}>
-                            {(fichaData.ctacte.movimientos || []).length === 0 ? (
-                              <div style={{ textAlign: 'center', padding: 20, color: 'var(--mu)', fontSize: 13 }}>Sin movimientos</div>
-                            ) : fichaData.ctacte.movimientos.slice(0, 30).map((m, i) => (
-                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--bd)', fontSize: 12 }}>
-                                <div>
-                                  <span className={`badge ${m.tipo === 'pago' ? 'badge-green' : 'badge-red'}`} style={{ fontSize: 9 }}>
-                                    {m.tipo === 'pago' ? 'Pago' : 'Deuda'}
-                                  </span>
-                                  <span style={{ marginLeft: 6, color: 'var(--mu)' }}>{m.descripcion || m.concepto || ''}</span>
-                                </div>
-                                <div style={{ textAlign: 'right' }}>
-                                  <div style={{ fontWeight: 700, color: m.tipo === 'pago' ? 'var(--ok)' : 'var(--bad)' }}>
-                                    {m.tipo === 'pago' ? '−' : '+'}{fmt(m.monto || 0)}
-                                  </div>
-                                  <div style={{ fontSize: 9, color: 'var(--mu)' }}>{new Date(m.fecha).toLocaleDateString('es-AR')}</div>
-                                </div>
-                              </div>
-                            ))}
+                          <div style={{ display:'flex', gap:6, marginBottom:8, flexWrap:'wrap' }}>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={()=> window.open(`/api/ctacte/${ficha.id}/resumen-pdf`, '_blank')}>📄 Resumen PDF</button>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={()=> { const url=`${window.location.origin}/api/ctacte/${ficha.id}/resumen-pdf`; window.open(`https://wa.me/?text=${encodeURIComponent(`Resumen CtaCte ${ficha.nombre} — Saldo ${fmt(fichaData.ctacte.saldo||0)} — ${url}`)}`,'_blank') }}>💬 WhatsApp</button>
+                            <button type="button" className="btn btn-secondary btn-sm" onClick={()=> { navigator.clipboard.writeText(`${window.location.origin}/api/ctacte/${ficha.id}/resumen-pdf`); toast('Link copiado','ok')}}>🔗 Copiar</button>
                           </div>
+                          <div className="table-wrap" style={{ maxHeight: 280, overflowY:'auto' }}>
+                            <table>
+                              <thead><tr><th>Fecha</th><th>Concepto</th><th style={{textAlign:'right'}}>Debe</th><th style={{textAlign:'right'}}>Haber</th><th style={{textAlign:'right'}}>Saldo</th><th></th></tr></thead>
+                              <tbody>
+                                {(fichaData.ctacte.movimientos||[]).length===0 ? <tr><td colSpan={6} style={{textAlign:'center', padding:16, color:'var(--mu)'}}>Sin movimientos</td></tr>
+                                : fichaData.ctacte.movimientos.slice(0,40).map((m,i)=>(
+                                  <tr key={i}>
+                                    <td style={{fontSize:11}}>{new Date(m.fecha).toLocaleDateString('es-AR')}</td>
+                                    <td style={{fontSize:12}}>{m.concepto||m.descripcion||''}</td>
+                                    <td style={{textAlign:'right', color:'var(--bad)', fontWeight: m.debe>0?600:400}}>{m.debe>0?fmt(m.debe):'—'}</td>
+                                    <td style={{textAlign:'right', color:'var(--ok)', fontWeight: m.haber>0?600:400}}>{m.haber>0?fmt(m.haber):'—'}</td>
+                                    <td style={{textAlign:'right', fontWeight:700, color: m.saldo>0?'var(--bad)':'var(--ok)'}}>{fmt(m.saldo ?? 0)}</td>
+                                    <td><button type="button" className="btn btn-icon btn-sm" title="Imprimir comprobante" onClick={()=> window.open(`/api/ctacte/pago/${m.id}/comprobante-pdf`,'_blank')}>🖨️</button></td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div style={{ fontSize:11, color:'var(--mu)', marginTop:6, textAlign:'right' }}>Total Debe: {fmt((fichaData.ctacte.movimientos||[]).filter(m=>m.tipo==='deuda').reduce((a,m)=>a+(m.monto||0),0))} · Total Haber: {fmt((fichaData.ctacte.movimientos||[]).filter(m=>m.tipo==='pago').reduce((a,m)=>a+(m.monto||0),0))}</div>
                         </>
                       ) : (
                         <div style={{ textAlign: 'center', padding: 24, color: 'var(--mu)', fontSize: 13 }}>
@@ -689,32 +713,55 @@ export function Clientes() {
 
                   {fichaTab === 'seguimiento' && (
                     <div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                        <input id="seguimiento-input" type="text" placeholder="Agregar seguimiento..." style={{ flex: 1 }}
-                          onKeyDown={async (e) => {
-                            if (e.key === 'Enter' && e.target.value.trim()) {
-                              try {
-                                await api('POST', '/pipeline/seguimiento', {
-                                  cliente_id: ficha.id, accion: 'contacto', nota: e.target.value,
-                                  fecha: new Date().toISOString(), usuario: me?.nombre || ''
-                                })
-                                toast('✅ Seguimiento agregado', 'ok')
-                                e.target.value = ''
-                              } catch { toast('Error al guardar', 'err') }
-                            }
-                          }} />
+                      <div style={{ background:'var(--sf)', borderRadius:8, padding:10, marginBottom:10 }}>
+                        <div style={{ display:'flex', gap:6, marginBottom:6 }}>
+                          <select value={segTipo} onChange={e=> setSegTipo(e.target.value)} style={{ width:140, padding:'6px 8px', fontSize:12 }}>
+                            <option value="llamada">📞 Llamada</option>
+                            <option value="whatsapp">💬 WhatsApp</option>
+                            <option value="visita">🏪 Visita</option>
+                            <option value="promesa">🤝 Promesa pago</option>
+                            <option value="otro">📝 Otro</option>
+                          </select>
+                          <input type="date" value={segProximo} onChange={e=> setSegProximo(e.target.value)} style={{ width:150, padding:'6px 8px', fontSize:12 }} title="Próximo contacto / promesa" />
+                        </div>
+                        <textarea value={segNota} onChange={e=> setSegNota(e.target.value)} rows={2} placeholder="Qué dijo el cliente... ej: Prometió pagar $20k el 30/08" style={{ width:'100%', resize:'vertical', fontSize:13 }} />
+                        <div style={{ display:'flex', justifyContent:'flex-end', marginTop:6 }}>
+                          <button type="button" className="btn btn-primary btn-sm" disabled={!segNota.trim()} onClick={async()=>{
+                            try{
+                              await api('POST', '/ctacte/seguimiento/'+ficha.id, { nota: segNota, accion: segTipo, estado_contacto: segTipo, proximo_contacto: segProximo });
+                              toast('✅ Seguimiento guardado','ok'); setSegNota(''); setSegProximo('');
+                              const seg= await api('GET','/ctacte/seguimiento/'+ficha.id).catch(()=>[]); setFichaSeg(Array.isArray(seg)?seg:[]);
+                            } catch(e){ toast(e.message,'err') }
+                          }}>💾 Guardar seguimiento</button>
+                        </div>
                       </div>
-                      <div style={{ fontSize: 12, color: 'var(--mu)', textAlign: 'center', padding: 16 }}>
-                        Presioná Enter para guardar. Los seguimientos se muestran en el Pipeline.
-                      </div>
+                      {fichaSeg.length===0 ? <div style={{ textAlign:'center', padding:16, color:'var(--mu)', fontSize:12 }}>Sin seguimientos — registrá la primera llamada</div>
+                      : <div style={{ maxHeight:260, overflowY:'auto' }}>
+                        {fichaSeg.map((s,i)=>(
+                          <div key={i} style={{ display:'flex', gap:8, padding:'8px 0', borderBottom:'1px solid var(--bd)', fontSize:12 }}>
+                            <div style={{ width:28, textAlign:'center' }}>{s.accion==='llamada'?'📞': s.accion==='whatsapp'?'💬': s.accion==='promesa'?'🤝': s.accion==='visita'?'🏪':'📝'}</div>
+                            <div style={{ flex:1 }}>
+                              <div style={{ fontWeight:600 }}>{s.usuario_nombre||'—'} <span style={{ fontWeight:400, color:'var(--mu)', fontSize:10 }}>{new Date(s.fecha).toLocaleString('es-AR')}</span></div>
+                              <div style={{ color:'var(--tx)' }}>{s.nota}</div>
+                              {s.estado_nuevo && <div style={{ fontSize:10, color:'var(--mu)' }}>→ {s.estado_nuevo} {s.data ? (()=>{ try{const d=JSON.parse(s.data); return d.proximo_contacto? `· Próximo: ${d.proximo_contacto}`:'' }catch{return ''}})() : ''}</div>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>}
                     </div>
                   )}
 
                   {fichaTab === 'notas' && (
                     <div>
-                      <textarea defaultValue={ficha.notas || ''} rows={4} style={{ width: '100%', resize: 'vertical' }} placeholder="Notas sobre el cliente..." onChange={(e) => {
-                        api('PUT', '/clientes/' + ficha.id, { notas: e.target.value }).catch(() => {})
-                      }} />
+                      <textarea value={fichaNotas} onChange={(e)=> setFichaNotas(e.target.value)} rows={4} style={{ width: '100%', resize: 'vertical' }} placeholder="Notas internas sobre el cliente..." />
+                      <div style={{ display:'flex', justifyContent:'flex-end', gap:8, marginTop:8 }}>
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={()=> setFichaNotas(ficha.notas||'')}>↺ Descartar</button>
+                        <button type="button" className="btn btn-primary btn-sm" disabled={savingNotas || fichaNotas=== (ficha.notas||'')} onClick={async()=>{
+                          setSavingNotas(true);
+                          try { await api('PATCH', '/clientes/'+ficha.id+'/notas', {notas: fichaNotas}); setFicha(f=> ({...f, notas: fichaNotas})); toast('Notas guardadas','ok'); load(); } catch(e){ toast(e.message,'err') } finally{ setSavingNotas(false) }
+                        }}>{savingNotas ? 'Guardando...' : '💾 Guardar notas'}</button>
+                      </div>
+                      <div style={{ fontSize:11, color:'var(--mu)', marginTop:6 }}>Se guarda solo al presionar Guardar (no por tecla).</div>
                     </div>
                   )}
                 </>

@@ -208,8 +208,21 @@ ctacteRouter.get('/',(req,res)=>{
   const hoy=new Date().toISOString().substr(0,10);
   const clis=db.all('clientes');
   if(cli_id){
-    const movs=db.where('ctacte_movimientos',m=>m.cliente_id===cli_id).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
+    let movs=db.where('ctacte_movimientos',m=>m.cliente_id===cli_id).sort((a,b)=>new Date(b.fecha)-new Date(a.fecha));
     const saldo=movs.filter(m=>!m.cancelado).reduce((a,m)=>a+(m.tipo==='deuda'?m.monto:m.tipo==='pago'?-m.monto:0),0);
+    // Enriquecer con Debe/Haber y saldo acumulado (running) para ficha pro
+    const asc=[...movs].sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
+    let running=0;
+    const enrichedAsc=asc.map(m=>{
+      if(!m.cancelado){
+        if(m.tipo==='deuda') running+= parseFloat(m.monto)||0;
+        else if(m.tipo==='pago') running-= parseFloat(m.monto)||0;
+      }
+      return {...m, debe: (m.tipo==='deuda'&&!m.cancelado)? parseFloat(m.monto)||0 : 0, haber: (m.tipo==='pago'&&!m.cancelado)? parseFloat(m.monto)||0 : 0, saldo: running};
+    });
+    // volver a ordenar desc pero con campos ya calculados
+    const byId=new Map(enrichedAsc.map(m=>[m.id,m]));
+    movs=movs.map(m=> byId.get(m.id));
     return res.json({movimientos:movs,saldo});
   }
   let resumen=clis.flatMap(c=>{
@@ -342,9 +355,12 @@ ctacteRouter.post('/seguimiento/:cli_id', authMiddleware, (req,res) => {
   const db = _getDB(req);
   const cli = db.findOne('clientes', req.params.cli_id);
   if(!cli) return res.status(404).json({error:'No encontrado'});
-  const {nota, accion, estado_contacto} = req.body;
+  const {nota, accion, estado_contacto, proximo_contacto, monto_prometido} = req.body;
   const {uid} = require('../db_sqlite');
   const id = 'sg'+uid();
+  const extraData = {};
+  if (proximo_contacto) extraData.proximo_contacto = proximo_contacto;
+  if (monto_prometido) extraData.monto_prometido = parseFloat(monto_prometido);
   db.insert('seguimiento', {
     id, entidad_tipo:'ctacte', entidad_id:req.params.cli_id,
     fecha:new Date().toISOString(),
@@ -352,7 +368,8 @@ ctacteRouter.post('/seguimiento/:cli_id', authMiddleware, (req,res) => {
     suc_id:req.user.suc_id,
     accion:estado_contacto||accion||'contacto',
     nota:nota||'',
-    estado_anterior:'', estado_nuevo:estado_contacto||''
+    estado_anterior:'', estado_nuevo:estado_contacto||accion||'',
+    data: Object.keys(extraData).length ? JSON.stringify(extraData) : '{}'
   });
   res.json({id, ok:true});
 });
@@ -360,9 +377,14 @@ ctacteRouter.post('/seguimiento/:cli_id', authMiddleware, (req,res) => {
 // ── Movimientos por cliente ──
 ctacteRouter.get('/:cli_id/movimientos', authMiddleware, (req,res) => {
   const db = _getDB(req);
-  const movs = db.where('ctacte_movimientos', m => m.cliente_id === req.params.cli_id && !m.cancelado)
+  let movs = db.where('ctacte_movimientos', m => m.cliente_id === req.params.cli_id && !m.cancelado)
     .sort((a,b) => new Date(b.fecha) - new Date(a.fecha));
   const saldo = movs.reduce((a,m) => a + (m.tipo==='deuda' ? m.monto : m.tipo==='pago' ? -m.monto : 0), 0);
+  const asc=[...movs].sort((a,b)=>new Date(a.fecha)-new Date(b.fecha));
+  let running=0;
+  const enrichedAsc=asc.map(m=>{ if(m.tipo==='deuda') running+=parseFloat(m.monto)||0; else if(m.tipo==='pago') running-=parseFloat(m.monto)||0; return {...m, debe:m.tipo==='deuda'?parseFloat(m.monto)||0:0, haber:m.tipo==='pago'?parseFloat(m.monto)||0:0, saldo:running};});
+  const byId=new Map(enrichedAsc.map(m=>[m.id,m]));
+  movs=movs.map(m=> byId.get(m.id));
   res.json({ movimientos: movs, saldo });
 });
 
@@ -381,6 +403,106 @@ ctacteRouter.put('/obs/:id', authMiddleware, (req,res) => {
   const prev = existing.observaciones ? existing.observaciones + '\n' : '';
   db.update('ctacte_movimientos', req.params.id, {observaciones: prev + (req.body.observaciones||'')});
   res.json({ok:true});
+});
+
+// ── Comprobante PDF pago CtaCte (A4) ──
+ctacteRouter.get('/pago/:id/comprobante-pdf', authMiddleware, (req,res) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const db = _getDB(req);
+    const mov = db.findOne('ctacte_movimientos', req.params.id);
+    if (!mov) return res.status(404).json({ error:'Movimiento no encontrado' });
+    const cli = db.findOne('clientes', mov.cliente_id);
+    const suc = mov.suc_id ? db.findOne('sucursales', mov.suc_id) : null;
+    const cfg = db.getConfig();
+    // saldo histórico
+    const allMovs = db.where('ctacte_movimientos', m=> m.cliente_id===mov.cliente_id && !m.cancelado).sort((a,b)=> new Date(a.fecha)-new Date(b.fecha));
+    let running=0; let saldoAntes=0;
+    for (const m of allMovs) {
+      if (m.id===mov.id) { saldoAntes=running; if(m.tipo==='deuda') running+=parseFloat(m.monto)||0; else if(m.tipo==='pago') running-=parseFloat(m.monto)||0; break; }
+      if(m.tipo==='deuda') running+=parseFloat(m.monto)||0; else if(m.tipo==='pago') running-=parseFloat(m.monto)||0;
+    }
+    const saldoDespues = running;
+    const doc = new PDFDocument({ size:'A4', margin:40, bufferPages:true });
+    const chunks=[]; doc.on('data',c=>chunks.push(c)); doc.on('end',()=>{ const pdf=Buffer.concat(chunks); res.setHeader('Content-Type','application/pdf'); res.setHeader('Content-Disposition',`attachment; filename="ctacte-${cli?.dni||cli?.id||'cliente'}-${new Date(mov.fecha).toISOString().slice(0,10)}.pdf"`); res.send(pdf); });
+    const fmtN = n=> '$'+(Number(n)||0).toLocaleString('es-AR',{minimumFractionDigits:2, maximumFractionDigits:2});
+    let y=40;
+    doc.font('Helvetica-Bold').fontSize(16).text(cfg.nombre || 'FlexCRM', 40, y, {align:'center', width:515}); y+=20;
+    if(cfg.dir) { doc.font('Helvetica').fontSize(8).text(`${cfg.dir} ${cfg.tel? '· Tel: '+cfg.tel:''} ${cfg.email? '· '+cfg.email:''}`, 40, y, {align:'center', width:515}); y+=12; }
+    doc.moveTo(40,y).lineTo(555,y).stroke('#ddd'); y+=14;
+    const titulo = mov.tipo==='pago' ? 'COMPROBANTE DE PAGO — CUENTA CORRIENTE' : 'COMPROBANTE DE DEUDA — CUENTA CORRIENTE';
+    doc.font('Helvetica-Bold').fontSize(12).text(titulo, 40, y, {align:'center', width:515}); y+=18;
+    doc.font('Helvetica').fontSize(9);
+    doc.text(`Fecha: ${new Date(mov.fecha).toLocaleString('es-AR')}`, 40, y); doc.text(`Comprobante: ${mov.id.slice(-8).toUpperCase()}`, 350, y, {width:205, align:'right'}); y+=14;
+    doc.text(`Cliente: ${(cli?cli.nombre+' '+(cli.apellido||''):'—')} ${cli?.dni? '· DNI '+cli.dni : ''}`, 40, y, {width:515}); y+=12;
+    if(cli?.tel) { doc.text(`Tel: ${cli.tel}  ${cli?.email? '· '+cli.email:''}`, 40, y); y+=12; }
+    if(cli?.direccion || cli?.dir) { doc.text(`Dir: ${cli.direccion||cli.dir||''}`, 40, y); y+=12; }
+    if(suc) { doc.text(`Sucursal: ${suc.nombre}`, 40, y); y+=12; }
+    const sucCli = cli ? db.findOne('sucursales', cli.suc_id||cli.suc_origen) : null;
+    if(sucCli) { doc.text(`Sucursal del cliente: ${sucCli.nombre}`, 40, y); y+=12; }
+    doc.text(`Concepto: ${mov.concepto||mov.descripcion||'—'}`, 40, y, {width:515}); y+=12;
+    doc.text(`Método: ${mov.pago_metodo|| mov.medio || (mov.tipo==='pago'?'Pago':'Deuda')}`, 40, y); y+=16;
+    // tabla resumen
+    doc.rect(40,y,515,60).stroke('#e5e7eb');
+    doc.font('Helvetica').fontSize(8).text('Saldo anterior', 50, y+8); doc.font('Helvetica-Bold').fontSize(11).text(fmtN(saldoAntes), 50, y+20);
+    doc.font('Helvetica').fontSize(8).text(mov.tipo==='pago' ? 'Haber (pago)' : 'Debe', 200, y+8); doc.font('Helvetica-Bold').fontSize(11).fillColor(mov.tipo==='pago'?'#16a34a':'#dc2626').text(fmtN(mov.monto), 200, y+20); doc.fillColor('#000');
+    doc.font('Helvetica').fontSize(8).text('Saldo actual', 350, y+8); doc.font('Helvetica-Bold').fontSize(11).fillColor(saldoDespues>0?'#dc2626':'#16a34a').text(fmtN(saldoDespues), 350, y+20); doc.fillColor('#000');
+    if(cli?.limite_credito) { doc.font('Helvetica').fontSize(7).text(`Límite: ${fmtN(cli.limite_credito)} · Disponible: ${fmtN(Math.max(0,(cli.limite_credito||0)-saldoDespues))}`, 350, y+38); }
+    y+=70;
+    doc.font('Helvetica').fontSize(7).fillColor('#6b7280').text('Este comprobante es válido como constancia de pago. Conserve este documento.', 40, 800, {align:'center', width:515});
+    doc.font('Helvetica-Bold').fontSize(8).fillColor('#000').text('¡Gracias por su pago!', 40, 815, {align:'center', width:515});
+    doc.end();
+  } catch(e){ res.status(500).json({ error:'Error generando PDF: '+e.message }); }
+});
+
+// ── Resumen PDF por cliente (A4) ──
+ctacteRouter.get('/:cli_id/resumen-pdf', authMiddleware, (req,res) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const db = _getDB(req);
+    const cli = db.findOne('clientes', req.params.cli_id);
+    if(!cli) return res.status(404).json({ error:'Cliente no encontrado' });
+    const { desde, hasta } = req.query;
+    let movs = db.where('ctacte_movimientos', m=> m.cliente_id===req.params.cli_id && !m.cancelado).sort((a,b)=> new Date(a.fecha)-new Date(b.fecha));
+    if(desde) movs=movs.filter(m=> m.fecha.slice(0,10) >= desde);
+    if(hasta) movs=movs.filter(m=> m.fecha.slice(0,10) <= hasta);
+    // saldo acumulado
+    let running=0;
+    const rows=movs.map(m=>{ if(m.tipo==='deuda') running+=parseFloat(m.monto)||0; else if(m.tipo==='pago') running-=parseFloat(m.monto)||0; return {...m, debe:m.tipo==='deuda'?parseFloat(m.monto)||0:0, haber:m.tipo==='pago'?parseFloat(m.monto)||0:0, saldo:running};});
+    const totalDebe=rows.filter(r=>r.tipo==='deuda').reduce((a,r)=>a+r.monto,0);
+    const totalHaber=rows.filter(r=>r.tipo==='pago').reduce((a,r)=>a+r.monto,0);
+    const saldoFinal=rows.length? rows[rows.length-1].saldo : 0;
+    const cfg=db.getConfig();
+    const doc=new PDFDocument({ size:'A4', margin:40, bufferPages:true });
+    const chunks=[]; doc.on('data',c=>chunks.push(c)); doc.on('end',()=>{ const pdf=Buffer.concat(chunks); res.setHeader('Content-Type','application/pdf'); res.setHeader('Content-Disposition',`attachment; filename="resumen-ctacte-${cli.dni||cli.id}.pdf"`); res.send(pdf); });
+    const fmtN=n=> '$'+(Number(n)||0).toLocaleString('es-AR',{minimumFractionDigits:2, maximumFractionDigits:2});
+    let y=40;
+    doc.font('Helvetica-Bold').fontSize(16).text(cfg.nombre||'FlexCRM',40,y,{align:'center',width:515}); y+=18;
+    doc.font('Helvetica-Bold').fontSize(12).text('RESUMEN DE CUENTA CORRIENTE',40,y,{align:'center',width:515}); y+=16;
+    doc.font('Helvetica').fontSize(9).text(`Cliente: ${cli.nombre} ${(cli.apellido||'')}  ·  DNI: ${cli.dni||'—'}  ·  Tel: ${cli.tel||'—'}`,40,y); y+=12;
+    const sucCli=db.findOne('sucursales', cli.suc_id||cli.suc_origen); if(sucCli){ doc.text(`Sucursal del cliente: ${sucCli.nombre}`,40,y); y+=12; }
+    if(desde||hasta) { doc.text(`Período: ${desde||'inicio'}  al  ${hasta||'hoy'}`,40,y); y+=12; }
+    doc.text(`Saldo actual: ${fmtN(saldoFinal)}  ·  Límite: ${cli.limite_credito?fmtN(cli.limite_credito):'Sin límite'}  ·  Disponible: ${cli.limite_credito?fmtN(Math.max(0,cli.limite_credito - saldoFinal)): '—'}`,40,y); y+=14;
+    // header tabla
+    doc.rect(40,y,515,16).fill('#f3f4f6').stroke('#e5e7eb');
+    doc.fillColor('#000').font('Helvetica-Bold').fontSize(7);
+    doc.text('Fecha',42,y+4,{width:70}); doc.text('Concepto',115,y+4,{width:195}); doc.text('Debe',315,y+4,{width:60, align:'right'}); doc.text('Haber',380,y+4,{width:60, align:'right'}); doc.text('Saldo',450,y+4,{width:60, align:'right'}); y+=18;
+    doc.font('Helvetica').fontSize(7);
+    for(const r of rows.slice(0, 60)){
+      if(y>760){ doc.addPage(); y=40; }
+      doc.text(new Date(r.fecha).toLocaleDateString('es-AR'),42,y,{width:70});
+      doc.text((r.concepto||'').slice(0,50),115,y,{width:195});
+      doc.text(r.debe?fmtN(r.debe):'—',315,y,{width:60, align:'right'});
+      doc.text(r.haber?fmtN(r.haber):'—',380,y,{width:60, align:'right'});
+      doc.fillColor(r.saldo>0?'#dc2626':'#16a34a').text(fmtN(r.saldo),450,y,{width:60, align:'right'}); doc.fillColor('#000');
+      y+=10; doc.moveTo(40,y).lineTo(555,y).stroke('#f3f4f6'); y+=4;
+    }
+    y+=6;
+    doc.font('Helvetica-Bold').fontSize(8).text(`Total Debe: ${fmtN(totalDebe)}`,315,y,{width:100, align:'right'});
+    doc.text(`Total Haber: ${fmtN(totalHaber)}`,315,y+10,{width:100, align:'right'});
+    doc.fillColor(saldoFinal>0?'#dc2626':'#16a34a').text(`Saldo: ${fmtN(saldoFinal)}`,450,y,{width:60, align:'right'}); doc.fillColor('#000');
+    doc.end();
+  } catch(e){ res.status(500).json({ error:'Error generando PDF: '+e.message }); }
 });
 
 module.exports = {pendRouter,ctacteRouter};

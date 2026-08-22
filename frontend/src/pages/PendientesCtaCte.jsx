@@ -508,12 +508,13 @@ async function buscarVentas() {
 export function CtaCte() {
   const { api } = useApi()
   const { toast } = useToast()
-  const { sucSesion } = useApp()
+  const { sucSesion, allSucs } = useApp()
 
   const [cuentas, setCuentas] = useState([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filtroDeuda, setFiltroDeuda] = useState('')
+  const [filtroSuc, setFiltroSuc] = useState('')
   const [page, setPage] = useState(1)
   const [modalPago, setModalPago] = useState(null)   // {cliente}
   const [modalHist, setModalHist] = useState(null)   // {cliente}
@@ -580,19 +581,24 @@ export function CtaCte() {
         return
       }
 
-      toast('Pago registrado', 'ok')
+      toast('Pago registrado — generando comprobante...', 'ok')
+      const pagoId = r.id || r._id || null
       setModalPago(null); setFormPago({ monto: '', obs: '', metodo: 'efectivo', nro_comprobante: '' }); load()
+      if (pagoId) {
+        setTimeout(()=> { window.open(`/api/ctacte/pago/${pagoId}/comprobante-pdf`, '_blank'); }, 400)
+      }
     } catch (e) { toast(e.message, 'err') }
     finally { setSaving(false) }
   }
 
   const filtered = useMemo(() => {
     let list = cuentas
-    if (search) { const q = search.toLowerCase(); list = list.filter((c) => (c.nombre + ' ' + c.apellido + ' ' + c.tel).toLowerCase().includes(q)) }
+    if (search) { const q = search.toLowerCase(); list = list.filter((c) => (c.nombre + ' ' + (c.apellido||'') + ' ' + (c.dni||'') + ' ' + (c.tel||'') + ' ' + (c.email||'')).toLowerCase().includes(q)) }
     if (filtroDeuda === 'deuda') list = list.filter((c) => (c.saldo || 0) > 0)
     if (filtroDeuda === 'favor') list = list.filter((c) => (c.saldo || 0) < 0)
+    if (filtroSuc) list = list.filter((c) => (c.suc_id||c.suc_origen)===filtroSuc)
     return list.sort((a, b) => (b.saldo || 0) - (a.saldo || 0))
-  }, [cuentas, search, filtroDeuda])
+  }, [cuentas, search, filtroDeuda, filtroSuc])
 
   const totales = useMemo(() => ({
     total_deuda: filtered.filter((c) => c.saldo > 0).reduce((a, c) => a + c.saldo, 0),
@@ -616,7 +622,11 @@ export function CtaCte() {
       </div>
 
       <PageHeader title="📒 Cuenta Corriente">
-        <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1) }} placeholder="Cliente..." style={{ width: 220 }} />
+        <SearchBar value={search} onChange={(v) => { setSearch(v); setPage(1) }} placeholder="Cliente, DNI, tel..." style={{ width: 220 }} />
+        <select style={selStyle} value={filtroSuc} onChange={(e) => { setFiltroSuc(e.target.value); setPage(1) }}>
+          <option value="">Todas las sucursales</option>
+          {allSucs.map(s=> <option key={s.id} value={s.id}>{s.nombre}</option>)}
+        </select>
         <select style={selStyle} value={filtroDeuda} onChange={(e) => { setFiltroDeuda(e.target.value); setPage(1) }}>
           <option value="">Todos</option>
           <option value="deuda">Con deuda</option>
@@ -627,18 +637,19 @@ export function CtaCte() {
       <div className="card" style={{ padding: 0 }}>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Cliente</th><th>Teléfono</th><th style={{ textAlign: 'right' }}>Saldo</th><th style={{ textAlign: 'right' }}>Límite</th><th>Última compra</th><th style={{ width: 120 }}></th></tr></thead>
+            <thead><tr><th>Cliente</th><th>Sucursal</th><th>Teléfono</th><th style={{ textAlign: 'right' }}>Saldo</th><th style={{ textAlign: 'right' }}>Límite</th><th>Última compra</th><th style={{ width: 130 }}></th></tr></thead>
             <tbody>
               {filtered.slice((page-1)*PER_PAGE, page*PER_PAGE).length === 0
-                ? <EmptyRow cols={6} icon="📒" text="Sin cuentas corrientes" />
+                ? <EmptyRow cols={7} icon="📒" text="Sin cuentas corrientes" />
                 : filtered.slice((page-1)*PER_PAGE, page*PER_PAGE).map((c) => (
                   <tr key={c.id}>
-                    <td data-label="Cliente"><div style={{ fontWeight: 600 }}>{c.nombre} {c.apellido || ''}</div></td>
+                    <td data-label="Cliente"><div style={{ fontWeight: 600 }}>{c.nombre} {c.apellido || ''}</div><div style={{ fontSize:10, color:'var(--mu)' }}>{c.dni ? `DNI ${c.dni}`:''}</div></td>
+                    <td data-label="Sucursal" style={{ fontSize: 11 }}>{allSucs.find(s=> s.id===(c.suc_id||c.suc_origen))?.nombre || '—'}</td>
                     <td data-label="Teléfono" style={{ fontSize: 12 }}>{c.tel || '—'}</td>
                     <td data-label="Saldo" style={{ textAlign: 'right', fontWeight: 800, color: c.saldo > 0 ? 'var(--bad)' : c.saldo < 0 ? 'var(--ok)' : 'var(--mu)' }}>
                       {c.saldo > 0 ? `Debe ${fmt(c.saldo)}` : c.saldo < 0 ? `A favor ${fmt(-c.saldo)}` : 'Al día'}
                     </td>
-                    <td data-label="Límite" style={{ textAlign: 'right', fontSize: 12 }}>{c.limite_ctacte ? fmt(c.limite_ctacte) : 'Sin límite'}</td>
+                    <td data-label="Límite" style={{ textAlign: 'right', fontSize: 12 }}>{(c.limite_credito ?? c.limite_ctacte) ? fmt(c.limite_credito ?? c.limite_ctacte) : 'Sin límite'}</td>
                     <td data-label="Última compra" style={{ fontSize: 12, color: 'var(--mu)' }}>{fmtDate(c.ultima_compra)}</td>
                     <td data-label="">
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
@@ -691,15 +702,25 @@ export function CtaCte() {
         )}
       </Modal>
 
-      {/* Historial modal */}
+      {/* Historial modal — ficha pro */}
       <Modal open={!!modalHist} onClose={() => setModalHist(null)} title={`📋 Historial — ${modalHist?.nombre}`} size="lg">
         {loadingHist ? <div style={{ display: 'flex', justifyContent: 'center', padding: 32 }}><div className="spinner" /></div> : (
+          <>
+          <div style={{ display:'flex', gap:6, marginBottom:10, flexWrap:'wrap' }}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={()=> window.open(`/api/ctacte/${modalHist.id}/resumen-pdf`, '_blank')}>📄 Resumen PDF</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={()=> {
+              const url = `${window.location.origin}/api/ctacte/${modalHist.id}/resumen-pdf`;
+              const text = `Resumen CtaCte ${modalHist.nombre} — ${fmt(modalHist.saldo||0)} — ${url}`;
+              window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+            }}>💬 WhatsApp</button>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={()=> { navigator.clipboard.writeText(`${window.location.origin}/api/ctacte/${modalHist.id}/resumen-pdf`); toast('Link copiado','ok'); }}>🔗 Copiar link</button>
+          </div>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>Fecha</th><th>Concepto</th><th style={{ textAlign: 'right' }}>Debe</th><th style={{ textAlign: 'right' }}>Haber</th><th style={{ textAlign: 'right' }}>Saldo</th></tr></thead>
+              <thead><tr><th>Fecha</th><th>Concepto</th><th style={{ textAlign: 'right' }}>Debe</th><th style={{ textAlign: 'right' }}>Haber</th><th style={{ textAlign: 'right' }}>Saldo</th><th></th></tr></thead>
               <tbody>
                 {historial.length === 0
-                  ? <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--mu)' }}>Sin movimientos</td></tr>
+                  ? <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: 'var(--mu)' }}>Sin movimientos</td></tr>
                   : historial.map((h, i) => (
                     <tr key={i}>
                       <td data-label="Fecha" style={{ fontSize: 12 }}>{fmtDate(h.fecha)}</td>
@@ -707,11 +728,13 @@ export function CtaCte() {
                       <td data-label="Debe" style={{ textAlign: 'right', color: 'var(--bad)', fontWeight: h.debe > 0 ? 600 : 400 }}>{h.debe > 0 ? fmt(h.debe) : '—'}</td>
                       <td data-label="Haber" style={{ textAlign: 'right', color: 'var(--ok)', fontWeight: h.haber > 0 ? 600 : 400 }}>{h.haber > 0 ? fmt(h.haber) : '—'}</td>
                       <td data-label="Saldo" style={{ textAlign: 'right', fontWeight: 700, color: h.saldo > 0 ? 'var(--bad)' : 'var(--ok)' }}>{fmt(h.saldo)}</td>
+                      <td data-label=""><button type="button" className="btn btn-icon btn-sm" title="Imprimir comprobante" onClick={()=> window.open(`/api/ctacte/pago/${h.id}/comprobante-pdf`, '_blank')} disabled={!h.id}>🖨️</button></td>
                     </tr>
                   ))}
               </tbody>
             </table>
           </div>
+          </>
         )}
       </Modal>
       {/* Confirm duplicado comprobante */}

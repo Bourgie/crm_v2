@@ -121,7 +121,7 @@ export function POS() {
     .slice(0, buscando ? 60 : verMasFavs)
 
   const cliResults = buscadorCli.length >= 2
-    ? allClis.filter((c) => (c.nombre + ' ' + (c.apellido || '') + ' ' + (c.tel || '')).toLowerCase().includes(buscadorCli.toLowerCase())).slice(0, 7)
+    ? allClis.filter((c) => (c.nombre + ' ' + (c.apellido || '') + ' ' + (c.dni || '') + ' ' + (c.tel || '')).toLowerCase().includes(buscadorCli.toLowerCase())).slice(0, 7)
     : []
 
   function addToCart(prod, cant = 1) {

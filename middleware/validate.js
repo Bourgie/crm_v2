@@ -137,7 +137,11 @@ const clienteSchema = z.object({
   notas: z.string().optional().default(''),
   lista: z.number().int().min(1).max(3).optional().default(1),
   limite_credito: z.number().optional().default(20000),
+  limite_ctacte: z.number().optional().nullable(),
+  es_ctacte: z.boolean().optional().default(false),
   suc_origen: z.string().optional().nullable(),
+  suc_id: z.string().optional().nullable(),
+  dir: z.string().optional().default(''),
   direccion: z.string().optional().default(''),
   provincia: z.string().optional().default(''),
   cp: z.string().optional().default(''),
@@ -148,6 +152,50 @@ const clienteSchema = z.object({
   tipo_doc: z.string().optional().default(''),
   web_id: z.string().optional().default(''),
   puntos: z.number().int().optional().default(0),
+  condicion_fiscal: z.string().optional().default('cf'),
+}).superRefine((data, ctx) => {
+  if (data.es_ctacte) {
+    const lim = data.limite_ctacte != null ? data.limite_ctacte : data.limite_credito;
+    if (lim == null || isNaN(lim) || Number(lim) <= 0) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['limite_ctacte'], message: 'Límite requerido si habilita cuenta corriente' });
+    }
+  }
+});
+
+const clienteUpdateSchema = z.object({
+  nombre: z.string().min(1, 'Nombre requerido').optional(),
+  apellido: z.string().optional(),
+  dni: z.string().optional(),
+  tel: z.string().optional(),
+  email: z.string().optional(),
+  ciudad: z.string().optional(),
+  bebe_nac: z.string().optional(),
+  notas: z.string().optional(),
+  lista: z.number().int().min(1).max(3).optional(),
+  limite_credito: z.number().optional().nullable(),
+  limite_ctacte: z.number().optional().nullable(),
+  es_ctacte: z.boolean().optional(),
+  suc_origen: z.string().optional().nullable(),
+  suc_id: z.string().optional().nullable(),
+  dir: z.string().optional(),
+  direccion: z.string().optional(),
+  provincia: z.string().optional(),
+  cp: z.string().optional(),
+  fecha_nac: z.string().optional(),
+  genero: z.string().optional(),
+  categoria: z.string().optional(),
+  vend_id: z.string().optional().nullable(),
+  tipo_doc: z.string().optional(),
+  web_id: z.string().optional(),
+  puntos: z.number().int().optional(),
+  condicion_fiscal: z.string().optional(),
+}).superRefine((data, ctx) => {
+  if (data.es_ctacte === true) {
+    const lim = data.limite_ctacte != null ? data.limite_ctacte : data.limite_credito;
+    if (lim != null && (isNaN(lim) || Number(lim) <= 0)) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['limite_ctacte'], message: 'Límite requerido si habilita cuenta corriente' });
+    }
+  }
 });
 
 const gastoSchema = z.object({
@@ -195,4 +243,4 @@ function validate(schema) {
   };
 }
 
-module.exports = { validate, loginSchema, createUserSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, webhookCreateSchema, superadminLoginSchema, twofaSetupSchema, twofaConfirmSchema, twofaVerifySchema, twofaDisableSchema, superadmin2faVerifySchema, ventaCreateSchema, productoSchema, clienteSchema, gastoSchema, cajaAbrirSchema, cajaMovimientoSchema };
+module.exports = { validate, loginSchema, createUserSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema, webhookCreateSchema, superadminLoginSchema, twofaSetupSchema, twofaConfirmSchema, twofaVerifySchema, twofaDisableSchema, superadmin2faVerifySchema, ventaCreateSchema, productoSchema, clienteSchema, clienteUpdateSchema, gastoSchema, cajaAbrirSchema, cajaMovimientoSchema };

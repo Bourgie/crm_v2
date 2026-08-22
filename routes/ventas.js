@@ -87,15 +87,18 @@ router.post('/', validate(ventaCreateSchema), (req,res) => {
   const cajaHoy=db.where('cajas',c=>c.suc_id===suc_id&&c.fecha.substr(0,10)===hoy&&c.estado==='abierta')[0];
   if(!cajaHoy&&!es_ctacte) return res.status(400).json({error:'La caja de esta sucursal está cerrada. Abrila antes de registrar ventas.'});
 
-  // Validar límite c/cte
+  // Validar habilitación y límite c/cte
   if(es_ctacte&&cliente_id){
     const cli=db.findOne('clientes',cliente_id);
-    if(cli&&cli.limite_credito===0) return res.status(400).json({error:'Este cliente no tiene crédito habilitado (límite $0).'});
-    if(cli&&cli.limite_credito>0){
-      const saldoAct=db.where('ctacte_movimientos',m=>m.cliente_id===cliente_id).reduce((a,m)=>a+(m.tipo==='deuda'?m.monto:m.tipo==='pago'?-m.monto:0),0);
+    if(!cli) return res.status(400).json({error:'Cliente no encontrado'});
+    if(!cli.es_ctacte) return res.status(403).json({error:'Este cliente no tiene cuenta corriente habilitada'});
+    if(cli.limite_credito===0 || cli.limite_credito===null) return res.status(400).json({error:'Este cliente no tiene crédito habilitado (límite $0).'});
+    if(cli.limite_credito>0){
+      const saldoAct=db.where('ctacte_movimientos',m=>m.cliente_id===cliente_id&&!m.cancelado).reduce((a,m)=>a+(m.tipo==='deuda'?m.monto:m.tipo==='pago'?-m.monto:0),0);
       if(saldoAct+parseFloat(total)>cli.limite_credito) return res.status(400).json({error:`Límite de crédito excedido. Disponible: $${Math.max(0,cli.limite_credito-saldoAct).toLocaleString('es-AR')}`});
     }
   }
+  if(es_ctacte && !cliente_id) return res.status(400).json({error:'Cuenta corriente requiere cliente'});
 
   const ventas=db.all('ventas');
   const numero=(ventas.length?Math.max(...ventas.map(v=>v.numero||0)):999)+1;

@@ -35,10 +35,13 @@ export async function apiFetch(method, path, body, onLogout) {
 
   const r = await fetch('/api' + path, opts)
 
-  if (r.status === 401 || r.status === 403) {
+  if (r.status === 401) {
     if (onLogout) onLogout()
-    const msg = r.status === 403 ? 'Sin permisos — volvé a iniciar sesión' : 'Sesión expirada'
-    throw new Error(msg)
+    throw new Error('Sesión expirada — volvé a iniciar sesión')
+  }
+  if (r.status === 403) {
+    const e = await r.json().catch(() => ({ error: 'No tenés permisos para esta acción' }))
+    throw new Error(e.error || 'No tenés permisos para esta acción')
   }
   if (!r.ok) {
     const e = await r.json().catch(() => ({ error: 'Error del servidor' }))
