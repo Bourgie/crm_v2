@@ -34,7 +34,7 @@ const NAV = [
 ]
 
 export function Sidebar({ mobile, onClose }) {
-  const { hasModule, cfg, sucSesion, setSucSesion, allSucs } = useApp()
+  const { hasModule, cfg, sucSesion, setSucSesion, allSucs, modulosLoaded } = useApp()
   const { me, logout } = useAuth()
   const navigate = useNavigate()
   const chatUnread = useChatUnread()
@@ -73,7 +73,8 @@ export function Sidebar({ mobile, onClose }) {
     if (item.section) return true
     if (item.adminOnly && !userRoles.includes('admin')) return false
     if (item.roles && !item.roles.some((r) => userRoles.includes(r))) return false
-    if (item.mod && !hasModule(item.mod)) return false
+    // Si aún no cargó config, no filtrar por módulo (evita flash de módulos ocultos por stale)
+    if (item.mod && modulosLoaded && !hasModule(item.mod)) return false
     return true
   })
 

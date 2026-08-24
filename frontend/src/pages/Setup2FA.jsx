@@ -107,14 +107,18 @@ export function Setup2FA() {
       const allSucs = Array.isArray(sucR) ? sucR : (sucR.data || [])
       const suc = allSucs.find(s => s.activo !== false && s.activo !== 0) || allSucs[0]
 
+      try { useApp.getState().resetApp?.() } catch {}
       setAppSucs(allSucs)
       setCfg(cfgR)
-      if (cfgR.modulos_habilitados) {
+      if (cfgR.modulos_habilitados !== undefined && cfgR.modulos_habilitados !== null) {
         try {
-          setModulos(typeof cfgR.modulos_habilitados === 'string'
+          const mods = typeof cfgR.modulos_habilitados === 'string'
             ? JSON.parse(cfgR.modulos_habilitados)
-            : cfgR.modulos_habilitados)
+            : cfgR.modulos_habilitados
+          setModulos(Array.isArray(mods) ? mods : null)
         } catch { setModulos(null) }
+      } else {
+        setModulos(null)
       }
       if (cfgR.rubro) setRubro(cfgR.rubro)
       setProds(Array.isArray(prodsR) ? prodsR : [])

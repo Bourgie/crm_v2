@@ -15,6 +15,9 @@ export const useAuth = create(
       logout: () => {
         set({ me: null })
         localStorage.removeItem('crm_suc')
+        // Limpiar estado volátil de la app para que el próximo login no herede módulos/cfg stale
+        try { useApp.getState().resetApp?.() } catch {}
+        try { useApps.getState().setInstalled([]) } catch {}
       },
 
       isLoggedIn: () => !!get().me,
@@ -33,7 +36,8 @@ export const useApp = create((set, get) => ({
   allClis:  [],
   allUsers: [],
   sucSesion: localStorage.getItem('crm_suc') || null,
-  modulos:  null,   // null = all enabled
+  modulos:  undefined,   // undefined = aún no cargado, null = todo habilitado
+  modulosLoaded: false,
   rubro:    'general',
   cfg:      {},
   theme:    'light',
@@ -43,7 +47,7 @@ export const useApp = create((set, get) => ({
   setClis:      (v) => set({ allClis: v }),
   setUsers:     (v) => set({ allUsers: v }),
   setSucSesion: (id) => { localStorage.setItem('crm_suc', id); set({ sucSesion: id }); },
-  setModulos:   (v) => set({ modulos: v }),
+  setModulos:   (v) => set({ modulos: v, modulosLoaded: true }),
   setRubro:     (v) => set({ rubro: v }),
   setCfg:       (v) => {
     set({ cfg: v })
@@ -54,10 +58,21 @@ export const useApp = create((set, get) => ({
   },
   setTheme:     (v) => { document.documentElement.setAttribute('data-theme', v); set({ theme: v }); },
 
+  // Limpia estado volátil entre usuarios (evita stale modulos/cfg)
+  resetApp: () => set({
+    allSucs: [], allProds: [], allClis: [], allUsers: [],
+    modulos: undefined, modulosLoaded: false,
+    rubro: 'general', cfg: {},
+    // sucSesion se limpia vía localStorage en logout; lo reflejamos
+    sucSesion: null,
+  }),
+
   hasModule: (mod) => {
-    const mods = get().modulos
-    if (!mods) return true
-    return Array.isArray(mods) ? mods.includes(mod) : true
+    const { modulos } = get()
+    // undefined = aún no cargado (boot) → no filtrar, evita flash de módulos ocultos
+    if (modulos === undefined) return true
+    if (modulos === null) return true
+    return Array.isArray(modulos) ? modulos.includes(mod) : true
   },
 }))
 

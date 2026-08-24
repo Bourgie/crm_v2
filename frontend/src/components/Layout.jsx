@@ -37,7 +37,7 @@ export function Layout() {
   const location = useLocation()
   useOfflineManager()
   const { api } = useApi()
-  const { sucSesion, allSucs, setSucs, cfg } = useApp()
+  const { sucSesion, allSucs, setSucs, cfg, modulosLoaded, setCfg, setModulos, setRubro } = useApp()
   const { logout } = useAuth()
   const pollRef = useRef(null)
 
@@ -56,6 +56,26 @@ export function Layout() {
       }).catch(() => {})
     }
   }, [])
+
+  // Load config/modulos on mount if not loaded — fetch fresco cada boot (plan siempre manda)
+  useEffect(() => {
+    if (modulosLoaded) return
+    api('GET', '/config').then(cfgR => {
+      if (!cfgR || typeof cfgR !== 'object') return
+      setCfg(cfgR)
+      if (cfgR.modulos_habilitados !== undefined && cfgR.modulos_habilitados !== null) {
+        try {
+          const mods = typeof cfgR.modulos_habilitados === 'string'
+            ? JSON.parse(cfgR.modulos_habilitados)
+            : cfgR.modulos_habilitados
+          setModulos(Array.isArray(mods) ? mods : null)
+        } catch { setModulos(null) }
+      } else {
+        setModulos(null)
+      }
+      if (cfgR.rubro) setRubro(cfgR.rubro)
+    }).catch(() => {})
+  }, [modulosLoaded])
 
   // Global chat + pipeline unread polling (badge in sidebar)
   useEffect(() => {

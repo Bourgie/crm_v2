@@ -280,6 +280,8 @@ export function Login() {
   }
 
   async function completarLogin(data, sucId, allSucsLogin) {
+    // Limpiar estado stale de usuario anterior (evita que admin vea módulos del plan previo)
+    try { useApp.getState().resetApp?.() } catch {}
     setMe({ ...data.user, suc_id: sucId, suc_sesion: sucId })
     setSucSesion(sucId)
     setAppSucs(allSucsLogin)
@@ -292,12 +294,15 @@ export function Login() {
       ])
 
       setCfg(cfgR)
-      if (cfgR.modulos_habilitados) {
+      if (cfgR.modulos_habilitados !== undefined && cfgR.modulos_habilitados !== null) {
         try {
-          setModulos(typeof cfgR.modulos_habilitados === 'string'
+          const mods = typeof cfgR.modulos_habilitados === 'string'
             ? JSON.parse(cfgR.modulos_habilitados)
-            : cfgR.modulos_habilitados)
+            : cfgR.modulos_habilitados
+          setModulos(Array.isArray(mods) ? mods : null)
         } catch { setModulos(null) }
+      } else {
+        setModulos(null)
       }
       if (cfgR.rubro) setRubro(cfgR.rubro)
       setProds(Array.isArray(prodsR) ? prodsR : [])
