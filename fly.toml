@@ -12,6 +12,13 @@ primary_region = "dfw"
   source = "crm_data"
   destination = "/app/data"
 
+# ── Servicios expuestos ──
+# SOLO 80 y 443 → 3000. No exponer 22/3389/3000 directo.
+# El aviso Cloudflare "Exposed RDP" del 25 Jul 2026 fue falso positivo:
+# Fly shared Anycast (66.241.125.246) responde SYN-ACK en cualquier puerto
+# pero el contenedor es Alpine Linux sin servicio RDP/SSH. Se mitiga
+# ocultando el origen tras Cloudflare proxy (naranja) y bloqueando
+# acceso directo por IP en server.js (ENFORCE_CLOUDFLARE_ORIGIN).
 [[services]]
   protocol = "tcp"
   internal_port = 3000

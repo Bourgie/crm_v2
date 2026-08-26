@@ -24,8 +24,58 @@ const PORT = process.env.PORT || 3000;
 // ── Purga de archivos huérfanos de empresas eliminadas (auto-reparación del borrado a cero) ──
 try { require('./lib/purgeEmpresa').purgeOrphanTenantDBs(); } catch(e) { console.error('[Startup] purgeOrphanTenantDBs:', e.message); }
 
-// ── Trust proxy (Fly.io / reverse proxy) ──
+// ── Trust proxy (Fly.io / Cloudflare) ──
 app.set('trust proxy', 1);
+
+// ── Origin protection: bloquear acceso directo por IP / fly.dev ──
+// Cuando admin/app están detrás de Cloudflare (naranja), el origen no debe ser
+// accesible directo por IP o por crm-v2.fly.dev. Esto mitiga el falso positivo
+// "Exposed RDP" de Cloudflare (Fly Anycast responde SYN-ACK en cualquier puerto
+// pero no hay servicio RDP real — contenedor Alpine). Si ENFORCE_CLOUDFLARE_ORIGIN=1
+// además se exige header CF-Ray/CF-Connecting-IP en producción.
+const ENFORCE_CF_ORIGIN = process.env.ENFORCE_CLOUDFLARE_ORIGIN === '1';
+app.use((req, res, next) => {
+  const host = (req.hostname || '').toLowerCase();
+  const rawHost = (req.headers.host || '').toLowerCase().split(':')[0];
+
+  // 1) Host es IP literal o fly.dev → no servir app/admin, solo redirigir a canónico
+  // Permitir localhost/127.0.0.1/::1 en dev/test (NODE_ENV !== production) para tests y desarrollo
+  const isLocalIP = rawHost === '127.0.0.1' || rawHost === 'localhost' || rawHost === '::1' || rawHost === '::ffff:127.0.0.1';
+  const isRawIP = !isLocalIP && (/^\d{1,3}(\.\d{1,3}){3}$/.test(rawHost) || rawHost.includes(':'));
+  const isFlyDev = rawHost.endsWith('.fly.dev');
+  const shouldBlockRawIP = isProd && (isRawIP || isFlyDev);
+  const isPrivateStatic = req.path === '/robots.txt' || req.path === '/sitemap.xml';
+  if (shouldBlockRawIP || isFlyDev) {
+    // Health check, robots, sitemap deben seguir su lógica original (no redirect genérico)
+    if (req.path === '/api/health' || req.path === '/robots.txt' || req.path === '/sitemap.xml' || req.path === '/landing.html') return next();
+    if (isRawIP || isFlyDev) {
+      if (req.path.startsWith('/api/')) {
+        return res.status(421).json({ error: 'Acceso directo por IP no permitido. Use https://app.flexcrm.com.ar' });
+      }
+      return res.redirect(301, 'https://flexcrm.com.ar' + req.originalUrl);
+    }
+  }
+  if (isPrivateStatic) return next();
+  // En dev/test, si es IP local, dejar pasar sin bloqueo
+  if (!isProd && isLocalIP) return next();
+
+  // 2) Si está detrás de Cloudflare (naranja), opcionalmente exigir headers CF
+  if (ENFORCE_CF_ORIGIN && process.env.NODE_ENV === 'production') {
+    const hasCFRay = !!req.headers['cf-ray'];
+    const hasCFIP = !!req.headers['cf-connecting-ip'];
+    // Permitir health check directo de Fly (sin CF) y previews
+    const isHealthOrPreview = req.path === '/api/health' || req.path === '/api/version';
+    const isFlyHealthCheck = req.headers['user-agent'] && req.headers['user-agent'].includes('Fly-HealthCheck');
+    if (!isHealthOrPreview && !isFlyHealthCheck && !hasCFRay && !hasCFIP) {
+      // Solo aplicar si el Host es uno de los que debería estar detrás de CF
+      if (host === 'app.flexcrm.com.ar' || host === 'admin.flexcrm.com.ar') {
+        console.warn('[OriginProtection] Bloqueado acceso sin CF headers:', host, req.ip, req.path);
+        return res.status(403).json({ error: 'Origen no autorizado' });
+      }
+    }
+  }
+  next();
+});
 
 // ── HTTPS redirect in production ──
 if (process.env.NODE_ENV === 'production') {
@@ -213,7 +263,9 @@ app.use(express.urlencoded({ extended: true }));
 // ── X-Robots-Tag: hosts no públicos (app/admin/fly.dev) nunca indexables ──
 app.use((req, res, next) => {
   const host = (req.hostname || '').toLowerCase();
-  if (host.startsWith('app.') || host.startsWith('admin.') || host.endsWith('.fly.dev')) {
+  const rawHost = (req.headers.host || '').toLowerCase();
+  const isRawIP = /^\d{1,3}(\.\d{1,3}){3}$/.test(rawHost.split(':')[0]);
+  if (host.startsWith('app.') || host.startsWith('admin.') || host.endsWith('.fly.dev') || isRawIP) {
     res.set('X-Robots-Tag', 'noindex, nofollow');
   }
   next();

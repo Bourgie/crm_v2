@@ -17,6 +17,7 @@
     "test:coverage": "cd frontend && npm run test:coverage",
     "doctor": "npx react-doctor@latest",
     "indexnow": "node scripts/indexnow.js",
+    "check:ports": "node scripts/check-exposed-ports.js",
     "build": "cd frontend && npm install && npm run build",
     "build:marketing": "node scripts/build-marketing.js"
   },
