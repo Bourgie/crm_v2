@@ -117,7 +117,7 @@ export function Presupuestos() {
   }
 
   async function cambiarEstado(id, estado) {
-    try { await api('PATCH', '/presupuestos/' + id + '/estado', { estado }); toast('Estado actualizado', 'ok'); load() }
+    try { await api('POST', '/presupuestos/' + id + '/estado', { estado }); toast('Estado actualizado', 'ok'); load() }
     catch (e) { toast(e.message, 'err') }
   }
 

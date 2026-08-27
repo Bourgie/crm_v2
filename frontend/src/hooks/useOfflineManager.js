@@ -3,7 +3,7 @@ import { useAuth, useOffline, useToast } from '../store'
 import { apiFetch } from './useApi'
 
 export function useOfflineManager() {
-  const { token, logout } = useAuth()
+  const { me, logout } = useAuth()
   const { online, queue, setOnline, removeOps, requeueFailed } = useOffline()
   const { toast } = useToast()
 
@@ -13,7 +13,7 @@ export function useOfflineManager() {
     removeOps(batch.map((op) => op.id))
 
     try {
-      const r = await apiFetch('POST', '/sync/push', { ops: batch }, token, logout)
+      const r = await apiFetch('POST', '/sync/push', { ops: batch }, logout)
       const failed = (r.results || []).filter((res) => !res.ok)
 
       if (failed.length > 0) {
@@ -26,7 +26,7 @@ export function useOfflineManager() {
     } catch {
       requeueFailed(batch)
     }
-  }, [online, queue, token])
+  }, [online, queue, logout])
 
   useEffect(() => {
     const handleOnline = () => {
@@ -49,7 +49,7 @@ export function useOfflineManager() {
 
   // Periodic sync every 30s + ping every 15s
   useEffect(() => {
-    if (!token) return
+    if (!me) return
 
     const syncTimer = setInterval(() => {
       if (online && queue.length > 0) syncQueue()
@@ -57,7 +57,7 @@ export function useOfflineManager() {
 
     const pingTimer = setInterval(async () => {
       try {
-        await apiFetch('GET', '/sync/status', null, token, logout)
+        await apiFetch('GET', '/sync/status', null, logout)
         if (!online) { setOnline(true); toast('✅ Conexión restaurada', 'ok'); syncQueue() }
       } catch {
         if (online) setOnline(false)
@@ -65,7 +65,7 @@ export function useOfflineManager() {
     }, 15_000)
 
     return () => { clearInterval(syncTimer); clearInterval(pingTimer) }
-  }, [token, online, queue, syncQueue])
+  }, [me, online, queue, syncQueue, logout])
 
   return { online, pendingCount: queue.length, syncQueue }
 }

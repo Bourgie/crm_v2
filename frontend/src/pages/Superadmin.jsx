@@ -464,7 +464,20 @@ export default function Superadmin() {
 
   async function importBackup(codigo) {
     const input = document.createElement('input'); input.type = 'file'; input.accept = '.db'
-    input.onchange = async () => { const file = input.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = async () => { try { await saApi('POST', '/empresas/' + codigo + '/import', { data_base64: reader.result.split(',')[1] || reader.result }); alert('✅ Base de datos importada') } catch (e) { alert(e.message) } }; reader.readAsDataURL(file) }
+    input.onchange = async () => {
+      const file = input.files[0]; if (!file) return
+      try {
+        const r = await fetch(API + '/empresas/' + codigo + '/import', {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: file,
+        })
+        const d = await r.json().catch(() => null)
+        if (!r.ok) throw new Error((d && d.error) || 'Error')
+        alert('✅ Base de datos importada')
+      } catch (e) { alert(e.message) }
+    }
     input.click()
   }
 

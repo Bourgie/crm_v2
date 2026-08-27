@@ -1,19 +1,26 @@
 // ═══════════════════════════════════════════════════════════
-// FlexCRM — Backup automático con ZIP de todas las DBs
+// FlexCRM — Backups POR EMPRESA (tenant-isolated)
+// Los backups de tenant SOLO contienen la DB de su propia empresa.
+// makeFullBackup (todas las DBs + master) se usa únicamente desde
+// superadmin (POST /api/superadmin/backup/download).
 // ═══════════════════════════════════════════════════════════
 const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
-const { db } = require('../db_sqlite');
 const { authMiddleware, requireRol } = require('../middleware/auth');
-const crypto = require('crypto');
 
 const DATA_DIR = process.env.TENANT_DATA_DIR || path.join(__dirname, '../data');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
+const EMPRESA_CODE_RE = /^[a-z0-9_]+$/;
 
 function ensureBackupDir() {
   if (!fs.existsSync(BACKUP_DIR)) fs.mkdirSync(BACKUP_DIR, { recursive: true });
+}
+
+function empresaCodeOf(req) {
+  const code = String((req.user && req.user.empresa) || '');
+  return EMPRESA_CODE_RE.test(code) ? code : null;
 }
 
 function getAllDbFiles() {
@@ -30,6 +37,8 @@ function getAllDbFiles() {
   return files;
 }
 
+// ⚠️ SOLO para superadmin (backup global de todas las DBs).
+// Nunca usar en rutas de tenant.
 function makeFullBackup() {
   ensureBackupDir();
   const ts = new Date().toISOString().replace(/[:.]/g,'-').substr(0,19);
@@ -120,7 +129,7 @@ function makeFullBackup() {
 }
 
 // ── Backup de UNA sola empresa (consistente con WAL vía VACUUM INTO) ──
-// Usado al eliminar una empresa: el backup/email solo contiene sus datos (no los de otros tenants)
+// El backup SOLO contiene los datos de esa empresa (nunca los de otros tenants).
 function makeEmpresaBackup(codigo) {
   ensureBackupDir();
   const ts = new Date().toISOString().replace(/[:.]/g,'-').substr(0,19);
@@ -133,9 +142,10 @@ function makeEmpresaBackup(codigo) {
   empDB.raw.exec(`VACUUM INTO '${safeDest.replace(/'/g, "''")}'`);
   if (!fs.existsSync(dest)) throw new Error('Backup de empresa no generado: ' + fileName);
 
-  // Mantener solo los últimos 30 backups por empresa
+  // Mantener solo los últimos 30 backups DE ESTA empresa
+  const prefix = `empresa_${codigo}-`;
   const files = fs.readdirSync(BACKUP_DIR)
-    .filter(f => f.startsWith('empresa_') && f.endsWith('.db'))
+    .filter(f => f.startsWith(prefix) && f.endsWith('.db'))
     .sort();
   if (files.length > 30) {
     files.slice(0, files.length - 30).forEach(f => {
@@ -165,23 +175,15 @@ function toDosDate(d) {
   };
 }
 
-// ── Manual backup ZIP (descarga) ──
-router.post('/download', authMiddleware, requireRol('admin'), (req, res) => {
+// ── Listar backups de MI empresa ──
+router.get('/backups', authMiddleware, requireRol('admin'), (req, res) => {
   try {
-    const result = makeFullBackup();
-    console.log(`[Backup] ZIP creado: ${result.name} — ${(result.size/1024).toFixed(1)}KB — ${result.dbs} DBs`);
-    res.download(result.path, result.name);
-  } catch(e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// ── List backups ──
-router.get('/list', authMiddleware, requireRol('admin'), (req, res) => {
-  try {
+    const codigo = empresaCodeOf(req);
+    if (!codigo) return res.status(400).json({ error: 'Empresa inválida' });
     ensureBackupDir();
+    const prefix = `empresa_${codigo}-`;
     const files = fs.readdirSync(BACKUP_DIR)
-      .filter(f => f.endsWith('.zip'))
+      .filter(f => f.startsWith(prefix) && f.endsWith('.db'))
       .sort().reverse().slice(0, 30)
       .map(f => {
         const stat = fs.statSync(path.join(BACKUP_DIR, f));
@@ -195,49 +197,17 @@ router.get('/list', authMiddleware, requireRol('admin'), (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// ── Download named backup ──
-router.get('/download/:nombre', authMiddleware, requireRol('admin'), (req, res) => {
-  const nombre = req.params.nombre;
-  if (!nombre.endsWith('.zip') || nombre.includes('..'))
-    return res.status(400).json({ error: 'Nombre inválido' });
-  const fp = path.join(BACKUP_DIR, nombre);
-  if (!fs.existsSync(fp)) return res.status(404).json({ error: 'Backup no encontrado' });
-  res.download(fp, nombre);
+// ── Crear backup manual de MI empresa ──
+router.post('/now', authMiddleware, requireRol('admin'), (req, res) => {
+  try {
+    const codigo = empresaCodeOf(req);
+    if (!codigo) return res.status(400).json({ error: 'Empresa inválida' });
+    const result = makeEmpresaBackup(codigo);
+    console.log(`[Backup] ${codigo}: ${result.name} — ${(result.size/1024).toFixed(1)}KB`);
+    res.json({ ok: true, filename: result.name });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
-// ── Auto backup scheduler ──
-let lastBackup = 0;
-
-function runAutoBackup() {
-  try {
-    const cfg = db.getConfig();
-    const freq = parseInt(cfg.backup_freq_horas) || 24;
-    if (freq <= 0) return;
-    const freqMs = freq * 60 * 60 * 1000;
-    if (Date.now() - lastBackup < freqMs) return;
-    lastBackup = Date.now();
-    const result = makeFullBackup();
-    console.log(`[Backup] Auto: ${result.name} — ${(result.size/1024).toFixed(1)}KB`);
-  } catch(e) {
-    console.error('[Backup] Error auto:', e.message);
-  }
-}
-
-function startBackupScheduler() {
-  // Initial backup 10s after startup
-  setTimeout(() => {
-    try {
-      const cfg = db.getConfig();
-      if (parseInt(cfg.backup_freq_horas) > 0 || !cfg.backup_freq_horas) {
-        lastBackup = Date.now();
-        const result = makeFullBackup();
-        console.log(`[Backup] Inicial: ${result.name}`);
-      }
-    } catch(e) { /* silent */ }
-  }, 10000);
-
-  // Check every hour
-  setInterval(runAutoBackup, 60 * 60 * 1000);
-}
-
-module.exports = { router, startBackupScheduler, makeFullBackup, makeEmpresaBackup };
+module.exports = { router, makeFullBackup, makeEmpresaBackup };

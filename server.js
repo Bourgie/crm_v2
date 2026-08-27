@@ -447,7 +447,7 @@ const listaBebeRouter = require('./routes/listabebe');
 const superadminRouter = require('./routes/superadmin');
 const pipelineRouter   = require('./routes/pipeline');
 const arcaRouter       = require('./routes/arca');
-const { router: backupRouter, startBackupScheduler } = require('./routes/backup');
+const { router: backupRouter } = require('./routes/backup');
 const { validateTenant } = require('./middleware/tenant');
 
 // ── Tenant validation ──
@@ -495,7 +495,7 @@ app.use('/api', csrfProtection);
 app.use('/api/auth',          authRouter);
 app.use('/api/auth/2fa',      require('./routes/auth-2fa'));
 app.use('/api/config',        configRouter);
-app.use('/api/config',        backupRouter);
+app.use('/api/backup',       backupRouter);
 app.use('/api/dashboard',     dashRouter);
 app.use('/api/ventas',        ventasRouter);
 app.use('/api/clientes',      clientesRouter);
@@ -596,8 +596,6 @@ app.use((err, req, res, next) => {
 module.exports = app;
 
 if (require.main === module) {
-  startBackupScheduler();
-
   // Start pipeline automation (prospect reminders, auto-status, auto-archive)
   const { startStaleReminderScheduler } = require('./lib/stale-prospect-reminder');
   startStaleReminderScheduler();

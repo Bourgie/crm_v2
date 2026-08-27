@@ -9,14 +9,13 @@ const ROLE_LABELS = { admin: 'Admin', supervisor: 'Supervisor', cajero: 'Cajero'
 export function MiCuenta() {
   const { api } = useApi()
   const { toast } = useToast()
-  const { me, token } = useAuth()
+  const { me } = useAuth()
 
   const [form, setForm] = useState({ password_actual: '', password_nuevo: '', password_repetir: '' })
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteSent, setDeleteSent] = useState(false)
   const [consentData, setConsentData] = useState(null)
-  const [exportando, setExportando] = useState(false)
   const [firmando, setFirmando] = useState(false)
   const [sesiones, setSesiones] = useState([])
   const [historial, setHistorial] = useState([])
@@ -67,22 +66,6 @@ export function MiCuenta() {
     } catch (e) {
       toast('No se pudieron cargar los consentimientos: ' + e.message, 'err')
     }
-  }
-
-  async function exportarDatos() {
-    setExportando(true)
-    try {
-      const r = await fetch('/api/user-data/mis-datos/exportar', {
-        headers: { Authorization: 'Bearer ' + token },
-      })
-      const blob = await r.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url; a.download = 'mis-datos.json'; a.click()
-      URL.revokeObjectURL(url)
-      toast('Datos exportados', 'ok')
-    } catch (e) { toast(e.message, 'err') }
-    finally { setExportando(false) }
   }
 
   async function handleFirmar() {
@@ -277,9 +260,6 @@ export function MiCuenta() {
           De acuerdo a la Ley 25.326, tenés derecho a acceder, rectificar, cancelar y oponerte al tratamiento de tus datos personales.
         </p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button type="button" className="btn btn-secondary btn-sm" onClick={exportarDatos} disabled={exportando}>
-            {exportando ? '⏳ Exportando...' : '📥 Exportar mis datos'}
-          </button>
           {!deleteSent && (
             <button type="button" className="btn btn-secondary btn-sm" onClick={solicitarEliminacion} disabled={deleting}
               style={{ background: 'rgba(239,68,68,.08)', color: 'var(--bad)' }}>

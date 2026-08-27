@@ -34,3 +34,13 @@ Las checklists de referencia están en `.agents/references/`:
 - `observability-checklist.md`
 - `orchestration-patterns.md`
 <!-- agent-skills:end -->
+
+<!-- invariantes:start -->
+# Invariantes de seguridad y API (NO romper)
+
+- **Backup de tenant**: solo existe en Config → Backups (`/api/backup/backups`, `/api/backup/now`). Siempre por empresa con `makeEmpresaBackup(codigo)` (VACUUM INTO). `makeFullBackup()` (todas las DBs + master) está PROHIBIDO en rutas de tenant — solo lo usa superadmin (`/api/superadmin/backup/download`).
+- **No duplicar export/backup**: la funcionalidad de exportar datos vive solo en Config. No volver a agregar "Exportar mis datos" en Mi Cuenta.
+- **Auth del frontend**: solo cookie httpOnly + `credentials: 'include'` (o el helper `api()`). `useAuth` NO expone `token`; cualquier `Authorization: 'Bearer ' + token` está roto.
+- **Paridad API**: toda ruta del frontend debe existir en backend. Correr `node scripts/check-api-parity.js` antes de commit/PR (falla si hay drift).
+- **Import de DB en superadmin**: cerrar conexión cacheada (`closeEmpresaConn`) antes de sobrescribir, borrar `-wal`/`-shm`, validar cabecera SQLite.
+<!-- invariantes:end -->

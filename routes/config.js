@@ -213,41 +213,6 @@ router.put('/', authMiddleware, requireRol('admin','tesorero'), (req, res) => {
   res.json({ ok: true });
 });
 
-// Listar backups disponibles
-router.get('/backups', authMiddleware, requireRol('admin'), (req, res) => {
-  const db = _getDB(req);
-  const fs = require('fs'), path = require('path');
-  const dir = path.join(__dirname, '../data/backups');
-  if (!fs.existsSync(dir)) return res.json([]);
-  const files = fs.readdirSync(dir)
-    .filter(f => f.startsWith('crm_backup_') && f.endsWith('.json'))
-    .sort().reverse()
-    .map(f => {
-      const stat = fs.statSync(path.join(dir, f));
-      return { name: f, size: stat.size, fecha: f.replace('crm_backup_','').replace('.json','') };
-    });
-  res.json(files);
-});
-
-// Forzar backup manual ahora
-router.post('/backup', authMiddleware, requireRol('admin'), (req, res) => {
-  const db = _getDB(req);
-  try {
-    const fs = require('fs'), path = require('path');
-    const { db } = require('../db_sqlite');
-    const dir = path.join(__dirname, '../data/backups');
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    const now = new Date();
-    const ts = now.toISOString().replace(/[:.]/g,'-').substr(0,19);
-    const file = path.join(dir, `crm_backup_manual_${ts}.json`);
-    const data = db.exportAll ? db.exportAll() : require('../db_sqlite')._db;
-    // Get raw data via reading current db file
-    const dbFile = path.join(__dirname, '../data/crm.json');
-    fs.copyFileSync(dbFile, file);
-    res.json({ ok: true, file: `crm_backup_manual_${ts}.json` });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
 // ── Objetivo mensual ──
 router.post('/objetivo', authMiddleware, requireRol('admin','supervisor'), (req, res) => {
   const db = _getDB(req);

@@ -1471,36 +1471,58 @@ router.post('/empresas/:codigo/mark-verified', superAuth, (req, res) => {
 router.get('/empresas/:codigo/backup', superAuth, (req, res) => {
   const e = getEmpresa(req.params.codigo);
   if (!e) return res.status(404).json({ error: 'Empresa no encontrada' });
-  const dbPath = require('path').join(__dirname, '../data', `empresa_${e.codigo}.db`);
-  if (!require('fs').existsSync(dbPath)) return res.status(404).json({ error: 'Archivo DB no encontrado' });
-  res.download(dbPath, `empresa_${e.codigo}_${new Date().toISOString().substr(0,10)}.db`);
+  try {
+    const { makeEmpresaBackup } = require('./backup');
+    const result = makeEmpresaBackup(e.codigo);
+    saAudit(req.sadmin.id, 'backup_empresa', e.id, `Backup: ${result.name} — ${(result.size/1024).toFixed(1)}KB`);
+    res.download(result.path, result.name);
+  } catch (err) {
+    res.status(500).json({ error: 'Error al generar backup: ' + err.message });
+  }
 });
 
-router.post('/empresas/:codigo/import', superAuth, (req, res) => {
+router.post('/empresas/:codigo/import', superAuth, express.raw({ type: 'application/octet-stream', limit: '200mb' }), (req, res) => {
   const e = getEmpresa(req.params.codigo);
   if (!e) return res.status(404).json({ error: 'Empresa no encontrada' });
   const fs = require('fs');
   const path = require('path');
-  const dbPath = path.join(__dirname, '../data', `empresa_${e.codigo}.db`);
-  const { data, nombre_archivo } = req.body;
-  if (!data) return res.status(400).json({ error: 'Enviá el contenido del archivo en base64 (campo: data)' });
-  // Backup current DB
+  const { TENANT_DATA_DIR } = require('../db_sqlite');
+  const { closeEmpresaConn } = require('../lib/purgeEmpresa');
+  const dbPath = path.join(TENANT_DATA_DIR, `empresa_${e.codigo}.db`);
+
+  // Acepta binario (application/octet-stream) o JSON base64 (compat con versiones viejas)
+  let buf = null;
+  if (Buffer.isBuffer(req.body) && req.body.length) {
+    buf = req.body;
+  } else if (req.body && (req.body.data_base64 || req.body.data)) {
+    try { buf = Buffer.from(req.body.data_base64 || req.body.data, 'base64'); } catch (eb) { /* ignore */ }
+  }
+  if (!buf || !buf.length) return res.status(400).json({ error: 'Enviá el archivo de base de datos (.db) como binario o base64' });
+
+  // Validar cabecera SQLite ("SQLite format 3\0") antes de tocar el disco
+  if (buf.length < 16 || buf.toString('utf8', 0, 16) !== 'SQLite format 3\u0000') {
+    return res.status(400).json({ error: 'El archivo no es una base de datos SQLite válida' });
+  }
+
+  // Backup de seguridad del estado actual
   const backupPath = dbPath + '.bak.' + Date.now();
   if (fs.existsSync(dbPath)) fs.copyFileSync(dbPath, backupPath);
+
+  // Cerrar conexión cacheada ANTES de sobrescribir (evita corrupción WAL)
+  closeEmpresaConn(e.codigo);
+
   try {
-    const buf = Buffer.from(data, 'base64');
+    // Borrar WAL/SHM para no mezclar datos stale con la DB importada
+    for (const suffix of ['.db-wal', '.db-shm']) {
+      try { const p = dbPath + suffix; if (fs.existsSync(p)) fs.unlinkSync(p); } catch (eu) { /* ignore */ }
+    }
     fs.writeFileSync(dbPath, buf);
-    // Clear DB cache
-    try {
-      const mod = require('../db_sqlite');
-      if (mod._dbCache) { delete mod._dbCache[e.codigo]; }
-    } catch (ec) { /* ignore */ }
-    saAudit(req.sadmin.id, 'import_db', e.id, `Import DB: ${e.nombre} (${e.codigo}) — archivo: ${nombre_archivo || 'unknown'}`);
-    // Clean up backup
+    saAudit(req.sadmin.id, 'import_db', e.id, `Import DB: ${e.nombre} (${e.codigo})`);
+    // Limpiar backup de seguridad
     try { if (fs.existsSync(backupPath)) fs.unlinkSync(backupPath); } catch (eu) { /* ignore */ }
     res.json({ ok: true, mensaje: 'Base de datos importada correctamente' });
   } catch (err) {
-    // Restore backup
+    // Restaurar backup de seguridad
     try { if (fs.existsSync(backupPath)) fs.copyFileSync(backupPath, dbPath); } catch (eu) { /* ignore */ }
     res.status(500).json({ error: 'Error al importar: ' + err.message });
   }

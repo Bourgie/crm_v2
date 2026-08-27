@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useApi } from '../hooks/useApi'
-import { useApp, useToast, useAuth } from '../store'
+import { useApp, useToast } from '../store'
 import { Modal } from '../components/Modal'
 import { SearchBar, PageHeader, EmptyRow, Loader, Pagination } from '../components/UI'
 import { exportExcel } from '../utils/excel'
@@ -289,7 +289,6 @@ export function Ventas() {
   const { api } = useApi()
   const { toast } = useToast()
   const { sucSesion, allSucs } = useApp()
-  const { token } = useAuth()
   const [searchParams] = useSearchParams()
 
   const [ventas, setVentas] = useState([])
@@ -422,9 +421,7 @@ export function Ventas() {
 
   async function handleDescargarPDF(venta) {
     try {
-      const r = await fetch('/api/ventas/' + venta.id + '/comprobante-pdf', {
-        headers: { Authorization: 'Bearer ' + (token || '') }
-      })
+      const r = await fetch('/api/ventas/' + venta.id + '/comprobante-pdf', { credentials: 'include' })
       if (!r.ok) throw new Error('Error')
       const blob = await r.blob()
       const url = URL.createObjectURL(blob)

@@ -224,6 +224,56 @@ describe('Security: aislamiento y borrado a cero', () => {
     })
   })
 
+  // ── Backup por empresa (tenant-isolated) ───────────────────
+  describe('Backup por empresa', () => {
+    const CSRF = 'csrf-sec-backup-token'
+    const csrfHdr = { 'x-csrf-token': CSRF, 'Cookie': `csrf-token=${CSRF}` }
+
+    it('POST /api/backup/now crea backup SOLO de la empresa autenticada', async () => {
+      const r = await request('POST', '/api/backup/now', {
+        headers: { ...csrfHdr, Authorization: `Bearer ${signUserToken('ua_admin', 'admin', 'seca')}` },
+      })
+      assert.strictEqual(r.status, 200, r.raw)
+      assert.ok(r.body.filename, 'debe devolver filename')
+      assert.ok(r.body.filename.startsWith('empresa_seca-'), 'backup por empresa (seca), no global: ' + r.body.filename)
+
+      const backupPath = path.join(TEST_DATA_DIR, 'backups', r.body.filename)
+      assert.ok(fs.existsSync(backupPath), 'backup existe en disco')
+
+      // El backup contiene los datos de seca y NO los de otras empresas
+      const { DatabaseSync } = require('node:sqlite')
+      const bdb = new DatabaseSync(backupPath, { readOnly: true })
+      const ventas = bdb.prepare("SELECT COUNT(*) as n FROM ventas").get().n
+      const sucs = bdb.prepare("SELECT id FROM sucursales").all().map(x => x.id)
+      bdb.close()
+      assert.strictEqual(ventas, 2, 'solo las 2 ventas de seca (no la de secb)')
+      assert.ok(sucs.includes('s1') && sucs.includes('s2'), 'contiene sucursales de seca')
+      assert.ok(!sucs.includes('sb1'), 'NO contiene sucursales de secb')
+    })
+
+    it('GET /api/backup/backups solo lista backups de MI empresa', async () => {
+      // Backup de otra empresa (secb) para verificar el filtrado
+      const { makeEmpresaBackup } = require('../routes/backup')
+      makeEmpresaBackup('secb')
+
+      const r = await request('GET', '/api/backup/backups', {
+        headers: { Authorization: `Bearer ${signUserToken('ua_admin', 'admin', 'seca')}` },
+      })
+      assert.strictEqual(r.status, 200, r.raw)
+      assert.ok(Array.isArray(r.body), 'debe devolver array')
+      assert.ok(r.body.length > 0, 'debe listar al menos el backup creado antes')
+      assert.ok(r.body.every(b => b.nombre && b.nombre.startsWith('empresa_seca-')), 'solo backups de seca')
+      assert.ok(r.body.every(b => 'fecha' in b && 'tamano' in b), 'campos nombre/fecha/tamano')
+    })
+
+    it('usuario no-admin no puede crear backups (403)', async () => {
+      const r = await request('POST', '/api/backup/now', {
+        headers: { ...csrfHdr, Authorization: `Bearer ${signUserToken('ua_vend1', 'vendedor', 'seca')}` },
+      })
+      assert.strictEqual(r.status, 403)
+    })
+  })
+
   // ── Borrado a cero ─────────────────────────────────────────
   describe('Borrado a cero de empresa', () => {
     it('DELETE con backup deja cero residuos y respalda solo esa empresa', async () => {

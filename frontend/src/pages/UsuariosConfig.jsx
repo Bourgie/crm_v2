@@ -1387,7 +1387,6 @@ function BackupsTab({ api, toast }) {
   const [backups, setBackups] = useState([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [restoring, setRestoring] = useState(null)
 
   const load = useCallback(async () => {
     try { const d = await api('GET', '/backup/backups'); setBackups(Array.isArray(d)?d:[]) }
@@ -1407,17 +1406,6 @@ function BackupsTab({ api, toast }) {
     finally { setSaving(false) }
   }
 
-  async function restaurar(nombre) {
-    if (!window.confirm(`¿Restaurar backup ${nombre}?\n\nSe creará un backup de seguridad del estado actual.\nEl sistema se reiniciará automáticamente.`)) return
-    setRestoring(nombre)
-    try {
-      await api('POST', '/backup/restore', { nombre })
-      toast('✅ Backup restaurado. El sistema se reiniciará...', 'ok')
-      setTimeout(() => window.location.reload(), 3000)
-    } catch (e) { toast(e.message, 'err') }
-    finally { setRestoring(null) }
-  }
-
   const fmtDate = (d) => d ? new Date(d).toLocaleString('es-AR') : '—'
 
   if (loading) return <Loader/>
@@ -1433,22 +1421,15 @@ function BackupsTab({ api, toast }) {
       <div className="card" style={{padding:0}}>
         <div className="table-wrap">
           <table>
-            <thead><tr><th>Archivo</th><th>Fecha</th><th>Tamaño</th><th style={{width:80}}></th></tr></thead>
+            <thead><tr><th>Archivo</th><th>Fecha</th><th>Tamaño</th></tr></thead>
             <tbody>
               {backups.length===0
-                ? <EmptyRow cols={4} icon="💾" text="Sin backups. Creá el primero."/>
+                ? <EmptyRow cols={3} icon="💾" text="Sin backups. Creá el primero."/>
                 : backups.map((b,i)=>(
                     <tr key={i}>
                       <td data-label="Archivo" style={{fontFamily:'monospace',fontSize:12}}>{b.nombre}</td>
                       <td data-label="Fecha" style={{fontSize:12}}>{fmtDate(b.fecha)}</td>
                       <td data-label="Tamaño" style={{fontSize:12}}>{b.tamaño}</td>
-                      <td>
-                        <button type="button" className="btn btn-icon btn-sm" style={{color:'var(--bad)'}}
-                          onClick={()=>restaurar(b.nombre)} disabled={restoring===b.nombre}
-                          title="Restaurar este backup">
-                          {restoring===b.nombre ? '⏳' : '🔄'}
-                        </button>
-                      </td>
                     </tr>
                   ))}
             </tbody>

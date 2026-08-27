@@ -37,42 +37,6 @@ router.get('/mis-consentimientos', authMiddleware, (req, res) => {
   }
 });
 
-router.get('/mis-datos/exportar', authMiddleware, (req, res) => {
-  try {
-    const db = req.db;
-    const empresa = req.user.empresa || 'default';
-    const userId = req.user.id;
-    const sucId = req.user.suc_id;
-    const user = db.findOne('usuarios', userId);
-    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-
-    const { password, ...userSafe } = user;
-
-    const exportData = {
-      exportado: new Date().toISOString(),
-      empresa,
-      usuario: userSafe,
-      clientes: db.where('clientes', c => c.activo !== false),
-      productos: db.where('productos', p => p.activo !== false),
-      ventas: db.where('ventas', v => v.suc_id === sucId && v.anulada !== true),
-      pendientes: db.where('pendientes', p => p.suc_id === sucId && p.estado !== 'cancelado'),
-      presupuestos: db.where('presupuestos', p => p.suc_id === sucId),
-      consentimientos: getConsentimientosEmpresa(db, empresa),
-    };
-
-    const { saAuditExtended } = require('../db_master');
-    saAuditExtended('system', 'exportacion_datos', empresa,
-      'Usuario ' + (user.email || user.usuario) + ' exportó sus datos', { ip: req.ip || '' });
-
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Content-Disposition', 'attachment; filename="mis-datos-' + empresa + '.json"');
-    res.json(exportData);
-  } catch(e) {
-    console.error('[ExportarDatos] Error:', e.message);
-    res.status(500).json({ error: 'Error al exportar datos' });
-  }
-});
-
 router.post('/derecho-oposicion', authMiddleware, (req, res) => {
   try {
     const db = req.db;
