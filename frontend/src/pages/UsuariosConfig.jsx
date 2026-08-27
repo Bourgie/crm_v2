@@ -1181,9 +1181,12 @@ function PlanTab({ api, toast }) {
   }
   useEffect(() => { load() }, [])
 
+  const [downgradePending, setDowngradePending] = useState(null)
+
   useEffect(() => {
     api('GET', '/billing/mp/config-public').then(setMpConf).catch(() => setMpConf({ enabled: false }))
     api('GET', '/billing/mp/mis-pagos').then(p => setMisPagos(Array.isArray(p) ? p : [])).catch(() => setMisPagos([]))
+    api('GET', '/billing/mp/downgrade-pending').then(p => setDowngradePending(p)).catch(() => setDowngradePending(null))
   }, [])
 
   if (loading) return <div style={{padding:20,textAlign:'center'}}><div className="spinner" style={{margin:'0 auto'}}/></div>
@@ -1227,6 +1230,10 @@ function PlanTab({ api, toast }) {
     try {
       let prate = null
       try { prate = await api('GET', `/config/plan/prorate?nuevo_plan_id=${planId}`) } catch {}
+      // Si MP habilitado, downgrade va por flujo programado (no solicitud)
+      if (mpConf?.enabled && !esUpgrade) {
+        return solicitarDowngrade(planId, planNombre)
+      }
       let msg = esUpgrade
         ? (prate?.tiene_costo && prate.monto_neto > 0
           ? `💳 Upgrade a ${planNombre}\n\nDías restantes: ${prate.dias_restantes}\nMonto a pagar ahora: $${prate.monto_neto}\n\n¿Confirmar solicitud de upgrade?`
@@ -1238,6 +1245,27 @@ function PlanTab({ api, toast }) {
       load()
     } catch (e) { toast(e.message, 'err') }
     finally { setSolicitando(false) }
+  }
+
+  async function solicitarDowngrade(planId, planNombre) {
+    if (!window.confirm(`⬇ Cambiar a ${planNombre}\n\nTu plan actual sigue vigente hasta el vencimiento (${emp.vencimiento || '—'}). El cambio se aplicará automáticamente al renovar. ¿Confirmar downgrade programado?`)) { setSolicitando(false); return }
+    try {
+      const r = await api('POST', '/billing/mp/downgrade', { plan_id: planId })
+      toast(r.mensaje || `Downgrade a ${planNombre} programado`, 'ok')
+      const pending = await api('GET', '/billing/mp/downgrade-pending').catch(() => null)
+      setDowngradePending(pending)
+      load()
+    } catch (e) { toast(e.message, 'err') }
+  }
+
+  async function cancelarDowngrade() {
+    if (!window.confirm('¿Cancelar el downgrade programado? Mantendrás tu plan actual.')) return
+    try {
+      await api('DELETE', '/billing/mp/downgrade-pending')
+      toast('Downgrade cancelado', 'ok')
+      setDowngradePending(null)
+      load()
+    } catch (e) { toast(e.message, 'err') }
   }
 
   // Pago con MercadoPago (Checkout Pro redirect). Sin costo → flujo manual.
@@ -1313,10 +1341,18 @@ function PlanTab({ api, toast }) {
         </div>
       ) : <div style={{padding:'10px 14px',background:'var(--sf)',borderRadius:8,border:'1px solid var(--bd)',marginBottom:14,color:'var(--mu)'}}>Sin plan asignado. Contactá al administrador.</div>}
 
-      {/* Solicitud pendiente */}
-      {solPendiente && (
+      {/* Solicitud pendiente (solo modo manual MP deshabilitado) */}
+      {solPendiente && !mpConf?.enabled && (
         <div style={{padding:'8px 12px',background:'rgba(245,158,11,.1)',border:'1px solid var(--warn)',borderRadius:8,marginBottom:12,fontSize:12}}>
           ⏳ Solicitud pendiente de aprobación: {solPendiente.tipo} → {solPendiente.plan_nombre||solPendiente.plan_id}. El administrador la procesará pronto.
+        </div>
+      )}
+
+      {/* Downgrade programado (MP habilitado) */}
+      {downgradePending && (
+        <div style={{padding:'10px 14px',background:'rgba(99,102,241,.08)',border:'1px solid rgba(99,102,241,.35)',borderRadius:8,marginBottom:12,fontSize:12,display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+          <span style={{flex:1}}>⬇ Downgrade programado a <strong>{downgradePending.plan_nombre || downgradePending.plan_id}</strong> desde el <strong>{downgradePending.aplicar_desde || 'vencimiento'}</strong>. Tu plan actual sigue vigente hasta entonces.</span>
+          <button type="button" className="btn btn-secondary btn-sm" onClick={cancelarDowngrade} style={{fontSize:11,whiteSpace:'nowrap'}}>✕ Cancelar downgrade</button>
         </div>
       )}
 
@@ -1371,7 +1407,7 @@ function PlanTab({ api, toast }) {
                     {perdidos.length>0 && <div style={{color:'var(--bad)'}}>❌ Se deshabilitarán: {perdidos.map(m=>MODNAMES[m]||m).join(', ')}</div>}
                   </div>
                 )}
-                {!esCurrent && !solPendiente && (
+                {!esCurrent && (!solPendiente || mpConf?.enabled) && (
                   esUpgrade && mpConf?.enabled ? (
                     <button type="button" className="btn btn-sm btn-primary"
                       onClick={() => pagarConMP(p.id, p.nombre)}

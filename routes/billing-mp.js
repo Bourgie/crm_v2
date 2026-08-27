@@ -9,8 +9,8 @@ const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { master, getEmpresa, getPlan, getGlobalConfig, createSaasPago, getSaasPagoByRef, getSaasPagoByPaymentId, updateSaasPago, getSaasPagosPorEmpresa, logSaasWebhook } = require('../db_master');
 const mp = require('../lib/mercadopago');
-const { calcularProrrateo } = require('../lib/billing/aplicar-pago');
-const { authMiddleware } = require('../middleware/auth');
+const { calcularProrrateo, programarDowngrade } = require('../lib/billing/aplicar-pago');
+const { authMiddleware, requireRol } = require('../middleware/auth');
 
 function esCodigoValido(c) { return typeof c === 'string' && /^[a-z0-9_]+$/.test(c); }
 
@@ -184,6 +184,65 @@ router.get('/status/:ref', (req, res) => {
     if (e) empresaInfo = { codigo: e.codigo, nombre: e.nombre, vencimiento: e.vencimiento };
   }
   res.json({ estado: pago.estado, plan: pago.plan_nombre, monto: pago.monto, moneda: pago.moneda, comprobante_num: pago.comprobante_num, empresa: empresaInfo });
+});
+
+// ── Solicitar downgrade diferido (se aplica al vencimiento) ──
+router.post('/downgrade', authMiddleware, requireRol('admin'), (req, res) => {
+  try {
+    if (!mp.isEnabled()) return res.status(400).json({ error: 'MercadoPago no está habilitado. Usá la solicitud manual.' });
+    const empresa = getEmpresa(req.user.empresa);
+    if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' });
+    const planNuevo = getPlan(req.body.plan_id);
+    if (!planNuevo) return res.status(400).json({ error: 'Plan no encontrado' });
+    const planActual = getPlan(empresa.plan_id);
+    if (planActual && parseFloat(planNuevo.precio) > parseFloat(planActual.precio)) {
+      return res.status(400).json({ error: 'Usá el upgrade con pago para mejorar el plan.' });
+    }
+    const pagoId = programarDowngrade(empresa, planNuevo, req.user.nombre || req.user.usuario || '');
+    const pago = require('../db_master').getSaasPago(pagoId);
+    let aplicarDesde = empresa.vencimiento;
+    try { const d = typeof pago.data === 'string' ? JSON.parse(pago.data) : pago.data; aplicarDesde = d.aplicar_desde || aplicarDesde; } catch {}
+    // Notificar + auditoría
+    try {
+      const { master, saAudit } = require('../db_master');
+      master.prepare(
+        "INSERT INTO notificaciones (id, empresa_codigo, tipo, titulo, mensaje, creado, data) VALUES (?,?,?,?,?,?,?)"
+      ).run('notif_' + Date.now() + '_' + empresa.codigo, empresa.codigo, 'downgrade_programado',
+        `⬇ Downgrade programado a ${planNuevo.nombre}`,
+        `Tu plan cambiará a ${planNuevo.nombre} el ${aplicarDesde}. Se mantiene tu plan actual hasta el vencimiento.`,
+        new Date().toISOString(), JSON.stringify({ accion: '/config' }));
+      saAudit(req.user.id || 'system', 'downgrade_programado', empresa.id,
+        `Downgrade programado: ${planActual ? planActual.nombre : empresa.plan_id} → ${planNuevo.nombre} desde ${aplicarDesde}`);
+    } catch(e) {}
+    res.json({ ok: true, pago_id: pagoId, aplicar_desde: aplicarDesde, mensaje: `Downgrade a ${planNuevo.nombre} programado para el ${aplicarDesde}.` });
+  } catch(e) {
+    console.error('[BillingDowngrade] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Downgrade pendiente actual (para mostrar banner en PlanTab)
+router.get('/downgrade-pending', authMiddleware, (req, res) => {
+  const codigo = req.user.empresa;
+  if (!esCodigoValido(codigo)) return res.json(null);
+  const pago = master.prepare("SELECT * FROM saas_pagos WHERE empresa_codigo=? AND tipo='downgrade' AND estado='pending' ORDER BY creado DESC LIMIT 1").get(codigo);
+  if (!pago) return res.json(null);
+  let data = pago.data; if (typeof data === 'string') { try { data = JSON.parse(data); } catch { data = {}; } }
+  res.json({ id: pago.id, plan_id: pago.plan_id, plan_nombre: pago.plan_nombre, aplicar_desde: data.aplicar_desde || null, creado: pago.creado });
+});
+
+// Cancelar downgrade pendiente
+router.delete('/downgrade-pending', authMiddleware, requireRol('admin'), (req, res) => {
+  const codigo = req.user.empresa;
+  const pago = master.prepare("SELECT * FROM saas_pagos WHERE empresa_codigo=? AND tipo='downgrade' AND estado='pending' ORDER BY creado DESC LIMIT 1").get(codigo);
+  if (!pago) return res.status(404).json({ error: 'No hay downgrade pendiente' });
+  master.prepare("DELETE FROM saas_pagos WHERE id=?").run(pago.id);
+  try {
+    const { getEmpresaDB } = require('../db_sqlite');
+    const db = getEmpresaDB(codigo);
+    db.setConfig({ pending_downgrade: null });
+  } catch(e) {}
+  res.json({ ok: true });
 });
 
 // ── Mis pagos (cliente en el CRM) ──

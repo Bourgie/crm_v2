@@ -60,8 +60,18 @@ router.get('/plan/prorate', authMiddleware, requireRol('admin'), (req, res) => {
   } catch(e) { res.json({ tiene_costo: false, error: e.message }); }
 });
 
-// POST /config/plan/solicitar — solicita cambio de plan
+// POST /config/plan/solicitar — solicita cambio de plan (legacy, solo cuando MP deshabilitado)
 router.post('/plan/solicitar', authMiddleware, requireRol('admin'), (req, res) => {
+  // Si MP está habilitado, los cambios van por flujo automático (pago o downgrade programado)
+  try {
+    const mp = require('../lib/mercadopago');
+    if (mp.isEnabled()) {
+      return res.status(400).json({
+        error: 'Pagos automáticos habilitados. Usá el botón de pago en Config → Plan.',
+        mp_enabled: true,
+      });
+    }
+  } catch(e) {}
   const { plan_id, tipo } = req.body;
   const empDB = _getDB(req);
   const solicitud = {
