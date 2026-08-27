@@ -171,10 +171,28 @@ export const useDetailState = makeCluster({
   detailAudit: [],
   detailApps: [],
   detailNotas: [],
+  detailPagos: [],
+  detailVencimientos: null,
   detailLoading: false,
   detailAuditSearch: '',
   notaForm: { texto: '' },
   notaSaving: false,
+  manualPagoModal: null,
+  manualPagoForm: { plan_id: '', monto: '', origen: 'manual_efectivo', notas: '' },
+  manualPagoSaving: false,
+})
+
+export const useMpState = makeCluster({
+  mpConfig: null,
+  mpSaving: false,
+  mpTesting: false,
+  mpTestResult: null,
+  billingConfig: { grace_days: 3, aviso_dias: '7,3,1,0,-1,-3', mail_subject: '', mail_body: '', suspend_after_grace: false },
+  billingSaving: false,
+  pagosList: [],
+  pagosFiltro: '',
+  pagosMes: '',
+  webhookLogs: [],
 })
 
 export const useDataState = makeCluster({

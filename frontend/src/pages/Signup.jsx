@@ -1,8 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { PasswordInput } from '../components/PasswordInput'
 
 export function Signup() {
   const [form, setForm] = useState({ empresa_nombre: '', email: '', password: '', rubro: 'general', nombre_dueno: '', apellido_dueno: '', telefono: '', ciudad: '', como_conociste: '' })
+  const [planSel, setPlanSel] = useState(() => new URLSearchParams(window.location.search).get('plan') || '')
+  const [planes, setPlanes] = useState([])
+  const [mpEnabled, setMpEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
@@ -11,6 +14,16 @@ export function Signup() {
   const [resent, setResent] = useState(false)
 
   const set = (f) => (e) => setForm(p => ({ ...p, [f]: e.target.value }))
+
+  useEffect(() => {
+    fetch('/api/billing/mp/config-public').then(r => r.json()).then(d => setMpEnabled(!!d.enabled)).catch(() => {})
+    fetch('/api/billing/mp/planes').then(r => r.json()).then(p => {
+      const filtrados = Array.isArray(p) ? p.filter(x => x.id !== 'plan_trial' && !x.id.endsWith('_anual')) : []
+      setPlanes(filtrados)
+      const urlPlan = new URLSearchParams(window.location.search).get('plan')
+      if (urlPlan && filtrados.some(x => x.id === urlPlan)) setPlanSel(urlPlan)
+    }).catch(() => {})
+  }, [])
 
   async function handleResend() {
     setResending(true); setError('')
@@ -37,8 +50,22 @@ export function Signup() {
     if (!/[A-Z]/.test(form.password)) { setError('Debe contener al menos una mayúscula'); return }
     if (!/[0-9]/.test(form.password)) { setError('Debe contener al menos un número'); return }
     if (!/[^A-Za-z0-9]/.test(form.password)) { setError('Debe contener al menos un símbolo'); return }
+
+    // Si el plan requiere pago y MP está habilitado → Checkout Pro (no crear cuenta directo)
+    const planPrecio = (planes.find(p => p.id === planSel) || {}).precio
+    const requierePago = mpEnabled && planSel && planPrecio > 0
     setLoading(true)
     try {
+      if (requierePago) {
+        const r = await fetch('/api/billing/mp/create-preference', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...form, plan_id: planSel, tipo: 'signup' }),
+        })
+        const data = await r.json()
+        if (!r.ok) throw new Error(data.error || 'Error al iniciar el pago')
+        if (data.init_point) { window.location.href = data.init_point; return }
+      }
       const r = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -99,6 +126,20 @@ export function Signup() {
           <PasswordInput value={form.password} onChange={set('password')} placeholder="Mín. 8 caracteres" style={{ width: '100%' }} onKeyDown={e => e.key === 'Enter' && handleSignup()} />
           <input type="text" name="website" value={form.website||''} onChange={set('website')} style={{ display:'none' }} tabIndex={-1} autoComplete="off" />
         </div>
+        {planes.length > 0 && (
+          <div style={{ marginBottom: 16 }}>
+            <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Plan</label>
+            <select value={planSel} onChange={e => setPlanSel(e.target.value)} style={{ width: '100%' }}>
+              <option value="">🆓 Prueba gratis — 14 días</option>
+              {planes.map(pl => <option key={pl.id} value={pl.id}>📦 {pl.nombre} — ${pl.precio}{pl.periodo === 'anual' ? '/año' : '/mes'}</option>)}
+            </select>
+            {mpEnabled && planSel && (planes.find(p => p.id === planSel) || {}).precio > 0 && (
+              <div style={{ fontSize: 11, color: 'var(--ok)', marginTop: 4, padding: '8px 10px', background: 'rgba(34,197,94,.06)', borderRadius: 6 }}>
+                💳 Serás redirigido a MercadoPago para completar el pago. Tu cuenta se activará automáticamente al confirmar.
+              </div>
+            )}
+          </div>
+        )}
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 11, fontWeight: 600, textTransform: 'uppercase', color: 'var(--mu)', marginBottom: 4, display: 'block' }}>Rubro (opcional)</label>
           <select value={form.rubro} onChange={set('rubro')} style={{ width: '100%' }}>
@@ -146,7 +187,10 @@ export function Signup() {
         </div>
         {error && <div style={{ color: 'var(--bad)', fontSize: 12, marginBottom: 12, padding: '8px 12px', background: 'rgba(239,68,68,.06)', borderRadius: 8 }}>{error}</div>}
         <button type="button" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', padding: 12 }} onClick={handleSignup} disabled={loading}>
-          {loading ? '⏳ Creando cuenta...' : '🚀 Comenzar prueba gratis'}
+          {loading ? '⏳ Procesando...' : (() => {
+            const pr = (planes.find(p => p.id === planSel) || {}).precio
+            return mpEnabled && planSel && pr > 0 ? `💳 Pagar y crear cuenta — $${pr}` : '🚀 Comenzar prueba gratis'
+          })()}
         </button>
         <div style={{ marginTop: 12 }}>
           <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer', fontSize: 12, color: 'var(--tx)', lineHeight: 1.5 }}>

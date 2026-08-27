@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import QRCode from 'qrcode'
-import { useDataState, useDelSolState, useLoginState, useForgotState, useResetState, usePassState, useSaSecState, useEmpState, usePlanState, useProspState, useTicketState, useLandingState, useEmailState, useAtributoState, useMtState, useDeleteState, useAppsState, useLegalState, useNotifState, useDetailState } from './superadminState'
+import { useDataState, useDelSolState, useLoginState, useForgotState, useResetState, usePassState, useSaSecState, useEmpState, usePlanState, useProspState, useTicketState, useLandingState, useEmailState, useAtributoState, useMtState, useDeleteState, useAppsState, useLegalState, useNotifState, useDetailState, useMpState } from './superadminState'
 
 const API = '/api/superadmin'
 
@@ -57,6 +57,7 @@ const SIDEBAR = [
   ['modulos', '🧩 Módulos'],
   ['tesoreria', '💵 Tesorería'],
   ['email', '📧 Email'],
+  ['pagos', '💳 Pagos'],
   ['atributos', '🏷️ Atributos'],
   ['mantenimiento', '🔧 Mantenimiento'],
   ['landing', '🌐 Landing'],
@@ -124,7 +125,8 @@ export default function Superadmin() {
   const { appsData, setAppsData, appsInstaladas, setAppsInstaladas, appsStats, setAppsStats, appsFiltroCat, setAppsFiltroCat, appsFiltroEmp, setAppsFiltroEmp, appModal, setAppModal, appForm, setAppForm, appSaving, setAppSaving } = useAppsState()
   const { legalEmpresas, setLegalEmpresas, legalAuditData, setLegalAuditData, legalMsg, setLegalMsg, legalMsgErr, setLegalMsgErr } = useLegalState()
   const { notifForm, setNotifForm, tesSaving, setTesSaving, notifEnviando, setNotifEnviando, notifMsg, setNotifMsg, notifHistorial, setNotifHistorial } = useNotifState()
-  const { empresaDetail, setEmpresaDetail, empresaDetailTab, setEmpresaDetailTab, detailAudit, setDetailAudit, detailApps, setDetailApps, detailNotas, setDetailNotas, detailLoading, setDetailLoading, detailAuditSearch, setDetailAuditSearch, notaForm, setNotaForm, notaSaving, setNotaSaving } = useDetailState()
+  const { empresaDetail, setEmpresaDetail, empresaDetailTab, setEmpresaDetailTab, detailAudit, setDetailAudit, detailApps, setDetailApps, detailNotas, setDetailNotas, detailPagos, setDetailPagos, detailVencimientos, setDetailVencimientos, detailLoading, setDetailLoading, detailAuditSearch, setDetailAuditSearch, notaForm, setNotaForm, notaSaving, setNotaSaving, manualPagoModal, setManualPagoModal, manualPagoForm, setManualPagoForm, manualPagoSaving, setManualPagoSaving } = useDetailState()
+  const { mpConfig, setMpConfig, mpSaving, setMpSaving, mpTesting, setMpTesting, mpTestResult, setMpTestResult, billingConfig, setBillingConfig, billingSaving, setBillingSaving, pagosList, setPagosList, pagosFiltro, setPagosFiltro, pagosMes, setPagosMes, webhookLogs, setWebhookLogs } = useMpState()
 
   useEffect(() => {
     saApi('GET', '/me').then(r => { setLogged(true); setUser(r); loadAll() }).catch(() => {})
@@ -270,9 +272,13 @@ export default function Superadmin() {
   }, [])
 
   function loadAll() {
-    loadDash(); loadEmpresas(); loadPlanes(); loadModulos(); loadSolicitudes(); loadSolicitudesEliminacion(); loadAudit(); loadProspectos(); loadLanding(); loadLandingStats(); loadTickets(); loadEmailConfig(); loadAtributos(); loadMantenimiento();
+    loadDash(); loadEmpresas(); loadPlanes(); loadModulos(); loadSolicitudes(); loadSolicitudesEliminacion(); loadAudit(); loadProspectos(); loadLanding(); loadLandingStats(); loadTickets(); loadEmailConfig(); loadAtributos(); loadMantenimiento(); loadMpConfig(); loadBillingConfig();
     try { const imp = JSON.parse(sessionStorage.getItem('SA_IMP') || 'null'); if (imp) setImpersonating(imp) } catch {}
   }
+
+  useEffect(() => {
+    if (logged && tab === 'pagos') { loadPagos(); loadWebhookLogs() }
+  }, [logged, tab])
 
   async function loadDash() { try { const r = await saApi('GET', '/dashboard'); setDash(r) } catch {} }
   async function loadEmpresas() { try { const r = await saApi('GET', '/empresas'); setEmpresas(r) } catch {} }
@@ -286,6 +292,78 @@ export default function Superadmin() {
   async function loadLandingStats() { try { const r = await saApi('GET', '/landing-stats?dias=' + statsDias + (statsPagina ? '&pagina=' + encodeURIComponent(statsPagina) : '')); setLandingStats(r) } catch {} }
   async function loadTickets() { try { const r = await saApi('GET', '/solicitudes-soporte'); setTickets(r) } catch {} }
   async function loadEmailConfig() { try { const r = await saApi('GET', '/email-config'); setEmailConfig(r) } catch {} }
+  async function loadMpConfig() { try { const r = await saApi('GET', '/mp-config'); setMpConfig(r) } catch {} }
+  async function loadBillingConfig() { try { const r = await saApi('GET', '/billing/config'); setBillingConfig(r) } catch {} }
+  async function loadPagos() { try { const r = await saApi('GET', '/saas-pagos' + (pagosFiltro ? '?estado=' + pagosFiltro : '') + (pagosMes ? (pagosFiltro ? '&' : '?') + 'mes=' + pagosMes : '')); setPagosList(r) } catch {} }
+  async function loadWebhookLogs() { try { const r = await saApi('GET', '/saas-webhooks?limit=100'); setWebhookLogs(r) } catch {} }
+
+  async function saveMpConfig() {
+    setMpSaving(true); setMpTestResult(null)
+    try {
+      const body = {
+        enabled: mpConfig.enabled,
+        mode: mpConfig.mode,
+        access_token: mpConfig.access_token_masked || '',
+        public_key: mpConfig.public_key || '',
+        webhook_secret: mpConfig.webhook_secret_masked || '',
+        currency: mpConfig.currency,
+        back_url_base: mpConfig.back_url_base || '',
+      }
+      await saApi('PUT', '/mp-config', body)
+      alert('✅ Configuración de MercadoPago guardada')
+      loadMpConfig()
+    }
+    catch(e) { alert(e.message) }
+    finally { setMpSaving(false) }
+  }
+
+  async function testMp() {
+    setMpTesting(true); setMpTestResult(null)
+    try { const r = await saApi('POST', '/mp-test'); setMpTestResult({ ok: true, msg: r.message }) }
+    catch(e) { setMpTestResult({ ok: false, msg: e.message }) }
+    finally { setMpTesting(false) }
+  }
+
+  async function saveBillingConfig() {
+    setBillingSaving(true)
+    try { await saApi('PUT', '/billing/config', billingConfig); alert('✅ Políticas de billing guardadas') }
+    catch(e) { alert(e.message) }
+    finally { setBillingSaving(false) }
+  }
+
+  async function registrarPagoManual() {
+    if (!manualPagoForm.monto || parseFloat(manualPagoForm.monto) <= 0) { alert('Monto requerido'); return }
+    setManualPagoSaving(true)
+    try {
+      const r = await saApi('POST', '/empresas/' + empresaDetail.codigo + '/pagos/manual', manualPagoForm)
+      alert('✅ ' + (r.mensaje || 'Pago registrado'))
+      setManualPagoModal(false)
+      const [pagos, venc] = await Promise.all([
+        saApi('GET', '/empresas/' + empresaDetail.codigo + '/pagos'),
+        saApi('GET', '/empresas/' + empresaDetail.codigo + '/vencimientos'),
+      ])
+      setDetailPagos(pagos); setDetailVencimientos(venc)
+      loadEmpresas(); loadDash()
+    } catch(e) { alert(e.message) }
+    finally { setManualPagoSaving(false) }
+  }
+
+  async function reenviarComprobante(pagoId) {
+    try { await saApi('POST', '/saas-pagos/' + pagoId + '/comprobante'); alert('✅ Comprobante regenerado') }
+    catch(e) { alert(e.message) }
+  }
+
+  async function exportPagosCSV() {
+    const qs = pagosMes ? '?mes=' + pagosMes : ''
+    try {
+      const res = await fetch(API + '/saas-pagos/export' + qs, { credentials: 'include' })
+      if (!res.ok) throw new Error('Error al exportar')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = 'saas-pagos' + (pagosMes ? '-' + pagosMes : '') + '.csv'; a.click()
+      URL.revokeObjectURL(url)
+    } catch(e) { alert(e.message) }
+  }
   async function loadAtributos() { try { const r = await saApi('GET', '/rubros-atributos'); setAtributos(r) } catch {} }
   async function loadMantenimiento() { try { const r = await saApi('GET', '/mantenimiento'); setMtItems(r) } catch {} }
 
@@ -534,19 +612,25 @@ export default function Superadmin() {
     setEmpresaDetail(e)
     setEmpresaDetailTab('info')
     setDetailAuditSearch('')
+    setDetailPagos([])
+    setDetailVencimientos(null)
     setNotaForm({ texto: '' })
     setDetailLoading(true)
     try {
-      const [info, audit, apps, notas] = await Promise.all([
+      const [info, audit, apps, notas, pagos, vencimientos] = await Promise.all([
         saApi('GET', '/empresas/' + e.codigo),
         saApi('GET', '/audit?empresa_id=' + e.id),
         saApi('GET', '/apps/instaladas?empresa_id=' + e.id),
         saApi('GET', '/empresas/' + e.id + '/notas'),
+        saApi('GET', '/empresas/' + e.codigo + '/pagos').catch(() => []),
+        saApi('GET', '/empresas/' + e.codigo + '/vencimientos').catch(() => null),
       ])
       setEmpresaDetail({ ...e, ...info })
       setDetailAudit(audit)
       setDetailApps(apps)
       setDetailNotas(notas)
+      setDetailPagos(Array.isArray(pagos) ? pagos : [])
+      setDetailVencimientos(vencimientos)
     } catch (err) { alert('Error al cargar detalle: ' + err.message) }
     finally { setDetailLoading(false) }
   }
@@ -1421,6 +1505,165 @@ export default function Superadmin() {
             </div>
           )}
 
+          {/* ═══════ PAGOS / BILLING ═══════ */}
+          {tab === 'pagos' && (
+            <>
+              {/* Config MercadoPago */}
+              <div className="card" style={{ maxWidth: 640, marginBottom: 16 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase' }}>💳 MercadoPago — Configuración</h3>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!!mpConfig?.enabled} onChange={e => setMpConfig(p => ({ ...p, enabled: e.target.checked }))} />
+                    <strong>{mpConfig?.enabled ? 'Habilitado' : 'Deshabilitado'}</strong>
+                  </label>
+                </div>
+                {mpConfig && <>
+                  <div className="fr">
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Modo</label>
+                      <select value={mpConfig.mode || 'test'} onChange={e => setMpConfig(p => ({ ...p, mode: e.target.value }))}>
+                        <option value="test">🧪 Test</option>
+                        <option value="live">🚀 Producción (live)</option>
+                      </select>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Moneda</label>
+                      <select value={mpConfig.currency || 'ARS'} onChange={e => setMpConfig(p => ({ ...p, currency: e.target.value }))}>
+                        <option value="ARS">ARS — Peso argentino</option>
+                        <option value="USD">USD — Dólar</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div style={{ marginTop: 12 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Access Token {mpConfig.access_token_configurado && <span style={{ color: 'var(--ok)' }}>(configurado ✓)</span>}</label>
+                    <input type="password" value={mpConfig.access_token_masked || ''} onChange={e => setMpConfig(p => ({ ...p, access_token_masked: e.target.value }))} placeholder={mpConfig.access_token_configurado ? '•••••••• (dejar vacío para no cambiar)' : 'APP_USR-... o TEST-...'} style={{ width: '100%' }} />
+                  </div>
+                  <div style={{ marginTop: 12 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Webhook Secret {mpConfig.webhook_secret_configurado && <span style={{ color: 'var(--ok)' }}>(configurado ✓)</span>}</label>
+                    <input type="password" value={mpConfig.webhook_secret_masked || ''} onChange={e => setMpConfig(p => ({ ...p, webhook_secret_masked: e.target.value }))} placeholder={mpConfig.webhook_secret_configurado ? '•••••••• (dejar vacío para no cambiar)' : 'Clave secreta para firmar webhooks'} style={{ width: '100%' }} />
+                  </div>
+                  <div style={{ marginTop: 12 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>URL del Webhook (copiala en el panel de MercadoPago → Notificaciones Webhooks)</label>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <input value={mpConfig.webhook_url || ''} readOnly style={{ flex: 1, fontFamily: 'monospace', fontSize: 11 }} onFocus={e => e.target.select()} />
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => { navigator.clipboard?.writeText(mpConfig.webhook_url || ''); alert('URL copiada') }}>📋</button>
+                    </div>
+                  </div>
+                  {mpTestResult && (
+                    <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, fontSize: 12, background: mpTestResult.ok ? 'rgba(34,197,94,.08)' : 'rgba(239,68,68,.08)', border: '1px solid ' + (mpTestResult.ok ? 'rgba(34,197,94,.3)' : 'rgba(239,68,68,.3)'), color: mpTestResult.ok ? 'var(--ok)' : 'var(--bad)' }}>
+                      {mpTestResult.ok ? '✅ ' : '❌ '}{mpTestResult.msg}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                    <button type="button" className="btn btn-secondary" onClick={testMp} disabled={mpTesting}>{mpTesting ? '⏳ Probando...' : '🔌 Probar conexión'}</button>
+                    <button type="button" className="btn btn-primary" onClick={saveMpConfig} disabled={mpSaving}>{mpSaving ? '⏳ Guardando...' : '💾 Guardar MercadoPago'}</button>
+                  </div>
+                </>}
+              </div>
+
+              {/* Políticas de billing */}
+              <div className="card" style={{ maxWidth: 640, marginBottom: 16 }}>
+                <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase', marginBottom: 12 }}>📅 Políticas de vencimiento y avisos</h3>
+                {billingConfig && <>
+                  <div className="fr">
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Días de gracia (acceso permitido tras vencer)</label>
+                      <input type="number" min="0" max="30" value={billingConfig.grace_days} onChange={e => setBillingConfig(p => ({ ...p, grace_days: parseInt(e.target.value) || 0 }))} />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Días de aviso (lista separada por comas)</label>
+                      <input value={billingConfig.aviso_dias} onChange={e => setBillingConfig(p => ({ ...p, aviso_dias: e.target.value }))} placeholder="7,3,1,0,-1,-3" style={{ fontFamily: 'monospace', fontSize: 12 }} />
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--mu)', marginTop: 4, padding: '8px 12px', background: 'var(--sf)', borderRadius: 6 }}>
+                    💡 Se notifica a la empresa (campana + email) en cada uno de esos días respecto del vencimiento. Ej: 7 = "vence en 7 días", -1 = "venció ayer". Se evita duplicar avisos del mismo día.
+                  </div>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, marginTop: 12, cursor: 'pointer' }}>
+                    <input type="checkbox" checked={!!billingConfig.suspend_after_grace} onChange={e => setBillingConfig(p => ({ ...p, suspend_after_grace: e.target.checked }))} />
+                    Suspender empresa automáticamente al superar el período de gracia
+                  </label>
+                  <div style={{ marginTop: 14 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Asunto del email de comprobante/aviso (placeholders: {'{{empresa}} {{plan}} {{monto}} {{vencimiento}} {{comprobante}} {{dias}}'})</label>
+                    <input value={billingConfig.mail_subject} onChange={e => setBillingConfig(p => ({ ...p, mail_subject: e.target.value }))} placeholder="Pago confirmado — FlexCRM {{plan}}" />
+                  </div>
+                  <div style={{ marginTop: 12 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Cuerpo del email</label>
+                    <textarea value={billingConfig.mail_body} onChange={e => setBillingConfig(p => ({ ...p, mail_body: e.target.value }))} rows={4} placeholder="Dejar vacío para usar el texto por defecto" style={{ resize: 'vertical' }} />
+                  </div>
+                  <button type="button" className="btn btn-primary" style={{ marginTop: 14 }} onClick={saveBillingConfig} disabled={billingSaving}>{billingSaving ? '⏳ Guardando...' : '💾 Guardar políticas'}</button>
+                </>}
+              </div>
+
+              {/* Listado de pagos */}
+              <div className="card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
+                  <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase' }}>🧾 Cobros registrados</h3>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    <select value={pagosFiltro} onChange={e => { setPagosFiltro(e.target.value); setTimeout(loadPagos, 0) }} style={{ ...S.select, width: 'auto', fontSize: 12, padding: '6px 10px' }}>
+                      <option value="">Todos</option>
+                      <option value="approved">✅ Aprobados</option>
+                      <option value="pending">⏳ Pendientes</option>
+                      <option value="rejected">❌ Rechazados</option>
+                    </select>
+                    <input type="month" value={pagosMes} onChange={e => { setPagosMes(e.target.value); setTimeout(loadPagos, 0) }} style={{ border: '1px solid var(--bd)', borderRadius: 6, fontSize: 12, padding: '6px 10px' }} />
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={exportPagosCSV} title="Exportar aprobados a CSV">📥 CSV</button>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={loadPagos}>↻</button>
+                  </div>
+                </div>
+                <div style={{ overflowX: 'auto' }}>
+                  <table>
+                    <thead><tr><th>Fecha</th><th>Empresa</th><th>Plan</th><th>Tipo</th><th>Origen</th><th>Monto</th><th>Estado</th><th>Comprobante</th><th></th></tr></thead>
+                    <tbody>
+                      {pagosList.length === 0 && <tr><td colSpan={9} style={{ textAlign: 'center', padding: 40, color: 'var(--mu)' }}>Sin pagos registrados</td></tr>}
+                      {pagosList.map(p => {
+                        const ESTADOS = { approved: ['✅ Aprobado', 'badge-green'], pending: ['⏳ Pendiente', 'badge-yellow'], rejected: ['❌ Rechazado', 'badge-red'], cancelled: ['🚫 Cancelado', 'badge-gray'], refunded: ['↩️ Reembolsado', 'badge-gray'] }
+                        const [estLabel, estCls] = ESTADOS[p.estado] || [p.estado, 'badge-gray']
+                        return (
+                          <tr key={p.id} style={{ fontSize: 12 }}>
+                            <td style={{ whiteSpace: 'nowrap' }} data-label="Fecha">{p.creado ? new Date(p.creado).toLocaleDateString('es-AR') : '—'}</td>
+                            <td data-label="Empresa"><span style={{ fontWeight: 600 }}>{p.empresa_nombre || p.empresa_codigo || '—'}</span></td>
+                            <td data-label="Plan">{p.plan_nombre || p.plan_id}</td>
+                            <td data-label="Tipo"><span className="badge badge-blue" style={{ fontSize: 10 }}>{p.tipo}</span></td>
+                            <td data-label="Origen" style={{ fontSize: 11, color: 'var(--mu)' }}>{p.origen === 'manual_efectivo' ? '💵 Efectivo' : p.origen === 'manual_transferencia' ? '🏦 Transferencia' : '💳 MercadoPago'}</td>
+                            <td data-label="Monto" style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{p.monto != null ? '$' + Number(p.monto).toLocaleString('es-AR') : '—'}</td>
+                            <td data-label="Estado"><span className={`badge ${estCls}`} style={{ fontSize: 10 }}>{estLabel}</span></td>
+                            <td data-label="Comprobante" style={{ fontFamily: 'monospace', fontSize: 11 }}>{p.comprobante_num || '—'}</td>
+                            <td data-label="Acciones" style={{ whiteSpace: 'nowrap' }}>
+                              {p.estado === 'approved' && <button type="button" className="btn btn-secondary btn-sm" style={{ fontSize: 10 }} title="Regenerar comprobante PDF" onClick={() => reenviarComprobante(p.id)}>📄</button>}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Log de webhooks */}
+              <details className="card" style={{ marginTop: 16 }}>
+                <summary style={{ cursor: 'pointer', fontWeight: 700, fontSize: 13, color: 'var(--mu)' }}>🔍 Log de webhooks MercadoPago ({webhookLogs.length})</summary>
+                <div style={{ marginTop: 12, maxHeight: 300, overflowY: 'auto' }}>
+                  {webhookLogs.length === 0 ? <div style={{ color: 'var(--mu)', textAlign: 'center', padding: 20 }}>Sin eventos</div> : (
+                    <table>
+                      <thead><tr><th>Fecha</th><th>Payment ID</th><th>Firma</th><th>Procesado</th><th>Error</th></tr></thead>
+                      <tbody>
+                        {webhookLogs.map(w => (
+                          <tr key={w.id} style={{ fontSize: 11 }}>
+                            <td style={{ whiteSpace: 'nowrap' }}>{w.creado ? new Date(w.creado).toLocaleString('es-AR') : '—'}</td>
+                            <td style={{ fontFamily: 'monospace', fontSize: 10 }}>{w.mp_payment_id || '—'}</td>
+                            <td>{w.firma_valida ? '✅' : '❌'}</td>
+                            <td>{w.procesado ? '✅' : '❌'}</td>
+                            <td style={{ color: 'var(--bad)', maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={w.error}>{w.error || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              </details>
+            </>
+          )}
+
           {/* ═══════ ATRIBUTOS POR RUBRO ═══════ */}
           {tab === 'atributos' && (
             <div className="card">
@@ -2085,7 +2328,7 @@ export default function Superadmin() {
             <div className="modal-body" style={{ maxHeight: '70vh', overflowY: 'auto' }}>
               {/* Tabs */}
               <div style={{display:'flex',gap:4,marginBottom:14,borderBottom:'2px solid var(--bd)',paddingBottom:8,flexWrap:'wrap'}}>
-                {[['info','📋 Info'],['audit','📋 Auditoría'],['apps','📦 Apps'],['integraciones','🔌 Integraciones'],['notas','📝 Notas']].map(([k,l]) => (
+                {[['info','📋 Info'],['pagos','💳 Pagos'],['vencimientos','📅 Vencimientos'],['audit','📋 Auditoría'],['apps','📦 Apps'],['integraciones','🔌 Integraciones'],['notas','📝 Notas']].map(([k,l]) => (
                   <button key={k} type="button" className={`btn btn-sm ${empresaDetailTab===k?'btn-primary':'btn-secondary'}`} onClick={() => setEmpresaDetailTab(k)}>{l}</button>
                 ))}
               </div>
@@ -2157,6 +2400,124 @@ export default function Superadmin() {
                         </div>
                       )}
                       <div style={{fontSize:11,color:'var(--mu)'}}>Creado: {empresaDetail.creado ? new Date(empresaDetail.creado).toLocaleString('es-AR') : '—'}</div>
+                    </div>
+                  )}
+
+                  {/* ═══ Tab Pagos ═══ */}
+                  {empresaDetailTab === 'pagos' && (
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                        <div style={{ fontSize: 12, color: 'var(--mu)' }}>{detailPagos.length} pago(s) registrados</div>
+                        <button type="button" className="btn btn-primary btn-sm"
+                          onClick={() => {
+                            const planActual = empresaDetail.plan_id || ''
+                            setManualPagoForm({ plan_id: planActual, monto: '', origen: 'manual_efectivo', notas: '' })
+                            setManualPagoModal(true)
+                          }}>
+                          + Registrar pago manual
+                        </button>
+                      </div>
+                      {detailPagos.length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: 24, color: 'var(--mu)' }}>Sin pagos registrados para esta empresa.</div>
+                      ) : (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table>
+                            <thead><tr><th>Fecha</th><th>Plan</th><th>Tipo</th><th>Origen</th><th>Monto</th><th>Estado</th><th>Comprobante</th><th></th></tr></thead>
+                            <tbody>
+                              {detailPagos.map(p => {
+                                const EST = { approved: ['✅', 'badge-green'], pending: ['⏳', 'badge-yellow'], rejected: ['❌', 'badge-red'], cancelled: ['🚫', 'badge-gray'], refunded: ['↩️', 'badge-gray'] }
+                                const [icon, cls] = EST[p.estado] || [p.estado, 'badge-gray']
+                                return (
+                                  <tr key={p.id} style={{ fontSize: 12 }}>
+                                    <td style={{ whiteSpace: 'nowrap' }}>{p.creado ? new Date(p.creado).toLocaleDateString('es-AR') : '—'}</td>
+                                    <td>{p.plan_nombre || p.plan_id}</td>
+                                    <td><span className="badge badge-blue" style={{ fontSize: 9 }}>{p.tipo}</span></td>
+                                    <td style={{ fontSize: 11, color: 'var(--mu)' }}>{p.origen === 'manual_efectivo' ? '💵 Efectivo' : p.origen === 'manual_transferencia' ? '🏦 Transferencia' : '💳 MP'}</td>
+                                    <td style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{p.monto != null ? '$' + Number(p.monto).toLocaleString('es-AR') : '—'}</td>
+                                    <td><span className={`badge ${cls}`} style={{ fontSize: 10 }}>{icon} {p.estado}</span></td>
+                                    <td style={{ fontFamily: 'monospace', fontSize: 10 }}>{p.comprobante_num || '—'}</td>
+                                    <td>
+                                      {p.estado === 'approved' && (
+                                        <button type="button" className="btn btn-secondary btn-sm" style={{ fontSize: 10 }} title="Regenerar comprobante" onClick={() => reenviarComprobante(p.id)}>📄</button>
+                                      )}
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+
+                      {/* Modal pago manual */}
+                      {manualPagoModal && (
+                        <div className="modal-overlay" onClick={() => setManualPagoModal(false)}>
+                          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
+                            <div className="modal-header"><h3>💵 Registrar pago manual</h3><button type="button" onClick={() => setManualPagoModal(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--mu)' }}>×</button></div>
+                            <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                              <div>
+                                <label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Plan a aplicar</label>
+                                <select value={manualPagoForm.plan_id} onChange={e => setManualPagoForm(p => ({ ...p, plan_id: e.target.value }))} style={{ width: '100%' }}>
+                                  {planes.map(pl => <option key={pl.id} value={pl.id}>{pl.nombre} (${pl.precio || 0}{pl.periodo === 'anual' ? '/año' : '/mes'})</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Monto cobrado</label>
+                                <input type="number" min="0" step="0.01" value={manualPagoForm.monto} onChange={e => setManualPagoForm(p => ({ ...p, monto: e.target.value }))} placeholder={'Sugerido: ' + ((planes.find(x => x.id === manualPagoForm.plan_id) || {}).precio || '')} style={{ width: '100%' }} />
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Medio de cobro</label>
+                                <select value={manualPagoForm.origen} onChange={e => setManualPagoForm(p => ({ ...p, origen: e.target.value }))} style={{ width: '100%' }}>
+                                  <option value="manual_efectivo">💵 Efectivo</option>
+                                  <option value="manual_transferencia">🏦 Transferencia bancaria</option>
+                                </select>
+                              </div>
+                              <div>
+                                <label style={{ display: 'block', marginBottom: 4, fontSize: 11, fontWeight: 600, color: 'var(--mu)' }}>Notas (opcional)</label>
+                                <textarea value={manualPagoForm.notas} onChange={e => setManualPagoForm(p => ({ ...p, notas: e.target.value }))} rows={2} style={{ width: '100%', resize: 'vertical' }} placeholder="Ej: transferencia HSBC, nº operación..." />
+                              </div>
+                              <div style={{ fontSize: 11, color: 'var(--mu)', padding: '8px 10px', background: 'var(--sf)', borderRadius: 6 }}>
+                                Al registrar: se extiende el vencimiento, se actualiza el plan, se genera comprobante PDF y se envía email al cliente.
+                              </div>
+                            </div>
+                            <div className="modal-footer">
+                              <button type="button" className="btn btn-secondary" onClick={() => setManualPagoModal(false)}>Cancelar</button>
+                              <button type="button" className="btn btn-primary" onClick={registrarPagoManual} disabled={manualPagoSaving}>{manualPagoSaving ? '⏳ Registrando...' : '💾 Registrar pago'}</button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* ═══ Tab Vencimientos ═══ */}
+                  {empresaDetailTab === 'vencimientos' && (
+                    <div>
+                      {detailVencimientos?.empresa && (
+                        <div style={{ padding: '10px 14px', background: 'var(--sf)', borderRadius: 8, border: '1px solid var(--bd)', marginBottom: 14, fontSize: 13, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          <span>📅 <strong>Vencimiento actual:</strong> {detailVencimientos.empresa.vencimiento_actual ? new Date(detailVencimientos.empresa.vencimiento_actual).toLocaleDateString('es-AR') : '—'}</span>
+                          <span>📦 <strong>Plan:</strong> {detailVencimientos.empresa.plan_id || '—'}</span>
+                        </div>
+                      )}
+                      {(detailVencimientos?.eventos || []).length === 0 ? (
+                        <div style={{ textAlign: 'center', padding: 24, color: 'var(--mu)' }}>Sin historial de pagos ni cambios de vencimiento.</div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                          {detailVencimientos.eventos.map((ev, i) => (
+                            <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', padding: '8px 10px', borderLeft: ev.tipo === 'pago' ? '3px solid var(--ok)' : '3px solid var(--ac2)', background: 'var(--sf)', borderRadius: 6 }}>
+                              <span style={{ fontSize: 14, flexShrink: 0 }}>{ev.tipo === 'pago' ? '💳' : '📋'}</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 12, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.detalle || ev.accion || '—'}</div>
+                                <div style={{ fontSize: 10, color: 'var(--mu)' }}>
+                                  {ev.fecha ? new Date(ev.fecha).toLocaleString('es-AR') : '—'}
+                                  {ev.comprobante && <span style={{ marginLeft: 8, fontFamily: 'monospace' }}>CP: {ev.comprobante}</span>}
+                                  {ev.accion && <span className="badge badge-gray" style={{ marginLeft: 8, fontSize: 9 }}>{ev.accion}</span>}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
 

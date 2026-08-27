@@ -17,8 +17,11 @@ const { master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa,
         getOAuthProviders, getOAuthProvider,
         getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas,
         setEmpresaIntegracion, setEmpresaIntegracionesBatch,
-        syncEmpresaIntegracionesDesdePlan } = require('../db_master');
+        syncEmpresaIntegracionesDesdePlan,
+        createSaasPago, getSaasPago, getSaasPagosPorEmpresa, getSaasPagos, getSaasWebhookLogs,
+        getBillingConfig, setBillingConfig } = require('../db_master');
 const { getEmpresaDB } = require('../db_sqlite');
+const { encryptValue, decryptValue } = require('../lib/crypto-utils');
 const { validate, superadminLoginSchema } = require('../middleware/validate');
 const { purgeEmpresa } = require('../lib/purgeEmpresa');
 
@@ -1689,6 +1692,214 @@ router.post('/email-test', superAuth, (req, res) => {
     ).then(() => res.json({ ok: true, message: 'Mail de prueba enviado ✅' }))
       .catch(e => res.status(500).json({ error: 'Error SMTP: ' + e.message }));
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ══════════════════════════════════════
+// BILLING / MERCADOPAGO (configurable desde SuperAdmin)
+// ══════════════════════════════════════
+
+// GET /api/superadmin/mp-config — config MP (token enmascarado)
+router.get('/mp-config', superAuth, (req, res) => {
+  const mp = require('../lib/mercadopago');
+  const cfg = mp.getMpConfig();
+  res.json({
+    enabled: !!cfg.enabled,
+    mode: cfg.mode,
+    access_token_configurado: !!cfg.accessToken,
+    access_token_masked: cfg.accessToken ? '***' : '',
+    public_key: cfg.publicKey,
+    webhook_secret_configurado: !!cfg.webhookSecret,
+    webhook_url: mp.getWebhookUrl(),
+    currency: getGlobalConfig('mp_currency') || 'ARS',
+    back_url_base: cfg.backUrlBase,
+  });
+});
+
+// PUT /api/superadmin/mp-config — guarda config (token encriptado)
+router.put('/mp-config', superAuth, (req, res) => {
+  const { enabled, mode, access_token, public_key, webhook_secret, currency, back_url_base } = req.body;
+  setGlobalConfig('mp_enabled', enabled ? '1' : '0');
+  if (mode) setGlobalConfig('mp_mode', mode === 'live' ? 'live' : 'test');
+  if (access_token && access_token.trim() && !access_token.includes('***')) {
+    setGlobalConfig('mp_access_token', encryptValue(access_token.trim()));
+  }
+  if (public_key !== undefined) setGlobalConfig('mp_public_key', String(public_key || '').trim());
+  if (webhook_secret && webhook_secret.trim() && !webhook_secret.includes('***')) {
+    setGlobalConfig('mp_webhook_secret', encryptValue(webhook_secret.trim()));
+  }
+  if (currency) setGlobalConfig('mp_currency', String(currency).trim());
+  if (back_url_base !== undefined) setGlobalConfig('mp_back_url_base', String(back_url_base || '').trim());
+  saAudit(req.sadmin.id, 'config_mercadopago', null, 'Configuración MercadoPago actualizada (enabled=' + (enabled ? '1' : '0') + ', mode=' + (mode || 'test') + ')');
+  res.json({ ok: true });
+});
+
+// POST /api/superadmin/mp-test — prueba conexión con token configurado
+router.post('/mp-test', superAuth, async (req, res) => {
+  try {
+    const mp = require('../lib/mercadopago');
+    const data = await mp.testConnection();
+    saAudit(req.sadmin.id, 'mercadopago_test', null, 'Test conexión MP exitoso');
+    res.json({ ok: true, message: 'Conexión exitosa — cuenta: ' + (data.nickname || data.email || 'MercadoPago') });
+  } catch(e) {
+    saAudit(req.sadmin.id, 'mercadopago_test', null, 'Test conexión MP falló: ' + e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// GET /api/superadmin/billing/config — políticas de billing (grace, avisos, templates)
+router.get('/billing/config', superAuth, (req, res) => {
+  res.json(getBillingConfig());
+});
+
+// PUT /api/superadmin/billing/config
+router.put('/billing/config', superAuth, (req, res) => {
+  setBillingConfig(req.body || {});
+  saAudit(req.sadmin.id, 'config_billing', null, 'Políticas de billing actualizadas');
+  res.json({ ok: true, config: getBillingConfig() });
+});
+
+// GET /api/superadmin/saas-pagos — todos los pagos (filtro estado/mes)
+router.get('/saas-pagos', superAuth, (req, res) => {
+  const { estado, mes } = req.query;
+  const pagos = getSaasPagos({ estado: estado || null, mes: mes || null, limit: 500 });
+  const planes = getPlanes();
+  const empresas = getEmpresas();
+  const enriched = pagos.map(p => ({
+    ...p,
+    empresa_nombre: (empresas.find(e => e.codigo === p.empresa_codigo) || {}).nombre || p.empresa_codigo || '—',
+    plan_precio_actual: (planes.find(x => x.id === p.plan_id) || {}).precio,
+  }));
+  res.json(enriched);
+});
+
+// GET /api/superadmin/saas-pagos/export?mes=YYYY-MM — CSV para contabilidad
+router.get('/saas-pagos/export', superAuth, (req, res) => {
+  const { mes } = req.query;
+  const pagos = getSaasPagos({ mes: mes || null, estado: 'approved', limit: 2000 });
+  const BOM = '\uFEFF';
+  const header = 'Fecha,Empresa,Codigo,Plan,Tipo,Origen,Monto,Moneda,Comprobante,Payment ID\n';
+  const rows = pagos.map(p => [
+    (p.creado || '').substr(0, 10),
+    '"' + String(p.empresa_codigo || '—').replace(/"/g, '""') + '"',
+    '"' + String(p.plan_nombre || p.plan_id || '').replace(/"/g, '""') + '"',
+    p.tipo || '', p.origen || '',
+    p.monto != null ? p.monto : 0, p.moneda || 'ARS',
+    '"' + String(p.comprobante_num || '').replace(/"/g, '""') + '"',
+    '"' + String(p.mp_payment_id || '').replace(/"/g, '""') + '"',
+  ].join(','));
+  res.setHeader('Content-Type', 'text/csv;charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="saas-pagos' + (mes ? '-' + mes : '') + '.csv"');
+  res.send(BOM + header + rows.join('\n'));
+});
+
+// GET /api/superadmin/saas-webhooks — log de webhooks MP
+router.get('/saas-webhooks', superAuth, (req, res) => {
+  res.json(getSaasWebhookLogs(parseInt(req.query.limit) || 100));
+});
+
+// GET /api/superadmin/empresas/:codigo/pagos — auditoría de pagos por empresa
+router.get('/empresas/:codigo/pagos', superAuth, (req, res) => {
+  const codigo = req.params.codigo;
+  const pagos = getSaasPagosPorEmpresa(codigo, 200);
+  res.json(pagos);
+});
+
+// GET /api/superadmin/empresas/:codigo/vencimientos — timeline de vencimientos/planes
+router.get('/empresas/:codigo/vencimientos', superAuth, (req, res) => {
+  const codigo = req.params.codigo;
+  const empresa = getEmpresa(codigo) || master.prepare("SELECT * FROM empresas WHERE codigo=?").get(codigo);
+  if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' });
+
+  const eventos = [];
+
+  // Pagos aprobados
+  const pagos = getSaasPagosPorEmpresa(codigo, 200).filter(p => p.estado === 'approved');
+  for (const p of pagos) {
+    eventos.push({
+      fecha: p.creado, tipo: 'pago', estado: p.estado,
+      detalle: `Pago ${p.origen} aprobado — ${p.plan_nombre || p.plan_id} — ${p.monto} ${p.moneda || 'ARS'}`,
+      comprobante: p.comprobante_num, plan_id: p.plan_id, monto: p.monto,
+    });
+  }
+
+  // Auditoría de acciones de plan/vencimiento
+  try {
+    const accionPlan = master.prepare(
+      "SELECT * FROM sa_audit_log WHERE (empresa_id=? OR empresa_id=?) AND (accion LIKE 'plan_%' OR accion IN ('renovar_suscripcion','crear_empresa','editar_empresa','pago_aprobado','pago_manual','vencimiento_notificado','suspension_automatica')) ORDER BY fecha DESC LIMIT 100"
+    ).all(codigo, empresa.id);
+    for (const a of accionPlan) {
+      eventos.push({ fecha: a.fecha, tipo: 'auditoria', accion: a.accion, detalle: a.detalle || '' });
+    }
+  } catch(e) {}
+
+  eventos.sort((a, b) => (b.fecha || '').localeCompare(a.fecha || ''));
+
+  res.json({
+    empresa: { codigo: empresa.codigo, nombre: empresa.nombre, vencimiento_actual: empresa.vencimiento, plan_id: empresa.plan_id },
+    eventos,
+  });
+});
+
+// POST /api/superadmin/empresas/:codigo/pagos/manual — registrar pago por fuera de MP
+// Usa el MISMO camino que el webhook (aplicarPago) → plan, vencimiento, comprobante, mail.
+router.post('/empresas/:codigo/pagos/manual', superAuth, async (req, res) => {
+  try {
+    const empresa = getEmpresa(req.params.codigo) || master.prepare("SELECT * FROM empresas WHERE codigo=?").get(req.params.codigo);
+    if (!empresa) return res.status(404).json({ error: 'Empresa no encontrada' });
+    const { plan_id, monto, origen, notas } = req.body;
+    const plan = getPlan(plan_id || empresa.plan_id);
+    if (!plan) return res.status(400).json({ error: 'Plan no encontrado' });
+    const montoFinal = parseFloat(monto) || parseFloat(plan.precio) || 0;
+    if (montoFinal <= 0) return res.status(400).json({ error: 'Monto inválido' });
+
+    const pagoId = createSaasPago({
+      empresa_codigo: empresa.codigo, empresa_id: empresa.id,
+      plan_id: plan.id, plan_nombre: plan.nombre, precio_snapshot: parseFloat(plan.precio) || null,
+      tipo: 'manual', monto: montoFinal, moneda: getGlobalConfig('mp_currency') || 'ARS',
+      estado: 'pending', origen: origen === 'manual_transferencia' ? 'manual_transferencia' : 'manual_efectivo',
+      mp_external_ref: 'man_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+      data: { notas: String(notas || '').substring(0, 500), superadmin: req.sadmin.nombre || req.sadmin.usuario },
+    });
+
+    const pago = getSaasPago(pagoId);
+    const { aplicarPago } = require('../lib/billing/aplicar-pago');
+    await aplicarPago(pago);
+
+    const final = getSaasPago(pagoId);
+    saAudit(req.sadmin.id, 'pago_manual', empresa.id,
+      `Pago manual registrado — ${plan.nombre} — ${montoFinal} ${final.moneda} — comprobante ${final.comprobante_num || ''}`);
+    res.json({ ok: true, pago: final, mensaje: 'Pago registrado. Plan y vencimiento actualizados, comprobante enviado.' });
+  } catch(e) {
+    console.error('[PagoManual] Error:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// POST /api/superadmin/saas-pagos/:id/comprobante — regenerar comprobante PDF
+router.post('/saas-pagos/:id/comprobante', superAuth, async (req, res) => {
+  try {
+    const pago = getSaasPago(req.params.id);
+    if (!pago) return res.status(404).json({ error: 'Pago no encontrado' });
+    const empresa = pago.empresa_codigo ? (getEmpresa(pago.empresa_codigo) || master.prepare("SELECT * FROM empresas WHERE codigo=?").get(pago.empresa_codigo)) : null;
+    const compNum = pago.comprobante_num || 'MP-' + new Date().getFullYear() + '-' + String(Date.now()).substr(-4);
+    const { generarComprobantePDF } = require('../lib/comprobante-saas');
+    const pdfPath = generarComprobantePDF({
+      comprobanteNum: compNum,
+      empresa: empresa ? empresa.nombre : (pago.data && pago.data.empresa_nombre) || 'FlexCRM',
+      empresaCodigo: pago.empresa_codigo || '',
+      plan: pago.plan_nombre || pago.plan_id,
+      monto: pago.monto, moneda: pago.moneda || 'ARS',
+      tipo: pago.tipo, vencimiento: empresa ? empresa.vencimiento : null,
+      prorrateo: pago.prorrateo, origen: pago.origen,
+      fecha: pago.creado || new Date().toISOString(),
+    });
+    const { master: m } = require('../db_master');
+    m.prepare("UPDATE saas_pagos SET comprobante_num=?, comprobante_path=? WHERE id=?").run(compNum, pdfPath, pago.id);
+    saAudit(req.sadmin.id, 'comprobante_regenerado', pago.empresa_id || null, 'Comprobante ' + compNum + ' regenerado');
+    res.json({ ok: true, comprobante_num: compNum });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── Superadmin forgot-password ──

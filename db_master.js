@@ -294,7 +294,44 @@ master.exec(`
     actualizado TEXT,
     UNIQUE(empresa_id, provider)
   );
+
+  CREATE TABLE IF NOT EXISTS saas_pagos (
+    id TEXT PRIMARY KEY,
+    empresa_codigo TEXT,
+    empresa_id TEXT,
+    plan_id TEXT NOT NULL,
+    plan_nombre TEXT,
+    precio_snapshot REAL,
+    tipo TEXT DEFAULT 'renovacion',
+    monto REAL,
+    moneda TEXT DEFAULT 'ARS',
+    estado TEXT DEFAULT 'pending',
+    origen TEXT DEFAULT 'mercadopago',
+    mp_preference_id TEXT,
+    mp_payment_id TEXT UNIQUE,
+    mp_external_ref TEXT UNIQUE,
+    prorrateo TEXT,
+    comprobante_num TEXT,
+    comprobante_path TEXT,
+    creado TEXT,
+    actualizado TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_saas_pagos_empresa ON saas_pagos(empresa_codigo, estado);
+  CREATE INDEX IF NOT EXISTS idx_saas_pagos_estado ON saas_pagos(estado, creado);
+
+  CREATE TABLE IF NOT EXISTS saas_webhook_log (
+    id TEXT PRIMARY KEY,
+    mp_payment_id TEXT,
+    payload TEXT,
+    firma_valida INTEGER DEFAULT 0,
+    procesado INTEGER DEFAULT 0,
+    error TEXT,
+    creado TEXT
+  );
 `);
+
+// Migración idempotente: columna data en saas_pagos (payload de signup, notas)
+try { master.exec("ALTER TABLE saas_pagos ADD COLUMN data TEXT DEFAULT '{}'"); } catch(e) {}
 
 // ── Migración idempotente: columnas de analítica (Jul 2026) ──
 const landingCols = master.prepare("PRAGMA table_info(landing_leads)").all().map(c => c.name);
@@ -1088,4 +1125,126 @@ try {
 } catch(_) {}
 
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
-module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getLandingLeadsFull, getLandingStats, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado, getOAuthProviders, getOAuthProvider, upsertOAuthProvider, getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas, setEmpresaIntegracion, setEmpresaIntegracionesBatch, syncEmpresaIntegracionesDesdePlan };
+module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getLandingLeadsFull, getLandingStats, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado, getOAuthProviders, getOAuthProvider, upsertOAuthProvider, getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas, setEmpresaIntegracion, setEmpresaIntegracionesBatch, syncEmpresaIntegracionesDesdePlan, createSaasPago, getSaasPago, getSaasPagoByRef, getSaasPagoByPaymentId, updateSaasPago, getSaasPagosPorEmpresa, getSaasPagos, logSaasWebhook, getSaasWebhookLogs, getBillingConfig, setBillingConfig };
+
+// ═══════════════════════════════════════════
+// SAAS BILLING (pagos de suscripción)
+// ═══════════════════════════════════════════
+
+function createSaasPago(data) {
+  const id = 'pay_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+  const ahora = new Date().toISOString();
+  master.prepare(`INSERT INTO saas_pagos
+    (id, empresa_codigo, empresa_id, plan_id, plan_nombre, precio_snapshot, tipo, monto, moneda, estado, origen,
+     mp_preference_id, mp_payment_id, mp_external_ref, prorrateo, comprobante_num, comprobante_path, data, creado, actualizado)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+    id, data.empresa_codigo || null, data.empresa_id || null, data.plan_id,
+    data.plan_nombre || null, data.precio_snapshot != null ? data.precio_snapshot : null,
+    data.tipo || 'renovacion', data.monto != null ? data.monto : null, data.moneda || 'ARS',
+    data.estado || 'pending', data.origen || 'mercadopago',
+    data.mp_preference_id || null, data.mp_payment_id || null, data.mp_external_ref || null,
+    data.prorrateo ? JSON.stringify(data.prorrateo) : null,
+    data.comprobante_num || null, data.comprobante_path || null,
+    data.data ? JSON.stringify(data.data) : '{}',
+    ahora, ahora
+  );
+  return id;
+}
+
+function parsePagoRow(p) {
+  return {
+    ...p,
+    prorrateo: p.prorrateo ? JSON.parse(p.prorrateo) : null,
+    data: (() => { try { return typeof p.data === 'string' ? JSON.parse(p.data || '{}') : (p.data || {}); } catch { return {}; } })(),
+  };
+}
+
+function getSaasPago(id) {
+  const p = master.prepare("SELECT * FROM saas_pagos WHERE id=?").get(id);
+  if (!p) return null;
+  return parsePagoRow(p);
+}
+
+function getSaasPagoByRef(mp_external_ref) {
+  const p = master.prepare("SELECT * FROM saas_pagos WHERE mp_external_ref=?").get(mp_external_ref);
+  if (!p) return null;
+  return parsePagoRow(p);
+}
+
+function getSaasPagoByPaymentId(mp_payment_id) {
+  const p = master.prepare("SELECT * FROM saas_pagos WHERE mp_payment_id=?").get(mp_payment_id);
+  if (!p) return null;
+  return parsePagoRow(p);
+}
+
+function updateSaasPago(id, data) {
+  const existing = getSaasPago(id);
+  if (!existing) return false;
+  const merged = { ...existing, ...data };
+  master.prepare(`UPDATE saas_pagos SET empresa_codigo=?, empresa_id=?, plan_id=?, plan_nombre=?, precio_snapshot=?,
+    tipo=?, monto=?, moneda=?, estado=?, origen=?, mp_preference_id=?, mp_payment_id=?, mp_external_ref=?,
+    prorrateo=?, comprobante_num=?, comprobante_path=?, data=?, actualizado=? WHERE id=?`).run(
+    merged.empresa_codigo || null, merged.empresa_id || null, merged.plan_id,
+    merged.plan_nombre || null, merged.precio_snapshot != null ? merged.precio_snapshot : null,
+    merged.tipo || 'renovacion', merged.monto != null ? merged.monto : null, merged.moneda || 'ARS',
+    merged.estado || 'pending', merged.origen || 'mercadopago',
+    merged.mp_preference_id || null, merged.mp_payment_id || null, merged.mp_external_ref || null,
+    merged.prorrateo ? JSON.stringify(merged.prorrateo) : null,
+    merged.comprobante_num || null, merged.comprobante_path || null,
+    merged.data ? JSON.stringify(merged.data) : '{}',
+    new Date().toISOString(), id
+  );
+  return true;
+}
+
+function getSaasPagosPorEmpresa(empresaCodigo, limit) {
+  const rows = master.prepare(
+    "SELECT * FROM saas_pagos WHERE empresa_codigo=? ORDER BY creado DESC LIMIT ?"
+  ).all(empresaCodigo, parseInt(limit) || 100);
+  return rows.map(parsePagoRow);
+}
+
+function getSaasPagos(filtro) {
+  let sql = "SELECT * FROM saas_pagos WHERE 1=1";
+  const params = [];
+  if (filtro && filtro.estado) { sql += " AND estado=?"; params.push(filtro.estado); }
+  if (filtro && filtro.mes) { sql += " AND creado LIKE ?"; params.push(filtro.mes + '%'); }
+  sql += " ORDER BY creado DESC LIMIT ?";
+  params.push(parseInt(filtro && filtro.limit) || 300);
+  const rows = master.prepare(sql).all(...params);
+  return rows.map(parsePagoRow);
+}
+
+function logSaasWebhook(data) {
+  try {
+    master.prepare("INSERT INTO saas_webhook_log (id, mp_payment_id, payload, firma_valida, procesado, error, creado) VALUES (?,?,?,?,?,?,?)")
+      .run('wh_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+        data.mp_payment_id || null, data.payload ? data.payload.substring(0, 20000) : null,
+        data.firma_valida ? 1 : 0, data.procesado ? 1 : 0, data.error || null, new Date().toISOString());
+  } catch(e) {}
+}
+
+function getSaasWebhookLogs(limit) {
+  try {
+    return master.prepare("SELECT * FROM saas_webhook_log ORDER BY creado DESC LIMIT ?").all(parseInt(limit) || 100);
+  } catch(e) { return []; }
+}
+
+// Configuración de billing en global_config (no-encriptada, salvo token que va encriptado)
+function getBillingConfig() {
+  return {
+    grace_days: parseInt(getGlobalConfig('billing_grace_days')) || 3,
+    aviso_dias: getGlobalConfig('billing_aviso_dias') || '7,3,1,0,-1,-3',
+    mail_subject: getGlobalConfig('billing_mail_subject') || '',
+    mail_body: getGlobalConfig('billing_mail_body') || '',
+    suspend_after_grace: getGlobalConfig('billing_suspend_after_grace') === '1',
+  };
+}
+
+function setBillingConfig(data) {
+  if (data.grace_days !== undefined) setGlobalConfig('billing_grace_days', String(parseInt(data.grace_days) || 3));
+  if (data.aviso_dias !== undefined) setGlobalConfig('billing_aviso_dias', String(data.aviso_dias).replace(/[^\d,-]/g, ''));
+  if (data.mail_subject !== undefined) setGlobalConfig('billing_mail_subject', String(data.mail_subject));
+  if (data.mail_body !== undefined) setGlobalConfig('billing_mail_body', String(data.mail_body));
+  if (data.suspend_after_grace !== undefined) setGlobalConfig('billing_suspend_after_grace', data.suspend_after_grace ? '1' : '0');
+}

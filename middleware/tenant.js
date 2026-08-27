@@ -22,11 +22,23 @@ function validateTenant(req, res, next) {
       return res.status(403).json({ error: 'Empresa suspendida. Contactá al administrador.' });
     }
 
-    // 2. Check vencimiento
+    // 2. Check vencimiento (con grace period configurable desde SuperAdmin)
     if(empresa.vencimiento) {
       const hoy = new Date().toISOString().substr(0, 10);
       if(empresa.vencimiento < hoy) {
-        return res.status(402).json({ error: 'Suscripción vencida. Renová para continuar.' });
+        // Dias vencidos
+        const diasVencido = Math.ceil((new Date(hoy + 'T12:00:00') - new Date(empresa.vencimiento + 'T12:00:00')) / 86400000);
+        let graceDays = 3;
+        try {
+          const { getGlobalConfig } = require('../db_master');
+          graceDays = parseInt(getGlobalConfig('billing_grace_days')) || 3;
+        } catch(e) {}
+        if (diasVencido <= graceDays) {
+          // En período de gracia: se permite acceso pero se avisa al frontend
+          req.grace = { dias_vencido: diasVencido, grace_days: graceDays };
+        } else {
+          return res.status(402).json({ error: 'Suscripción vencida. Renová para continuar.' });
+        }
       }
     }
 

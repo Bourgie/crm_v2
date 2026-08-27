@@ -256,8 +256,16 @@ const signupLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// ── Body parsing ──
-app.use(express.json({ limit: '2mb' }));
+// ── Body parsing (rawBody capturado para verificar firma del webhook MP) ──
+app.use(express.json({
+  limit: '2mb',
+  verify: (req, res, buf) => {
+    const url = req.originalUrl || req.url || '';
+    if (url.startsWith('/api/billing/mp/webhook')) {
+      req.rawBody = buf.toString('utf8');
+    }
+  },
+}));
 app.use(express.urlencoded({ extended: true }));
 
 // ── X-Robots-Tag: hosts no públicos (app/admin/fly.dev) nunca indexables ──
@@ -456,6 +464,9 @@ app.use('/api', validateTenant);
 // ── Public: MercadoLibre OAuth callback (sin auth) ──
 app.use('/api/meli-callback', meliCallbackLimiter, require('./routes/sync-tienda-meli-callback'));
 
+// ── Public: MercadoPago webhook (sin auth, sin CSRF — firma HMAC verificada) ──
+app.use('/api/billing/mp/webhook', webhookReceptorLimiter, require('./routes/billing-mp').webhookRouter);
+
 // ── Public config endpoint (login branding, no auth needed) ──
 app.get('/api/config/public', (req, res) => {
   const empresa = req.query.empresa || 'default';
@@ -527,6 +538,7 @@ app.use('/api/superadmin',    superadminRouter);
 app.use('/api/landing',       landingLimiter, require('./routes/landing'));
 app.use('/api/user-data',     require('./routes/user-data'));
 app.use('/api/notificaciones', require('./routes/notificaciones'));
+app.use('/api/billing/mp',     require('./routes/billing-mp'));
 
 // ── Integrations Center ──
 app.use('/api/integration-center', require('./routes/integration-center/oauth.routes'));
@@ -599,6 +611,10 @@ if (require.main === module) {
   // Start pipeline automation (prospect reminders, auto-status, auto-archive)
   const { startStaleReminderScheduler } = require('./lib/stale-prospect-reminder');
   startStaleReminderScheduler();
+
+  // Start billing vencimiento reminders (notificación de vencimiento de plan)
+  const { startVencimientoScheduler } = require('./lib/vencimiento-reminder');
+  startVencimientoScheduler();
 
   function getLanIP() {
     const { networkInterfaces } = require('os');

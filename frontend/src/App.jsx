@@ -36,6 +36,9 @@ const Sucursales = lazy(() => import('./pages/Sucursales').then(m => ({ default:
 const RRHH = lazy(() => import('./pages/RRHH'))
 const Tesoreria = lazy(() => import('./pages/Tesoreria').then(m => ({ default: m.Tesoreria })))
 const Superadmin = lazy(() => import('./pages/Superadmin'))
+const PagoExitoso = lazy(() => import('./pages/PagoResultado').then(m => ({ default: m.PagoExitoso })))
+const PagoPendiente = lazy(() => import('./pages/PagoResultado').then(m => ({ default: m.PagoPendiente })))
+const PagoError = lazy(() => import('./pages/PagoResultado').then(m => ({ default: m.PagoError })))
 
 // App ecosystem
 const AppShell = lazy(() => import('./components/AppShell'))
@@ -62,6 +65,9 @@ export default function App() {
         <Route path="/politica-de-privacidad" element={<L><Privacidad /></L>} />
         <Route path="/politica-de-cookies" element={<L><CookiesPolicy /></L>} />
         <Route path="/app/activar-cuenta" element={<L><ActivarCuenta /></L>} />
+        <Route path="/app/pago-exitoso" element={<L><PagoExitoso /></L>} />
+        <Route path="/app/pago-pendiente" element={<L><PagoPendiente /></L>} />
+        <Route path="/app/pago-error" element={<L><PagoError /></L>} />
         <Route path="/app/2fa-setup" element={<L><Setup2FA /></L>} />
         <Route path="/app" element={<RequireAuth><Layout /></RequireAuth>}>
         <Route index element={<Navigate to="/app/dashboard" replace />} />

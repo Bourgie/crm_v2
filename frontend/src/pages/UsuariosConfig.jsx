@@ -1171,12 +1171,20 @@ function PlanTab({ api, toast }) {
   const [loading, setLoading] = useState(true)
   const [solicitando, setSolicitando] = useState(false)
   const [periodo, setPeriodo] = useState('mensual')
+  const [mpConf, setMpConf] = useState(null)
+  const [misPagos, setMisPagos] = useState([])
+  const [pagando, setPagando] = useState(null)
 
   const load = () => {
     setLoading(true)
     api('GET', '/config/plan').then(setData).catch(() => setData(null)).finally(() => setLoading(false))
   }
   useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    api('GET', '/billing/mp/config-public').then(setMpConf).catch(() => setMpConf({ enabled: false }))
+    api('GET', '/billing/mp/mis-pagos').then(p => setMisPagos(Array.isArray(p) ? p : [])).catch(() => setMisPagos([]))
+  }, [])
 
   if (loading) return <div style={{padding:20,textAlign:'center'}}><div className="spinner" style={{margin:'0 auto'}}/></div>
   if (!data) return <div style={{color:'var(--mu)',fontSize:13,padding:12}}>No se pudo cargar la información del plan.</div>
@@ -1232,10 +1240,64 @@ function PlanTab({ api, toast }) {
     finally { setSolicitando(false) }
   }
 
+  // Pago con MercadoPago (Checkout Pro redirect). Sin costo → flujo manual.
+  async function pagarConMP(planId, planNombre) {
+    setPagando(planId)
+    try {
+      const r = await api('POST', '/billing/mp/create-preference', { plan_id: planId })
+      if (r.no_pago_requerido) {
+        toast(r.mensaje || 'Este cambio no requiere pago', '')
+        await api('POST', '/config/plan/solicitar', { plan_id: planId, tipo: 'upgrade' })
+        toast('Solicitud enviada al administrador', 'ok')
+        return
+      }
+      if (r.init_point) { window.location.href = r.init_point; return }
+      toast('No se pudo iniciar el pago', 'err')
+    } catch (e) { toast(e.message, 'err') }
+    finally { setPagando(null) }
+  }
+
+  async function descargarComprobante(p) {
+    if (!p.comprobante_num) return
+    try {
+      const res = await fetch('/api/billing/mp/mis-pagos/' + p.id + '/comprobante', { credentials: 'include' })
+      if (!res.ok) throw new Error('No se pudo descargar')
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a'); a.href = url; a.download = (p.comprobante_num || 'comprobante') + '.pdf'; a.click()
+      URL.revokeObjectURL(url)
+    } catch (e) { toast(e.message, 'err') }
+  }
+
   const periodoActual = actual && (actual.periodo === 'anual' || actual.id.endsWith('_anual')) ? 'anual' : 'mensual'
 
   return (
     <div>
+      {/* Banner de vencimiento próximo / gracia */}
+      {vto && diasVto != null && diasVto <= 7 && (
+        <div style={{
+          padding: '12px 16px', borderRadius: 10, marginBottom: 14, fontSize: 13, fontWeight: 600,
+          background: diasVto <= 0 ? 'rgba(239,68,68,.1)' : 'rgba(245,158,11,.12)',
+          border: '1px solid ' + (diasVto <= 0 ? 'rgba(239,68,68,.4)' : 'rgba(245,158,11,.45)'),
+          color: diasVto <= 0 ? 'var(--bad)' : '#92400e',
+          display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+        }}>
+          <span style={{ flex: 1 }}>
+            {diasVto <= 0
+              ? (mpConf?.grace_days && Math.abs(diasVto) <= mpConf.grace_days
+                ? `⚠️ Tu suscripción venció hace ${Math.abs(diasVto)} días. Tenés ${mpConf.grace_days - Math.abs(diasVto)} día(s) de gracia para renovar.`
+                : '❌ Tu suscripción está vencida. Renová para continuar.')
+              : diasVto === 1 ? '🚨 Tu plan vence mañana.' : `⏰ Tu plan vence en ${diasVto} días (${vto.toLocaleDateString('es-AR')}).`}
+          </span>
+          {mpConf?.enabled && (
+            <button type="button" className="btn btn-primary btn-sm" style={{ whiteSpace: 'nowrap' }}
+              onClick={() => pagarConMP(actual.id, actual.nombre)} disabled={pagando === actual.id}>
+              {pagando === actual.id ? '⏳ Abriendo pago...' : '💳 Renovar ahora'}
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Plan actual */}
       {actual ? (
         <div style={{background:'var(--ac)',borderRadius:10,padding:'14px 18px',marginBottom:14,color:'#fff',display:'flex',gap:12,alignItems:'center'}}>
@@ -1310,17 +1372,63 @@ function PlanTab({ api, toast }) {
                   </div>
                 )}
                 {!esCurrent && !solPendiente && (
-                  <button type="button" className={`btn btn-sm ${esUpgrade?'btn-primary':''}`}
-                    style={esUpgrade?{}:{border:'1px solid var(--bd)'}}
-                    onClick={() => solicitarPlan(p.id, p.nombre, esUpgrade)}
-                    disabled={solicitando===p.id}>
-                    {solicitando===p.id ? '⏳ Enviando...' : esUpgrade ? `⬆ Mejorar a ${p.nombre}` : `⬇ Cambiar a ${p.nombre}`}
-                  </button>
+                  esUpgrade && mpConf?.enabled ? (
+                    <button type="button" className="btn btn-sm btn-primary"
+                      onClick={() => pagarConMP(p.id, p.nombre)}
+                      disabled={pagando===p.id}>
+                      {pagando===p.id ? '⏳ Abriendo pago...' : `💳 Pagar y mejorar a ${p.nombre}`}
+                    </button>
+                  ) : (
+                    <button type="button" className={`btn btn-sm ${esUpgrade?'btn-primary':''}`}
+                      style={esUpgrade?{}:{border:'1px solid var(--bd)'}}
+                      onClick={() => solicitarPlan(p.id, p.nombre, esUpgrade)}
+                      disabled={solicitando===p.id}>
+                      {solicitando===p.id ? '⏳ Enviando...' : esUpgrade ? `⬆ Mejorar a ${p.nombre}` : `⬇ Cambiar a ${p.nombre}`}
+                    </button>
+                  )
                 )}
               </div>
             )
           })}
-          <div style={{fontSize:11,color:'var(--mu)',marginTop:8}}>Los cambios son procesados por el administrador de FlexCRM. Te contactaremos a la brevedad.</div>
+          <div style={{fontSize:11,color:'var(--mu)',marginTop:8}}>
+            {mpConf?.enabled
+              ? 'Los upgrades se pagan al instante con MercadoPago. Los downgrades se aplican al renovar.'
+              : 'Los cambios son procesados por el administrador de FlexCRM. Te contactaremos a la brevedad.'}
+          </div>
+        </div>
+      )}
+
+      {/* Mis pagos */}
+      {misPagos.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 8 }}>🧾 Historial de pagos</div>
+          <div className="card" style={{ padding: 0 }}>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>Fecha</th><th>Plan</th><th>Tipo</th><th>Monto</th><th>Estado</th><th>Comprobante</th></tr></thead>
+                <tbody>
+                  {misPagos.map(p => {
+                    const cls = p.estado === 'approved' ? 'badge-green' : p.estado === 'pending' ? 'badge-yellow' : 'badge-red'
+                    const label = p.estado === 'approved' ? 'Aprobado' : p.estado === 'pending' ? 'Pendiente' : p.estado
+                    return (
+                      <tr key={p.id} style={{ fontSize: 12 }}>
+                        <td data-label="Fecha">{p.creado ? new Date(p.creado).toLocaleDateString('es-AR') : '—'}</td>
+                        <td data-label="Plan">{p.plan}</td>
+                        <td data-label="Tipo"><span className="badge badge-blue" style={{ fontSize: 10 }}>{p.tipo}</span></td>
+                        <td data-label="Monto" style={{ fontWeight: 700 }}>${Number(p.monto || 0).toLocaleString('es-AR')} {p.moneda || ''}</td>
+                        <td data-label="Estado"><span className={`badge ${cls}`} style={{ fontSize: 10 }}>{label}</span></td>
+                        <td data-label="Comprobante">
+                          {p.comprobante_num
+                            ? <button type="button" className="btn btn-secondary btn-sm" style={{ fontSize: 11 }} onClick={() => descargarComprobante(p)}>📄 {p.comprobante_num}</button>
+                            : <span style={{ color: 'var(--mu)', fontSize: 11 }}>—</span>}
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       )}
     </div>
