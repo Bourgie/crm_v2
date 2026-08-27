@@ -20,12 +20,13 @@ router.get('/config-public', (req, res) => {
     const { getBillingConfig } = require('../db_master');
     const billing = getBillingConfig();
     res.json({
-      enabled: mp.isEnabled(),
+      enabled: getGlobalConfig('mp_enabled') === '1',
+      configurado: mp.isEnabled(),
       aviso_dias: billing.aviso_dias,
       grace_days: billing.grace_days,
       public_key: getGlobalConfig('mp_public_key') || '',
     });
-  } catch(e) { res.json({ enabled: false }); }
+  } catch(e) { res.json({ enabled: false, configurado: false }); }
 });
 
 // ── Planes públicos (para landing / signup — solo id, nombre, precio, periodo) ──
@@ -144,26 +145,27 @@ router.post('/create-preference', async (req, res) => {
     if (!planNuevo) return res.status(400).json({ error: 'Plan no encontrado' });
     const planActual = getPlan(empresa.plan_id);
 
-    const prorrateo = calcularProrrateo(empresa, planActual, planNuevo);
     const esUpgrade = planActual && planNuevo && parseFloat(planNuevo.precio) > parseFloat(planActual.precio);
-    if (prorrateo.es_downgrade || !esUpgrade) {
-      return res.json({ no_pago_requerido: true, mensaje: 'Este cambio no requiere pago. Se procesará manualmente.' });
+    if (!esUpgrade) {
+      return res.json({ no_pago_requerido: true, mensaje: 'Usá el downgrade programado para cambiar a un plan inferior.', es_downgrade: true });
     }
-    if (!prorrateo.tiene_costo || !(prorrateo.monto > 0)) {
-      return res.json({ no_pago_requerido: true, mensaje: 'Sin costo ahora. Se procesará manualmente.' });
+    // Cobro completo: nuevo vencimiento es hoy+periodo, no prorrateo por días restantes
+    const monto = parseFloat(planNuevo.precio) || 0;
+    if (!(monto > 0)) {
+      return res.json({ no_pago_requerido: true, mensaje: 'Este plan no requiere pago.' });
     }
 
     const externalRef = 'upg_' + empresa.codigo + '_' + Date.now() + '_' + crypto.randomBytes(3).toString('hex');
     const pagoId = createSaasPago({
       empresa_codigo: empresa.codigo, empresa_id: empresa.id,
-      plan_id: planNuevo.id, plan_nombre: planNuevo.nombre, precio_snapshot: parseFloat(planNuevo.precio),
-      tipo: 'upgrade', monto: prorrateo.monto, moneda: getGlobalConfig('mp_currency') || 'ARS', estado: 'pending',
-      mp_external_ref: externalRef, prorrateo,
+      plan_id: planNuevo.id, plan_nombre: planNuevo.nombre, precio_snapshot: monto,
+      tipo: 'upgrade', monto, moneda: getGlobalConfig('mp_currency') || 'ARS', estado: 'pending',
+      mp_external_ref: externalRef, prorrateo: null,
       data: { usuario: req.user.nombre || req.user.usuario || '', usuario_id: req.user.id },
     });
-    const pref = await mp.createPreference({ monto: prorrateo.monto, external_ref: externalRef, planNombre: planNuevo.nombre, payerEmail: empresa.admin_email || undefined });
+    const pref = await mp.createPreference({ monto, external_ref: externalRef, planNombre: planNuevo.nombre, payerEmail: empresa.admin_email || undefined });
     updateSaasPago(pagoId, { mp_preference_id: pref.preference_id });
-    res.json({ ok: true, init_point: pref.init_point, pago_id: pagoId, external_ref: externalRef, monto: prorrateo.monto });
+    res.json({ ok: true, init_point: pref.init_point, pago_id: pagoId, external_ref: externalRef, monto });
   } catch(e) {
     console.error('[BillingCreatePreference] Error:', e.message);
     res.status(500).json({ error: e.message });

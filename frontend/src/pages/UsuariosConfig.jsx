@@ -1184,9 +1184,20 @@ function PlanTab({ api, toast }) {
   const [downgradePending, setDowngradePending] = useState(null)
 
   useEffect(() => {
-    api('GET', '/billing/mp/config-public').then(setMpConf).catch(() => setMpConf({ enabled: false }))
+    api('GET', '/billing/mp/config-public').then(setMpConf).catch(() => setMpConf({ enabled: false, configurado: false }))
     api('GET', '/billing/mp/mis-pagos').then(p => setMisPagos(Array.isArray(p) ? p : [])).catch(() => setMisPagos([]))
     api('GET', '/billing/mp/downgrade-pending').then(p => setDowngradePending(p)).catch(() => setDowngradePending(null))
+  }, [])
+
+  // Refresca plan al volver a la pestaña (sincroniza precio editado en SuperAdmin)
+  useEffect(() => {
+    const onFocus = () => {
+      api('GET', '/config/plan').then(setData).catch(() => {})
+      api('GET', '/billing/mp/config-public').then(setMpConf).catch(() => {})
+    }
+    window.addEventListener('focus', onFocus)
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) onFocus() })
+    return () => { window.removeEventListener('focus', onFocus); document.removeEventListener('visibilitychange', onFocus) }
   }, [])
 
   if (loading) return <div style={{padding:20,textAlign:'center'}}><div className="spinner" style={{margin:'0 auto'}}/></div>
@@ -1317,12 +1328,19 @@ function PlanTab({ api, toast }) {
                 : '❌ Tu suscripción está vencida. Renová para continuar.')
               : diasVto === 1 ? '🚨 Tu plan vence mañana.' : `⏰ Tu plan vence en ${diasVto} días (${vto.toLocaleDateString('es-AR')}).`}
           </span>
-          {mpConf?.enabled && (
+          {mpConf?.enabled && mpConf?.configurado && (
             <button type="button" className="btn btn-primary btn-sm" style={{ whiteSpace: 'nowrap' }}
               onClick={() => pagarConMP(actual.id, actual.nombre)} disabled={pagando === actual.id}>
               {pagando === actual.id ? '⏳ Abriendo pago...' : '💳 Renovar ahora'}
             </button>
           )}
+        </div>
+      )}
+
+      {/* Aviso MP habilitado pero no configurado */}
+      {mpConf?.enabled && !mpConf?.configurado && (
+        <div style={{padding:'10px 14px',background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.3)',borderRadius:8,marginBottom:12,fontSize:12,color:'var(--bad)'}}>
+          ⚠️ Pagos automáticos habilitados pero MercadoPago aún no está configurado. Contactá al administrador.
         </div>
       )}
 
@@ -1408,18 +1426,29 @@ function PlanTab({ api, toast }) {
                   </div>
                 )}
                 {!esCurrent && (!solPendiente || mpConf?.enabled) && (
-                  esUpgrade && mpConf?.enabled ? (
-                    <button type="button" className="btn btn-sm btn-primary"
-                      onClick={() => pagarConMP(p.id, p.nombre)}
-                      disabled={pagando===p.id}>
-                      {pagando===p.id ? '⏳ Abriendo pago...' : `💳 Pagar y mejorar a ${p.nombre}`}
-                    </button>
+                  esUpgrade ? (
+                    mpConf?.enabled ? (
+                      mpConf?.configurado ? (
+                        <button type="button" className="btn btn-sm btn-primary"
+                          onClick={() => pagarConMP(p.id, p.nombre)}
+                          disabled={pagando===p.id}>
+                          {pagando===p.id ? '⏳ Abriendo pago...' : `💳 Pagar y mejorar a ${p.nombre}`}
+                        </button>
+                      ) : (
+                        <div style={{fontSize:11,color:'var(--bad)',padding:'6px 10px',background:'rgba(239,68,68,.06)',borderRadius:6}}>⚠️ MP habilitado pero no configurado — contactá al administrador</div>
+                      )
+                    ) : (
+                      <button type="button" className="btn btn-sm btn-primary"
+                        onClick={() => solicitarPlan(p.id, p.nombre, true)}
+                        disabled={solicitando===p.id}>
+                        {solicitando===p.id ? '⏳ Enviando...' : `⬆ Mejorar a ${p.nombre}`}
+                      </button>
+                    )
                   ) : (
-                    <button type="button" className={`btn btn-sm ${esUpgrade?'btn-primary':''}`}
-                      style={esUpgrade?{}:{border:'1px solid var(--bd)'}}
-                      onClick={() => solicitarPlan(p.id, p.nombre, esUpgrade)}
+                    <button type="button" className="btn btn-sm" style={{border:'1px solid var(--bd)'}}
+                      onClick={() => solicitarPlan(p.id, p.nombre, false)}
                       disabled={solicitando===p.id}>
-                      {solicitando===p.id ? '⏳ Enviando...' : esUpgrade ? `⬆ Mejorar a ${p.nombre}` : `⬇ Cambiar a ${p.nombre}`}
+                      {solicitando===p.id ? '⏳ Enviando...' : `⬇ Cambiar a ${p.nombre}`}
                     </button>
                   )
                 )}
