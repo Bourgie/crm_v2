@@ -13,6 +13,7 @@ function ChartTooltip({ active, payload, fmt }) {
       <div style={{ fontWeight: 700, marginBottom: 4 }}>
         {row.nombre}
         {row.usando_global && <span style={{ fontSize: 11, color: 'var(--mu)', marginLeft: 5 }}>🌐 global</span>}
+        {row.sin_objetivo && <span style={{ fontSize: 11, color: 'var(--warn)', marginLeft: 5 }}>Sin objetivo</span>}
       </div>
       {payload.map(p => (
         <div key={p.dataKey} style={{ display: 'flex', justifyContent: 'space-between', gap: 16 }}>
@@ -24,6 +25,11 @@ function ChartTooltip({ active, payload, fmt }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 4, borderTop: '1px solid var(--bd)', paddingTop: 4 }}>
           <span style={{ color: 'var(--mu)' }}>Cumplimiento:</span>
           <span style={{ fontWeight: 700, color: cumplColor(row.cumplimiento) }}>{row.cumplimiento}%</span>
+        </div>
+      )}
+      {row.cumplimiento == null && row.objetivo === 0 && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, marginTop: 4, borderTop: '1px solid var(--bd)', paddingTop: 4 }}>
+          <span style={{ color: 'var(--warn)' }}>Sin objetivo definido</span>
         </div>
       )}
       {row.proyeccion != null && (
@@ -53,17 +59,25 @@ export default function ObjetivosSucChart({ data, fmt = defaultFmt, height = 220
 
   const sucs = data?.sucursales || []
   const total = data?.total
-  if (!data || sucs.length === 0 || !total || total.objetivo === 0) return null
 
-  const chartData = [...sucs, total].map(r => ({
+  if (!data || sucs.length === 0) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 120, color: 'var(--mu)', fontSize: 13 }}>
+        Sin datos de sucursales para mostrar
+      </div>
+    )
+  }
+
+  const chartData = [...sucs, ...(total ? [total] : [])].map(r => ({
     nombre: r.nombre.length > 14 ? r.nombre.substr(0, 13) + '…' : r.nombre,
     'Vendido': r.ventas_mes,
-    'Objetivo': r.objetivo,
+    'Objetivo': r.objetivo || 0,
     'Año anterior': r.ventas_anio_anterior,
     cumplimiento: r.cumplimiento,
     proyeccion: r.proyeccion,
     delta_anio_anterior: r.delta_anio_anterior,
     usando_global: r.usando_global,
+    sin_objetivo: r.sin_objetivo || r.objetivo === 0,
   }))
 
   const { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, LabelList } = recharts

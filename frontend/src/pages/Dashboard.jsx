@@ -43,7 +43,11 @@ export function Dashboard() {
       const d = await api('GET', `/dashboard?suc_id=${sucSesion || ''}&fecha=${fechaTareas}`)
       let objetivosSuc = null
       if (me?.rol === 'admin') {
-        try { objetivosSuc = await api('GET', '/dashboard/objetivos-sucs') } catch { /* sin objetivos */ }
+        try {
+          objetivosSuc = await api('GET', '/dashboard/objetivos-sucs')
+        } catch (e) {
+          console.warn('[Dashboard] No se pudo cargar objetivos-sucs:', e)
+        }
       }
       setData({ dash: d, objetivosSuc })
     } catch { /* offline or error */ }
@@ -275,8 +279,8 @@ export function Dashboard() {
         </div>
       )}
 
-      {/* Ventas por sucursal vs objetivo (solo admin, solo si hay objetivos) */}
-      {me?.rol === 'admin' && raw?.objetivosSuc?.total?.objetivo > 0 && (
+      {/* Ventas por sucursal vs objetivo (solo admin) */}
+      {me?.rol === 'admin' && (
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-header"><h3>📊 Ventas por sucursal</h3></div>
           <Suspense fallback={<div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>}>
