@@ -284,7 +284,7 @@ export function Dashboard() {
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-header"><h3>📊 Ventas por sucursal</h3></div>
           <Suspense fallback={<div style={{ height: 120, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><div className="spinner" /></div>}>
-            <ObjetivosSucChart data={raw?.objetivosSuc} fmt={fmt} />
+            <ObjetivosSucChart data={data?.objetivosSuc} fmt={fmt} />
           </Suspense>
         </div>
       )}
