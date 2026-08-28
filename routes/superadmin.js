@@ -1084,25 +1084,91 @@ router.post('/empresas/:codigo/login-as', superAuth, (req, res) => {
 // ══════════════════════════════════════
 // PLANES
 // ══════════════════════════════════════
-router.get('/planes', superAuth, (req, res) => res.json(getPlanes()));
+router.get('/planes', superAuth, (req, res) => {
+  const incluir = req.query.incluir_inactivos === '1' || req.query.incluir_inactivos === 'true';
+  res.json(getPlanes(incluir ? { incluirInactivos: true } : undefined));
+});
 
 router.post('/planes', superAuth, (req, res) => {
-  const {codigo,nombre,descripcion,precio,moneda,modulos,limites,orden} = req.body;
-  if(!codigo||!nombre) return res.status(400).json({error:'Código y nombre requeridos'});
-  const id = 'plan_'+Date.now();
-  master.prepare("INSERT INTO planes (id,codigo,nombre,descripcion,precio,moneda,modulos,limites,activo,orden) VALUES (?,?,?,?,?,?,?,?,1,?)")
-    .run(id,codigo,nombre,descripcion||'',precio||0,moneda||'USD',
-      JSON.stringify(modulos||[]),JSON.stringify(limites||{}),orden||99);
-  saAudit(req.sadmin.id,'crear_plan',null,`Plan: ${nombre}`);
-  res.json({id,ok:true});
+  try {
+    let {codigo,nombre,descripcion,precio,moneda,modulos,limites,orden} = req.body;
+    if(!codigo||!nombre) return res.status(400).json({error:'Código y nombre requeridos'});
+    codigo = String(codigo).trim().toLowerCase();
+    if(!/^[a-z0-9_]+$/.test(codigo)) return res.status(400).json({error:'Código solo minúsculas, números y _'});
+    const dup = master.prepare("SELECT id FROM planes WHERE codigo=?").get(codigo);
+    if(dup) return res.status(400).json({error:'Ese código ya existe'});
+    // Normalizar limites
+    if(limites && typeof limites === 'object'){
+      if('usuarios' in limites || 'sucursales' in limites){
+        limites = { usuarios_max: limites.usuarios_max ?? limites.usuarios ?? 0, sucursales_max: limites.sucursales_max ?? limites.sucursales ?? 0 };
+      }
+    }
+    const id = 'plan_'+Date.now();
+    master.prepare("INSERT INTO planes (id,codigo,nombre,descripcion,precio,moneda,modulos,limites,activo,orden) VALUES (?,?,?,?,?,?,?,?,1,?)")
+      .run(id,codigo,nombre,descripcion||'',precio||0,moneda||'USD',
+        JSON.stringify(modulos||[]),JSON.stringify(limites||{}), orden!=null? parseInt(orden)||99 : 99);
+    saAudit(req.sadmin.id,'crear_plan',null,`Plan: ${nombre}`);
+    res.json({id,ok:true});
+  } catch(e){ res.status(500).json({error:e.message}); }
 });
 
 router.put('/planes/:id', superAuth, (req, res) => {
-  const {codigo,nombre,descripcion,precio,modulos,limites,activo,orden} = req.body;
-  master.prepare("UPDATE planes SET codigo=?,nombre=?,descripcion=?,precio=?,modulos=?,limites=?,activo=?,orden=? WHERE id=?")
-    .run(codigo||'',nombre,descripcion||'',precio||0,JSON.stringify(modulos||[]),JSON.stringify(limites||{}),activo != null ? (activo ? 1 : 0) : 1,orden||99,req.params.id);
-  saAudit(req.sadmin.id,'editar_plan',null,`Plan: ${nombre}`);
-  res.json({ok:true});
+  try {
+    const existing = getPlan(req.params.id);
+    if(!existing) return res.status(404).json({error:'Plan no encontrado'});
+    let {codigo,nombre,descripcion,precio,modulos,limites,activo,orden} = req.body;
+    // codigo
+    if(codigo != null){
+      codigo = String(codigo).trim().toLowerCase();
+      if(!codigo) return res.status(400).json({error:'Código requerido'});
+      if(!/^[a-z0-9_]+$/.test(codigo)) return res.status(400).json({error:'Código solo minúsculas, números y _'});
+      const dup = master.prepare("SELECT id FROM planes WHERE codigo=? AND id!=?").get(codigo, req.params.id);
+      if(dup) return res.status(400).json({error:'Ese código ya existe'});
+    } else {
+      codigo = existing.codigo;
+    }
+    // nombre requerido
+    if(nombre != null && !String(nombre).trim()) return res.status(400).json({error:'Nombre requerido'});
+    // limites normalización
+    if(limites && typeof limites === 'object'){
+      if('usuarios' in limites || 'sucursales' in limites){
+        limites = { usuarios_max: limites.usuarios_max ?? limites.usuarios ?? 0, sucursales_max: limites.sucursales_max ?? limites.sucursales ?? 0 };
+      }
+    }
+    const finalNombre = nombre != null ? nombre : existing.nombre;
+    const finalDesc = descripcion != null ? descripcion : existing.descripcion;
+    const finalPrecio = precio != null ? precio : existing.precio;
+    const finalModulos = modulos != null ? modulos : existing.modulos;
+    const finalLimites = limites != null ? limites : existing.limites;
+    const finalActivo = activo != null ? (activo ? 1 : 0) : existing.activo;
+    const finalOrden = orden != null ? (parseInt(orden)||0) : existing.orden;
+    master.prepare("UPDATE planes SET codigo=?,nombre=?,descripcion=?,precio=?,modulos=?,limites=?,activo=?,orden=? WHERE id=?")
+      .run(codigo, finalNombre, finalDesc||'', finalPrecio||0, JSON.stringify(finalModulos||[]), JSON.stringify(finalLimites||{}), finalActivo, finalOrden, req.params.id);
+    saAudit(req.sadmin.id,'editar_plan',null,`Plan: ${finalNombre}`);
+    res.json({ok:true});
+  } catch(e){ res.status(500).json({error:e.message}); }
+});
+
+router.post('/planes/:id/reactivar', superAuth, (req, res) => {
+  try {
+    const p = getPlan(req.params.id);
+    if(!p) return res.status(404).json({error:'Plan no encontrado'});
+    master.prepare("UPDATE planes SET activo=1 WHERE id=?").run(req.params.id);
+    saAudit(req.sadmin.id,'reactivar_plan',null,`Plan reactivado: ${p.nombre}`);
+    res.json({ok:true});
+  } catch(e){ res.status(500).json({error:e.message}); }
+});
+
+router.delete('/planes/:id', superAuth, (req, res) => {
+  try {
+    const p = getPlan(req.params.id);
+    if(!p) return res.status(404).json({error:'Plan no encontrado'});
+    const uso = master.prepare("SELECT COUNT(*) as n FROM empresas WHERE plan_id=?").get(req.params.id);
+    if(uso && uso.n > 0) return res.status(400).json({error:`No se puede eliminar: ${uso.n} empresa(s) usan este plan. Reasignar primero.`});
+    master.prepare("DELETE FROM planes WHERE id=?").run(req.params.id);
+    saAudit(req.sadmin.id,'eliminar_plan',null,`Plan eliminado definitivo: ${p.nombre} (${p.codigo})`);
+    res.json({ok:true});
+  } catch(e){ res.status(500).json({error:e.message}); }
 });
 
 // ══════════════════════════════════════

@@ -114,7 +114,7 @@ export default function Superadmin() {
   const { saSecEnabled, setSaSecEnabled, saSecSetup, setSaSecSetup, saSecCode, setSaSecCode, saSecBackup, setSaSecBackup, saSecDevices, setSaSecDevices, saSecLoading, setSaSecLoading, saSecErr, setSaSecErr } = useSaSecState()
 
   const { empModal, setEmpModal, empForm, setEmpForm, empSaving, setEmpSaving } = useEmpState()
-  const { planModal, setPlanModal, planForm, setPlanForm, planSaving, setPlanSaving } = usePlanState()
+  const { planModal, setPlanModal, planForm, setPlanForm, planSaving, setPlanSaving, planIncluirInactivos, setPlanIncluirInactivos, planHighlight, setPlanHighlight } = usePlanState()
   const { prospForm, setProspForm, prospModal, setProspModal, prospSaving, setProspSaving, prospFiltro, setProspFiltro, prospDetalle, setProspDetalle, segForm, setSegForm, segSaving, setSegSaving } = useProspState()
   const { tickets, setTickets, ticketFiltro, setTicketFiltro, ticketRespuesta, setTicketRespuesta, ticketRespondiendo, setTicketRespondiendo, ticketSaving, setTicketSaving } = useTicketState()
   const { landingFiltro, setLandingFiltro, landingStats, setLandingStats, statsDias, setStatsDias, statsPagina, setStatsPagina } = useLandingState()
@@ -282,7 +282,10 @@ export default function Superadmin() {
 
   async function loadDash() { try { const r = await saApi('GET', '/dashboard'); setDash(r) } catch {} }
   async function loadEmpresas() { try { const r = await saApi('GET', '/empresas'); setEmpresas(r) } catch {} }
-  async function loadPlanes() { try { const r = await saApi('GET', '/planes'); setPlanes(r) } catch {} }
+  async function loadPlanes(incluir) {
+    const flag = incluir !== undefined ? incluir : planIncluirInactivos;
+    try { const r = await saApi('GET', '/planes' + (flag ? '?incluir_inactivos=1' : '')); setPlanes(r) } catch {}
+  }
   async function loadModulos() { try { const r = await saApi('GET', '/modulos'); setModulos(r) } catch {} }
   async function loadSolicitudes() { try { setLoading(p=>({...p,sol:true})); const r = await saApi('GET', '/solicitudes-plan'); setSolicitudes(r) } catch {} finally { setLoading(p=>({...p,sol:false})) } }
   async function loadSolicitudesEliminacion() { try { const r = await saApi('GET', '/solicitudes-eliminacion'); setSolicitudesElim(r) } catch {} }
@@ -296,6 +299,16 @@ export default function Superadmin() {
   async function loadBillingConfig() { try { const r = await saApi('GET', '/billing/config'); setBillingConfig(r) } catch {} }
   async function loadPagos() { try { const r = await saApi('GET', '/saas-pagos' + (pagosFiltro ? '?estado=' + pagosFiltro : '') + (pagosMes ? (pagosFiltro ? '&' : '?') + 'mes=' + pagosMes : '')); setPagosList(r) } catch {} }
   async function loadWebhookLogs() { try { const r = await saApi('GET', '/saas-webhooks?limit=100'); setWebhookLogs(r) } catch {} }
+
+  useEffect(() => { if (logged) loadPlanes(planIncluirInactivos) }, [planIncluirInactivos])
+  useEffect(() => {
+    if (planHighlight) {
+      const el = document.getElementById('plan-' + planHighlight)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const t = setTimeout(() => setPlanHighlight(null), 3000)
+      return () => clearTimeout(t)
+    }
+  }, [planes, planHighlight])
 
   async function saveMpConfig() {
     setMpSaving(true); setMpTestResult(null)
@@ -729,22 +742,37 @@ export default function Superadmin() {
     if (!planForm.codigo.trim() || !planForm.nombre.trim()) { alert('Código y nombre requeridos'); return }
     setPlanSaving(true)
     try {
-      const body = { codigo: planForm.codigo.trim().toLowerCase(), nombre: planForm.nombre, descripcion: planForm.descripcion || '', precio: parseFloat(planForm.precio) || 0, modulos: planForm.modulos || [], limites: { usuarios: parseInt(planForm.umax) || 0, sucursales: parseInt(planForm.smax) || 0 }, activo: true }
-      if (planModal === 'new') { await saApi('POST', '/planes', body); alert('✅ Plan creado') }
-      else { await saApi('PUT', '/planes/' + planModal.id, body); alert('✅ Plan actualizado') }
-      setPlanModal(null); loadPlanes()
+      const body = { codigo: planForm.codigo.trim().toLowerCase(), nombre: planForm.nombre, descripcion: planForm.descripcion || '', precio: parseFloat(planForm.precio) || 0, modulos: planForm.modulos || [], limites: { usuarios_max: parseInt(planForm.umax) || 0, sucursales_max: parseInt(planForm.smax) || 0 }, orden: parseInt(planForm.orden) || 99, activo: true }
+      let savedId = null
+      if (planModal === 'new') { const r = await saApi('POST', '/planes', body); savedId = r.id; alert('✅ Plan creado') }
+      else { await saApi('PUT', '/planes/' + planModal.id, body); savedId = planModal.id; alert('✅ Plan actualizado') }
+      setPlanModal(null);
+      await loadPlanes();
+      if (savedId) { setPlanHighlight(savedId); setTimeout(() => { const el=document.getElementById('plan-'+savedId); if(el) el.scrollIntoView({behavior:'smooth', block:'center'}) }, 300) }
     } catch (e) { alert(e.message) }
     finally { setPlanSaving(false) }
   }
 
-  function openNuevoPlan() { setPlanForm({ codigo: '', nombre: '', descripcion: '', precio: '', modulos: [], umax: '', smax: '' }); setPlanModal('new') }
+  function openNuevoPlan() { setPlanForm({ codigo: '', nombre: '', descripcion: '', precio: '', modulos: [], umax: '', smax: '', orden: '99' }); setPlanModal('new') }
   function openEditPlan(p) {
     let mods = p.modulos || []; if (typeof mods === 'string') try { mods = JSON.parse(mods) } catch { mods = [] }
     let lims = p.limites || {}; if (typeof lims === 'string') try { lims = JSON.parse(lims) } catch { lims = {} }
-    setPlanForm({ codigo: p.codigo, nombre: p.nombre || '', descripcion: p.descripcion || '', precio: String(p.precio || ''), modulos: mods, umax: String(lims.usuarios || ''), smax: String(lims.sucursales || '') })
+    const umax = lims.usuarios_max ?? lims.usuarios ?? '';
+    const smax = lims.sucursales_max ?? lims.sucursales ?? '';
+    setPlanForm({ codigo: p.codigo, nombre: p.nombre || '', descripcion: p.descripcion || '', precio: String(p.precio || ''), modulos: mods, umax: String(umax), smax: String(smax), orden: String(p.orden ?? 99) })
     setPlanModal(p)
   }
   function togglePlanMod(m) { setPlanForm(p => ({ ...p, modulos: p.modulos.includes(m) ? p.modulos.filter(x => x !== m) : [...p.modulos, m] })) }
+
+  async function reactivarPlan(p) {
+    if (!confirm(`¿Reactivar plan "${p.nombre}"?`)) return
+    try { await saApi('POST', '/planes/' + p.id + '/reactivar'); alert('✅ Plan reactivado'); await loadPlanes(); setPlanHighlight(p.id) } catch(e){ alert(e.message) }
+  }
+  async function eliminarPlanDefinitivo(p) {
+    if (!confirm(`¿Eliminar DEFINITIVAMENTE el plan "${p.nombre}" (${p.codigo})? Esta acción no se puede deshacer.`)) return
+    if (!confirm('Confirmá nuevamente: el plan se borrará para siempre.')) return
+    try { await saApi('DELETE', '/planes/' + p.id); alert('✅ Plan eliminado'); await loadPlanes() } catch(e){ alert(e.message) }
+  }
 
   async function aprobarSol(id) { try { await saApi('POST', '/solicitudes-plan/' + id + '/resolver', { accion: 'aprobar' }); loadSolicitudes(); loadEmpresas() } catch (e) { alert(e.message) } }
   async function rechazarSol(id) { try { await saApi('POST', '/solicitudes-plan/' + id + '/resolver', { accion: 'rechazar' }); loadSolicitudes() } catch (e) { alert(e.message) } }
@@ -1236,26 +1264,54 @@ export default function Superadmin() {
           {/* ═══════ PLANES ═══════ */}
           {tab === 'planes' && (
             <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap:'wrap', gap:8 }}>
                 <h3 style={{ fontSize: 14, fontWeight: 700, color: 'var(--mu)', textTransform: 'uppercase' }}>Planes de suscripción</h3>
-                <button type="button" className="btn btn-primary" onClick={openNuevoPlan}>+ Nuevo plan</button>
+                <div style={{display:'flex', alignItems:'center', gap:8}}>
+                  <label style={{display:'flex', alignItems:'center', gap:6, fontSize:12, cursor:'pointer', color:'var(--mu)'}}>
+                    <input type="checkbox" checked={planIncluirInactivos} onChange={e => setPlanIncluirInactivos(e.target.checked)} />
+                    Mostrar inactivos
+                  </label>
+                  <button type="button" className="btn btn-primary" onClick={openNuevoPlan}>+ Nuevo plan</button>
+                </div>
+              </div>
+              <div style={{fontSize:11, color:'var(--mu)', marginBottom:12}}>
+                Ordena por <strong>orden</strong> (menor primero). Al editar se mantiene la posición; usá “Orden” para reordenar. {planIncluirInactivos ? `Mostrando ${planes.length} planes (incluye inactivos).` : `${planes.length} planes activos.`}
               </div>
               <div className="grid-auto" style={{ gap: 16 }}>
                 {planes.map(p => {
                   let mods = p.modulos || []; if (typeof mods === 'string') try { mods = JSON.parse(mods) } catch { mods = [] }
                   let lims = p.limites || {}; if (typeof lims === 'string') try { lims = JSON.parse(lims) } catch { lims = {} }
-                  return <div key={p.id} className="card" style={{ padding: 16 }}>
-                    <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 4 }}>{p.nombre || p.codigo}</div>
-                    <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--ac)', marginBottom: 8 }}>${p.precio || 0}<span style={{ fontSize: 12, fontWeight: 400, color: 'var(--mu)' }}>/mes</span></div>
-                    <div style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 10 }}>👥 {lims.usuarios || '∞'} usuarios · 🏪 {lims.sucursales || '∞'} sucursales · {mods.length} módulos</div>
+                  const umax = lims.usuarios_max ?? lims.usuarios
+                  const smax = lims.sucursales_max ?? lims.sucursales
+                  const isInactive = Number(p.activo) === 0
+                  const isHighlight = planHighlight === p.id
+                  return <div key={p.id} id={'plan-' + p.id} className="card" style={{ padding: 16, opacity: isInactive ? 0.6 : 1, border: isHighlight ? '2px solid var(--ac)' : undefined, boxShadow: isHighlight ? '0 0 0 3px rgba(249,115,22,.15)' : undefined, transition:'all .3s' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+                      <div style={{ fontWeight: 800, fontSize: 16 }}>{p.nombre || p.codigo}</div>
+                      <div style={{display:'flex', gap:4, alignItems:'center'}}>
+                        <span className={`badge ${isInactive ? 'badge-gray' : 'badge-green'}`} style={{fontSize:9}}>{isInactive ? '⚪ Inactivo' : '🟢 Activo'}</span>
+                        <span className="badge badge-blue" style={{fontSize:9}}>#{p.orden ?? 99}</span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 24, fontWeight: 900, color: 'var(--ac)', marginBottom: 8 }}>${p.precio || 0}<span style={{ fontSize: 12, fontWeight: 400, color: 'var(--mu)' }}>{p.periodo === 'anual' ? '/año' : '/mes'}</span></div>
+                    <div style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 10 }}>👥 {umax || '∞'} usuarios · 🏪 {smax || '∞'} sucursales · {mods.length} módulos · <span style={{fontFamily:'monospace'}}>{p.codigo}</span></div>
                     <div style={{ fontSize: 11, color: 'var(--mu)', marginBottom: 12 }}>{p.descripcion || ''}</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 12 }}>
                       {mods.map(m => <span key={m} className="badge badge-orange" style={{ fontSize: 10 }}>{MOD_LABELS[m] || m}</span>)}
                     </div>
-                    <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEditPlan(p)}>✏️ Editar</button>
+                    <div style={{display:'flex', gap:6, flexWrap:'wrap'}}>
+                      <button type="button" className="btn btn-secondary btn-sm" onClick={() => openEditPlan(p)}>✏️ Editar</button>
+                      {isInactive ? (
+                        <>
+                          <button type="button" className="btn btn-primary btn-sm" onClick={() => reactivarPlan(p)}>♻️ Reactivar</button>
+                          <button type="button" className="btn btn-danger btn-sm" style={{background:'var(--bad)', color:'#fff'}} onClick={() => eliminarPlanDefinitivo(p)}>🗑️ Eliminar definitivo</button>
+                        </>
+                      ) : null}
+                    </div>
                   </div>
                 })}
               </div>
+              {planes.length===0 && <div style={{textAlign:'center', color:'var(--mu)', padding:20}}>Sin planes. Creá uno nuevo.</div>}
             </div>
           )}
 
@@ -2689,6 +2745,7 @@ export default function Superadmin() {
               <div className="fr">
                 <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Límite usuarios</label><input type="number" value={planForm.umax} onChange={e => setPlanForm(p => ({ ...p, umax: e.target.value }))} min="0" placeholder="0 = ilimitado" style={S.input} /></div>
                 <div style={{ flex:1 }}><label className="" style={{ display:'block',marginBottom:4 }}>Límite sucursales</label><input type="number" value={planForm.smax} onChange={e => setPlanForm(p => ({ ...p, smax: e.target.value }))} min="0" placeholder="0 = ilimitado" style={S.input} /></div>
+                <div style={{ flex:0.6 }}><label className="" style={{ display:'block',marginBottom:4 }}>Orden</label><input type="number" value={planForm.orden} onChange={e => setPlanForm(p => ({ ...p, orden: e.target.value }))} min="0" placeholder="99" style={S.input} /></div>
               </div>
               <div><label className="" style={{ display:'block',marginBottom:4 }}>Módulos incluidos</label>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, padding: 8, background: 'var(--sf)', borderRadius: 6, marginTop: 4 }}>

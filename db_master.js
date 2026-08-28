@@ -546,8 +546,11 @@ if(planCount === 0) {
 // Históricamente se recreaba en cada arranque, lo que hacía que una empresa
 // eliminada desde superadmin "reapareciera" tras cada deploy/restart.
 
-function getPlanes() {
-  return master.prepare("SELECT * FROM planes WHERE activo=1 ORDER BY orden").all()
+function getPlanes(opts) {
+  const incluirInactivos = opts === true || (opts && opts.incluirInactivos);
+  const where = incluirInactivos ? '' : 'WHERE activo=1';
+  const order = incluirInactivos ? 'ORDER BY activo DESC, orden ASC' : 'ORDER BY orden';
+  return master.prepare(`SELECT * FROM planes ${where} ${order}`).all()
     .map(p => ({...p, modulos: JSON.parse(p.modulos||'[]'), limites: JSON.parse(p.limites||'{}'), integraciones: JSON.parse(p.integraciones||'[]')}));
 }
 function getPlan(id_or_codigo) {
@@ -1123,6 +1126,29 @@ try {
   }
   if (nPlanes > 0 || nEmps > 0) console.log('✓ Deprecación módulo gastos: ' + nPlanes + ' planes / ' + nEmps + ' empresas');
 } catch(_) {}
+
+// Migración: normalizar limites legacy {usuarios,sucursales} → {usuarios_max,sucursales_max}
+try {
+  const rows = master.prepare("SELECT id, limites FROM planes").all();
+  let nLim = 0;
+  for (const r of rows) {
+    let l = {};
+    try { l = JSON.parse(r.limites || '{}'); } catch { l = {}; }
+    if ('usuarios' in l || 'sucursales' in l) {
+      const fixed = {
+        usuarios_max: l.usuarios_max ?? l.usuarios ?? 0,
+        sucursales_max: l.sucursales_max ?? l.sucursales ?? 0
+      };
+      // Preserve any other keys if present
+      for (const k of Object.keys(l)) {
+        if (k !== 'usuarios' && k !== 'sucursales' && !(k in fixed)) fixed[k] = l[k];
+      }
+      master.prepare("UPDATE planes SET limites=? WHERE id=?").run(JSON.stringify(fixed), r.id);
+      nLim++;
+    }
+  }
+  if (nLim > 0) console.log('✓ Migración limites planes: ' + nLim + ' planes normalizados a usuarios_max/sucursales_max');
+} catch(e) { console.error('[Master] Error migración limites:', e.message); }
 
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
 module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getLandingLeadsFull, getLandingStats, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado, getOAuthProviders, getOAuthProvider, upsertOAuthProvider, getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas, setEmpresaIntegracion, setEmpresaIntegracionesBatch, syncEmpresaIntegracionesDesdePlan, createSaasPago, getSaasPago, getSaasPagoByRef, getSaasPagoByPaymentId, updateSaasPago, getSaasPagosPorEmpresa, getSaasPagos, logSaasWebhook, getSaasWebhookLogs, getBillingConfig, setBillingConfig };

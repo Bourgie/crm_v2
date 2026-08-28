@@ -74,8 +74,10 @@ export const useEmpState = makeCluster({
 
 export const usePlanState = makeCluster({
   planModal: null,
-  planForm: { codigo: '', nombre: '', descripcion: '', precio: '', modulos: [], umax: '', smax: '' },
+  planForm: { codigo: '', nombre: '', descripcion: '', precio: '', modulos: [], umax: '', smax: '', orden: '99' },
   planSaving: false,
+  planIncluirInactivos: false,
+  planHighlight: null,
 })
 
 export const useProspState = makeCluster({
