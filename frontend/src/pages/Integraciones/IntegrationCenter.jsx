@@ -37,9 +37,16 @@ export function IntegrationCenter() {
   async function handleSync(provider) {
     try {
       setSyncStatus(s => ({ ...s, [provider]: 'syncing' }))
-      await sync(provider)
+      const res = await sync(provider)
+      // Sincronización en background: no podemos afirmar que terminó.
+      if (res && res.queued) {
+        setSyncStatus(s => ({ ...s, [provider]: 'queued' }))
+        toast(`${provider}: sincronización iniciada en segundo plano`, 'info')
+        return
+      }
       setSyncStatus(s => ({ ...s, [provider]: 'done' }))
-      toast(`${provider}: sincronización completada`, 'ok')
+      const pv = res?.result?.puntoVenta
+      toast(`${provider}: sincronización completada${pv ? ` (PV ${pv})` : ''}`, 'ok')
     } catch (e) {
       setSyncStatus(s => ({ ...s, [provider]: 'error' }))
       toast(`Error: ${e.message}`, 'err')
@@ -70,6 +77,7 @@ export function IntegrationCenter() {
               provider={provider.name}
               displayName={provider.displayName}
               icon={provider.icon}
+              configBased={provider.usesTenantCredentials}
               info={integraciones[provider.name]}
               onConnect={() => handleConnect(provider.name)}
               onDisconnect={() => handleDisconnect(provider.name)}

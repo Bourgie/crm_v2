@@ -51,12 +51,11 @@ describe('SecretsManager', () => {
     assert.strictEqual(status[1].key, 'MELI_CLIENT_SECRET');
   });
 
-  it('debe reportar env vars faltantes', () => {
+  it('debe reportar que ARCA no usa env vars globales', () => {
     const { SecretsManager } = require('../../lib/integration-center/SecretsManager');
     const sm = new SecretsManager();
     const status = sm.getStatus('arca');
-    assert.strictEqual(status.length, 1);
-    assert.strictEqual(status[0].configured, false);
+    assert.deepStrictEqual(status, []);
   });
 
   it('debe obtener client_id por provider', () => {
@@ -122,7 +121,24 @@ describe('Providers — ArcaProvider', () => {
     assert.strictEqual(p.displayName, 'ARCA / AFIP');
     assert.strictEqual(p.icon, '📄');
     assert.strictEqual(p.category, 'fiscal');
-    assert.deepStrictEqual(p.requiredEnvKeys, ['ARCA_ACCESS_TOKEN']);
+    assert.deepStrictEqual(p.requiredEnvKeys, []);
+    assert.strictEqual(p.usesTenantCredentials, true);
+  });
+
+  it('debe mapear la config del tenant (claves arca_*)', () => {
+    const { ArcaProvider } = require('../../lib/integration-center/providers/ArcaProvider');
+    const mapped = ArcaProvider.mapTenantConfig({
+      arca_access_token: 'tok', arca_cuit: '20-12345678-6',
+      arca_punto_venta: '3', arca_ambiente: 'prod',
+      arca_cert: 'CERT', arca_key: 'KEY', arca_iva_pct: '21',
+    });
+    assert.strictEqual(mapped.access_token, 'tok');
+    assert.strictEqual(mapped.cuit, '20123456786');
+    assert.strictEqual(mapped.puntoVenta, 3);
+    assert.strictEqual(mapped.ambiente, 'prod');
+    assert.strictEqual(mapped.cert, 'CERT');
+    assert.strictEqual(mapped.key, 'KEY');
+    assert.strictEqual(mapped.ivaPct, 21);
   });
 
   it('debe tener schema de config', () => {

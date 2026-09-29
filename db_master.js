@@ -7,6 +7,7 @@ const { DatabaseSync } = require('node:sqlite');
 const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
+const { normalizeCuit } = require('./lib/validar-cuit');
 
 const MASTER_PATH = process.env.MASTER_PATH || path.join(__dirname, 'data', 'master.db');
 const dir = path.dirname(MASTER_PATH);
@@ -294,6 +295,18 @@ master.exec(`
     actualizado TEXT,
     UNIQUE(empresa_id, provider)
   );
+
+  -- Índice fiscal por empresa: reclama el CUIT de facturación para evitar
+  -- que dos empresas emitan con la misma identidad fiscal.
+  CREATE TABLE IF NOT EXISTS empresa_fiscal (
+    empresa_id TEXT PRIMARY KEY,
+    empresa_codigo TEXT,
+    arca_cuit TEXT,
+    actualizado TEXT
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_empresa_fiscal_arca_cuit
+    ON empresa_fiscal(arca_cuit)
+    WHERE arca_cuit IS NOT NULL AND arca_cuit <> '';
 
   CREATE TABLE IF NOT EXISTS saas_pagos (
     id TEXT PRIMARY KEY,
@@ -1047,6 +1060,91 @@ function syncEmpresaIntegracionesDesdePlan(empresaId, planId) {
   }
 }
 
+// ── Índice fiscal: CUIT de facturación por empresa ──
+// La config real de ARCA vive en la DB de cada empresa. Este índice en master
+// solo guarda a quién pertenece cada CUIT, para impedir que dos empresas
+// emitan comprobantes con la misma identidad fiscal.
+
+let _fiscalBackfilled = false;
+
+function _ensureFiscalBackfill() {
+  if (_fiscalBackfilled) return;
+  _fiscalBackfilled = true;
+  let count = 0;
+  try { count = master.prepare("SELECT COUNT(*) n FROM empresa_fiscal").get().n; } catch (_) { return; }
+  if (count > 0) return;
+
+  // Read-through: indexar los CUIT ya configurados por las empresas existentes.
+  const { getEmpresaDB } = require('./db_sqlite');
+  const now = new Date().toISOString();
+  for (const e of getEmpresas()) {
+    if (!e.activo) continue;
+    try {
+      const tenant = getEmpresaDB(e.codigo, { existingOnly: true });
+      if (!tenant) continue;
+      const cuit = normalizeCuit(tenant.getConfig().arca_cuit || '');
+      if (!cuit) continue;
+      try {
+        master.prepare(
+          "INSERT INTO empresa_fiscal (empresa_id, empresa_codigo, arca_cuit, actualizado) VALUES (?,?,?,?)"
+        ).run(e.id, e.codigo, cuit, now);
+      } catch (_) { /* CUIT ya reclamado por otra empresa: gana la primera */ }
+    } catch (_) { /* DB ilegible: se ignora */ }
+  }
+}
+
+/**
+ * Busca qué empresa (distinta de la dada) ya reclamó un CUIT.
+ * @returns {object|null} { empresa_id, nombre, codigo }
+ */
+function getEmpresaPorCuit(cuit, exceptoEmpresaId) {
+  const clean = normalizeCuit(cuit);
+  if (!clean) return null;
+  _ensureFiscalBackfill();
+  return master.prepare(
+    `SELECT ef.empresa_id, e.nombre, e.codigo
+       FROM empresa_fiscal ef
+       LEFT JOIN empresas e ON e.id = ef.empresa_id
+      WHERE ef.arca_cuit = ? AND ef.empresa_id <> ?`
+  ).get(clean, exceptoEmpresaId || '') || null;
+}
+
+/**
+ * Reclama (o libera, si cuit viene vacío) el CUIT de una empresa.
+ * @returns {{ok:true}|{ok:false, empresa:object}}
+ */
+function reclamarCuit(empresaId, empresaCodigo, cuit) {
+  _ensureFiscalBackfill();
+  const clean = normalizeCuit(cuit);
+  const now = new Date().toISOString();
+
+  if (!clean) {
+    master.prepare("UPDATE empresa_fiscal SET arca_cuit = NULL, actualizado = ? WHERE empresa_id = ?")
+      .run(now, empresaId);
+    return { ok: true };
+  }
+
+  const duenio = getEmpresaPorCuit(clean, empresaId);
+  if (duenio) return { ok: false, empresa: duenio };
+
+  try {
+    const existing = master.prepare("SELECT empresa_id FROM empresa_fiscal WHERE empresa_id = ?").get(empresaId);
+    if (existing) {
+      master.prepare("UPDATE empresa_fiscal SET empresa_codigo = ?, arca_cuit = ?, actualizado = ? WHERE empresa_id = ?")
+        .run(empresaCodigo || null, clean, now, empresaId);
+    } else {
+      master.prepare("INSERT INTO empresa_fiscal (empresa_id, empresa_codigo, arca_cuit, actualizado) VALUES (?,?,?,?)")
+        .run(empresaId, empresaCodigo || null, clean, now);
+    }
+  } catch (e) {
+    // Carrera contra el índice único: otra empresa lo reclamó en el medio.
+    const otro = getEmpresaPorCuit(clean, empresaId);
+    if (otro) return { ok: false, empresa: otro };
+    throw e;
+  }
+  return { ok: true };
+}
+
 // Seed oauth_providers
 const provCount = master.prepare("SELECT COUNT(*) as n FROM oauth_providers").get().n;
 if (provCount === 0) {
@@ -1151,7 +1249,7 @@ try {
 } catch(e) { console.error('[Master] Error migración limites:', e.message); }
 
 console.log('✓ Master DB activa — empresas:', master.prepare("SELECT COUNT(*) as n FROM empresas").get().n);
-module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getLandingLeadsFull, getLandingStats, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado, getOAuthProviders, getOAuthProvider, upsertOAuthProvider, getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas, setEmpresaIntegracion, setEmpresaIntegracionesBatch, syncEmpresaIntegracionesDesdePlan, createSaasPago, getSaasPago, getSaasPagoByRef, getSaasPagoByPaymentId, updateSaasPago, getSaasPagosPorEmpresa, getSaasPagos, logSaasWebhook, getSaasWebhookLogs, getBillingConfig, setBillingConfig };
+module.exports = { master, masterDb: master, getEmpresas, getEmpresa, createEmpresa, updateEmpresa, getPlanes, getPlan, getModulos,   saAudit, saPurgeAuditLog, saAuditExtended, isDisposableEmail, getProspectos, getProspecto, getProspectoSeguimiento, getLandingLeads, getLandingLeadsFull, getLandingStats, getDbStats, getGlobalConfig, setGlobalConfig, getAllGlobalConfig, getRubroAtributos, getAllRubrosAtributos, createRubroAtributo, updateRubroAtributo, getAppsDisponibles, getAppDisponible, upsertAppDisponible, getAppsInstaladas, getAppInstalada, installApp, uninstallApp, updateAppStatus, updateAppConfig, logAppEvent, getAppStats, getMantenimientoItems, createMantenimientoItem, updateMantenimientoItem, deleteMantenimientoItem, getVencimientosProximos, getVersionVigente, getAllVersiones, setVersionVigente, getConsentimientoEstado, getOAuthProviders, getOAuthProvider, upsertOAuthProvider, getEmpresaIntegraciones, getEmpresaIntegracionesHabilitadas, setEmpresaIntegracion, setEmpresaIntegracionesBatch, syncEmpresaIntegracionesDesdePlan, getEmpresaPorCuit, reclamarCuit, createSaasPago, getSaasPago, getSaasPagoByRef, getSaasPagoByPaymentId, updateSaasPago, getSaasPagosPorEmpresa, getSaasPagos, logSaasWebhook, getSaasWebhookLogs, getBillingConfig, setBillingConfig };
 
 // ═══════════════════════════════════════════
 // SAAS BILLING (pagos de suscripción)

@@ -1,8 +1,25 @@
 const express = require('express');
 const router = express.Router();
 const { db, uid } = require('../db_sqlite');
-const _getDB = req => (req && req.db) || db;
+const { normalizeCuit, isValidCuit } = require('../lib/validar-cuit');
 const { authMiddleware, requireRol } = require('../middleware/auth');
+
+// ── Multi-tenant: nunca tocar la DB legacy compartida (data/crm.db) ──
+// Sin la DB propia del tenant, leer o escribir config acá mezclaría datos
+// fiscales y SMTP entre empresas. Preferimos fallar a filtrar.
+function _getDB(req) {
+  const t = req && req.db;
+  return t && t !== db ? t : null;
+}
+
+function _requireDB(req, res) {
+  const t = _getDB(req);
+  if (!t) {
+    res.status(503).json({ error: 'Base de datos de la empresa no disponible. Volvé a iniciar sesión.' });
+    return null;
+  }
+  return t;
+}
 
 // GET /config/plan — plan actual de la empresa + planes disponibles
 router.get('/plan', authMiddleware, (req, res) => {
@@ -74,7 +91,8 @@ router.post('/plan/solicitar', authMiddleware, requireRol('admin'), (req, res) =
     }
   } catch(e) {}
   const { plan_id, tipo } = req.body;
-  const empDB = _getDB(req);
+  const empDB = _requireDB(req, res);
+  if (!empDB) return;
   const solicitud = {
     plan_id, tipo,
     fecha: new Date().toISOString(),
@@ -106,7 +124,6 @@ router.post('/plan/solicitar', authMiddleware, requireRol('admin'), (req, res) =
 
 // ── Enviar solicitud de soporte ──
 router.post('/solicitud', authMiddleware, (req, res) => {
-  const db = _getDB(req);
   const { tipo, asunto, descripcion } = req.body;
   if (!asunto || !descripcion) return res.status(400).json({ error: 'Asunto y descripción requeridos' });
   const fecha = new Date().toISOString();
@@ -131,7 +148,7 @@ router.post('/email-test', authMiddleware, (req, res) => {
   const emailTo = req.user.email || user;
   try {
     const { sendEmail } = require('../lib/send-email');
-    const smtpPass = pass || _getDB(req).getConfig().smtp_pass || '';
+    const smtpPass = pass || _getDB(req)?.getConfig().smtp_pass || '';
     sendEmail(host, parseInt(port) || 465, user, smtpPass, from || user,
       emailTo, 'Test de conexión — FlexCRM',
       `<div style="font-family:sans-serif;padding:20px"><h2>✅ ¡Funciona!</h2><p>Tu configuración SMTP es correcta. Ya podés usar el envío de mails desde FlexCRM.</p><p style="color:#64748b;font-size:12px">Enviado: ${new Date().toLocaleString('es-AR')}</p></div>`
@@ -152,7 +169,8 @@ const SENSITIVE_KEYS = new Set([
 const MASK_KEYS = new Set(['arca_access_token', 'arca_cert', 'arca_key']);
 
 router.get('/', authMiddleware, (req, res) => {
-  const db = _getDB(req);
+  const db = _requireDB(req, res);
+  if (!db) return;
   const cfg = { ...db.getConfig() };
   for (const key of SENSITIVE_KEYS) {
     if (key in cfg) {
@@ -192,7 +210,8 @@ router.get('/', authMiddleware, (req, res) => {
 });
 
 router.put('/', authMiddleware, requireRol('admin','tesorero'), (req, res) => {
-  const db = _getDB(req);
+  const db = _requireDB(req, res);
+  if (!db) return;
   const { jwt_secret, ...safe } = req.body;
 
   // El rol tesorero solo puede editar métodos de pago (tipos_pago)
@@ -220,13 +239,39 @@ router.put('/', authMiddleware, requireRol('admin','tesorero'), (req, res) => {
     }
   }
 
+  // ── CUIT de facturación: validar formato y reclamarlo para esta empresa ──
+  // Es la identidad fiscal del contribuyente; no puede estar repetido.
+  if (safe.arca_cuit !== undefined && typeof safe.arca_cuit === 'string') {
+    const cuit = normalizeCuit(safe.arca_cuit);
+    if (cuit && !isValidCuit(cuit)) {
+      return res.status(400).json({ error: 'El CUIT no es válido. Debe tener 11 dígitos y el dígito verificador correcto.' });
+    }
+
+    const { getEmpresa, reclamarCuit } = require('../db_master');
+    const empresa = getEmpresa(req.user.empresa || 'default');
+    if (empresa) {
+      const claim = reclamarCuit(empresa.id, empresa.codigo, cuit);
+      if (!claim.ok) {
+        const due = claim.empresa || {};
+        const quien = due.nombre || due.codigo || 'otra empresa';
+        return res.status(409).json({
+          error: `El CUIT ${cuit} ya está en uso por la empresa "${quien}". Cada empresa debe facturar con su propio CUIT.`,
+          cuit,
+          empresa: { id: due.empresa_id || null, nombre: due.nombre || null, codigo: due.codigo || null },
+        });
+      }
+    }
+    safe.arca_cuit = cuit;
+  }
+
   db.setConfig(safe);
   res.json({ ok: true });
 });
 
 // ── Objetivo mensual ──
 router.post('/objetivo', authMiddleware, requireRol('admin','supervisor'), (req, res) => {
-  const db = _getDB(req);
+  const db = _requireDB(req, res);
+  if (!db) return;
   const {mes_key, monto} = req.body;
   if (!mes_key || monto === undefined) return res.status(400).json({error:'Datos incompletos'});
   const cfg = db.getConfig();

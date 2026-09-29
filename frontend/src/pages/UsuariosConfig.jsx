@@ -6,6 +6,7 @@ import { useApi } from '../hooks/useApi'
 import { useApp, useAuth, useToast } from '../store'
 import { Modal } from '../components/Modal'
 import { PageHeader, Field, EmptyRow, Loader, ConfirmDialog } from '../components/UI'
+import { isValidCuit, formatCuit } from '../lib/validar-cuit'
 
 const ROLES_ALL = [
   {id:'vendedor', label:'Vendedor', color:'badge-gray'},
@@ -270,6 +271,9 @@ export function Config() {
   const [emailTesting, setEmailTesting] = useState(false)
   const [emailTestRes, setEmailTestRes] = useState(null)
 
+  const [arcaTesting, setArcaTesting] = useState(false)
+  const [arcaTestRes, setArcaTestRes] = useState(null)
+
   useEffect(() => {
     api('GET', '/config').then((d) => {
       setForm((p) => ({ ...p, ...Object.fromEntries(Object.entries(d).filter(([,v])=>v!=null&&v!==undefined)) }))
@@ -282,7 +286,12 @@ export function Config() {
   async function save() {
     setSaving(true)
     try {
-      await api('PUT', '/config', form)
+      const payload = { ...form }
+      // "Cambiar token" deja null = mantener el valor existente.
+      if (payload.arca_access_token === null) delete payload.arca_access_token
+      if (payload.arca_cert === null) delete payload.arca_cert
+      if (payload.arca_key === null) delete payload.arca_key
+      await api('PUT', '/config', payload)
       setCfg({ ...cfg, ...form })
       toast('Configuración guardada','ok')
     } catch(e) { toast(e.message,'err') }
@@ -315,9 +324,32 @@ export function Config() {
     finally { setEmailTesting(false) }
   }
 
+  async function testArca() {
+    if (!form.arca_cuit || !isValidCuit(form.arca_cuit)) { toast('Cargá un CUIT válido antes de probar','err'); return }
+    if (!form.arca_access_token) { toast('Cargá el Access Token de ARCA','err'); return }
+    if (form.arca_ambiente === 'prod' && (!form.arca_cert || !form.arca_key)) { toast('En Producción necesitás certificado y clave privada','err'); return }
+    setArcaTesting(true); setArcaTestRes(null)
+    try {
+      const payload = { ...form }
+      if (payload.arca_access_token === null) delete payload.arca_access_token
+      if (payload.arca_cert === null) delete payload.arca_cert
+      if (payload.arca_key === null) delete payload.arca_key
+      await api('PUT', '/config', payload)
+      setCfg({ ...cfg, ...form })
+      const r = await api('GET', '/arca/status')
+      if (r.ok) {
+        const ambiente = r.ambiente === 'prod' ? 'Producción' : 'Desarrollo'
+        setArcaTestRes({ ok: true, msg: `Conexión OK con AFIP — Ambiente ${ambiente}, CUIT ${formatCuit(r.cuit)}.` })
+      } else {
+        setArcaTestRes({ ok: false, msg: r.error || 'No se pudo conectar con ARCA' })
+      }
+    } catch(e) { setArcaTestRes({ ok: false, msg: e.message }) }
+    finally { setArcaTesting(false) }
+  }
+
   if (loading) return <Loader/>
 
-  const TABS_ALL = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['email','📧 Email'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['impresion','🖨️ Impresión'],['seguridad','🔒 Seguridad'],['webhooks','🔗 Webhooks'],['plan','📦 Plan'],['backups','💾 Backups'],['ayuda','🆘 Ayuda']]
+  const TABS_ALL = [['general','🏢 General'],['apariencia','🎨 Apariencia'],['email','📧 Email'],['arca','📄 ARCA'],['metodospago','💳 Métodos de pago'],['ctacte','📒 Cta. Cte.'],['pendientes','🚚 Pendientes'],['objetivo','🎯 Objetivo'],['fidelizacion','⭐ Fidelización'],['comision','💰 Comisión'],['descuentos','🏷️ Descuentos'],['impresion','🖨️ Impresión'],['seguridad','🔒 Seguridad'],['webhooks','🔗 Webhooks'],['plan','📦 Plan'],['backups','💾 Backups'],['ayuda','🆘 Ayuda']]
   const TABS = configIsAdmin ? TABS_ALL : TABS_ALL.filter(([k]) => k === 'metodospago')
 
   return (
@@ -333,7 +365,7 @@ export function Config() {
           <>
             <Field label="Nombre del negocio"><input value={form.nombre} onChange={set('nombre')} placeholder="FlexCRM Store"/></Field>
             <Field label="Eslogan / descripción"><input value={form.slogan||''} onChange={set('slogan')} placeholder="Tu sistema de gestión"/></Field>
-            <div className="fr"><Field label="CUIT"><input value={form.cuit} onChange={set('cuit')} placeholder="20-12345678-9"/></Field><Field label="IVA %"><input type="number" value={form.iva} onChange={set('iva')} min="0" max="100"/></Field></div>
+            <div className="fr"><Field label="CUIT"><input value={form.cuit} onChange={set('cuit')} placeholder="20-12345678-6"/></Field><Field label="IVA %"><input type="number" value={form.iva} onChange={set('iva')} min="0" max="100"/></Field></div>
             <Field label="Dirección"><input value={form.dir} onChange={set('dir')} placeholder="Calle 123, Ciudad"/></Field>
             <div className="fr"><Field label="Teléfono"><input value={form.tel} onChange={set('tel')} placeholder="11-1234-5678"/></Field><Field label="Email"><input type="email" value={form.email} onChange={set('email')} placeholder="contacto@..."/></Field></div>
             <Field label="Rubro">
@@ -390,6 +422,99 @@ export function Config() {
               </div>
             )}
             <button type="button" className="btn btn-secondary" onClick={testEmail} disabled={emailTesting} style={{marginBottom:8}}>{emailTesting ? '⏳ Probando...' : '📨 Probar conexión'}</button>
+          </>
+        )}
+
+        {tab==='arca' && (
+          <>
+            <div style={{background:'rgba(99,102,241,.06)',border:'1px solid rgba(99,102,241,.2)',borderRadius:8,padding:'10px 14px',fontSize:13,marginBottom:14}}>
+              📄 Facturación electrónica con <strong>ARCA (AFIP)</strong> para <strong>{form.nombre || 'tu empresa'}</strong>.
+              Cada empresa factura con su propio CUIT. Necesitás un Access Token de <a href="https://app.afipsdk.com" target="_blank" rel="noopener" style={{color:'var(--ac)'}}>app.afipsdk.com</a>.
+              Guía completa en la pestaña <strong>🆘 Ayuda</strong>.
+            </div>
+
+            <Field label="Access Token (Afip SDK)">
+              {form.arca_access_token === true ? (
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                  <input value="•••••••••••••• (configurado)" readOnly style={{flex:1}}/>
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={()=>setForm(p=>({...p,arca_access_token:null}))}>Cambiar</button>
+                </div>
+              ) : (
+                <input type="password" value={form.arca_access_token || ''} onChange={set('arca_access_token')} placeholder="Pegá acá tu Access Token" autoComplete="off"/>
+              )}
+            </Field>
+
+            <div className="fr">
+              <Field label="CUIT de la empresa (obligatorio)">
+                <input value={form.arca_cuit || ''} onChange={(e)=>setForm(p=>({...p,arca_cuit:formatCuit(e.target.value)}))} placeholder="20-12345678-6" inputMode="numeric"/>
+              </Field>
+              <Field label="Punto de venta">
+                <input type="number" min="1" max="9999" value={form.arca_punto_venta || '1'} onChange={set('arca_punto_venta')}/>
+              </Field>
+            </div>
+            {form.arca_cuit && !isValidCuit(form.arca_cuit) && (
+              <div style={{fontSize:12,color:'var(--bad)',marginBottom:12}}>⚠️ El CUIT no es válido. Revisá los 11 dígitos y el dígito verificador.</div>
+            )}
+
+            <div className="fr">
+              <Field label="Ambiente">
+                <select value={form.arca_ambiente || 'dev'} onChange={set('arca_ambiente')}>
+                  <option value="dev">🧪 Desarrollo (pruebas)</option>
+                  <option value="prod">🚀 Producción (facturas reales)</option>
+                </select>
+              </Field>
+              <Field label="IVA por defecto (%)">
+                <select value={String(form.arca_iva_pct ?? '21')} onChange={set('arca_iva_pct')}>
+                  <option value="21">21%</option>
+                  <option value="10.5">10,5%</option>
+                  <option value="27">27%</option>
+                  <option value="0">0%</option>
+                </select>
+              </Field>
+            </div>
+
+            <Field label="Condición frente al IVA">
+              <select value={form.arca_condicion_fiscal || 'responsable_inscripto'} onChange={set('arca_condicion_fiscal')}>
+                <option value="responsable_inscripto">Responsable Inscripto</option>
+                <option value="monotributista">Monotributista</option>
+                <option value="exento">Exento</option>
+              </select>
+            </Field>
+
+            {form.arca_ambiente === 'prod' && (
+              <>
+                <div style={{background:'rgba(234,179,8,.08)',border:'1px solid rgba(234,179,8,.3)',borderRadius:8,padding:'10px 14px',fontSize:12,marginBottom:14}}>
+                  🚀 En <strong>Producción</strong> también necesitás el certificado digital y la clave privada emitidos por AFIP (Paso 3 de la guía en Ayuda).
+                </div>
+                <Field label="Certificado digital (.crt / .pem)">
+                  {form.arca_cert === true ? (
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <input value="•••••••••••••• (configurado)" readOnly style={{flex:1}}/>
+                      <button type="button" className="btn btn-sm btn-secondary" onClick={()=>setForm(p=>({...p,arca_cert:null}))}>Cambiar</button>
+                    </div>
+                  ) : (
+                    <textarea value={form.arca_cert || ''} onChange={set('arca_cert')} rows={4} style={{resize:'vertical',fontFamily:'monospace',fontSize:11}} placeholder={"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"}/>
+                  )}
+                </Field>
+                <Field label="Clave privada (.key)">
+                  {form.arca_key === true ? (
+                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                      <input value="•••••••••••••• (configurado)" readOnly style={{flex:1}}/>
+                      <button type="button" className="btn btn-sm btn-secondary" onClick={()=>setForm(p=>({...p,arca_key:null}))}>Cambiar</button>
+                    </div>
+                  ) : (
+                    <textarea value={form.arca_key || ''} onChange={set('arca_key')} rows={4} style={{resize:'vertical',fontFamily:'monospace',fontSize:11}} placeholder={"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"}/>
+                  )}
+                </Field>
+              </>
+            )}
+
+            {arcaTestRes && (
+              <div style={{padding:'10px 14px',borderRadius:8,fontSize:12,background:arcaTestRes.ok?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(arcaTestRes.ok?'rgba(34,197,94,.3)':'rgba(239,68,68,.3)'),color:arcaTestRes.ok?'var(--ok)':'var(--bad)',marginBottom:8}}>
+                {arcaTestRes.ok ? '✅ ' : '❌ '}{arcaTestRes.msg}
+              </div>
+            )}
+            <button type="button" className="btn btn-secondary" onClick={testArca} disabled={arcaTesting}>{arcaTesting ? '⏳ Probando...' : '🔌 Guardar y probar conexión con ARCA'}</button>
           </>
         )}
 
@@ -729,7 +854,7 @@ export function Config() {
                     <li>Te va a dar dos archivos: el <strong>certificado</strong> (.crt o .pem) y la <strong>clave privada</strong> (.key)</li>
                     <li>Abrí cada archivo con el Bloc de Notas y copiá TODO su contenido (incluyendo las líneas <code>-----BEGIN CERTIFICATE-----</code> y <code>-----END CERTIFICATE-----</code>)</li>
                   </ol>
-                  <p style={{fontSize:11,color:'var(--mu)',marginTop:6}}>Para <strong>modo prueba</strong> no hace falta certificado. FlexCRM usa el CUIT 20-40937847-2 automáticamente para pruebas con Afip SDK.</p>
+                  <p style={{fontSize:11,color:'var(--mu)',marginTop:6}}>Para <strong>modo prueba</strong> no hace falta certificado, pero sí tu <strong>CUIT real</strong> y un Access Token de Afip SDK. Cada empresa factura con su propio CUIT.</p>
                 </div>
 
                 <div style={{background:'var(--bg)',borderRadius:8,padding:'12px 14px',marginBottom:12,border:'1px solid var(--bd)'}}>
@@ -737,7 +862,7 @@ export function Config() {
                   <ol style={{paddingLeft:20,margin:'6px 0'}}>
                     <li>Andá a <strong>Configuración → pestaña 📄 ARCA</strong></li>
                     <li>Pegá el <strong>Access Token</strong> que obtuviste en el Paso 1<br/><span style={{fontSize:11}}>Si dice "✅ Configurado", hacé clic en <strong>Cambiar</strong> y pegá el nuevo token.</span></li>
-                    <li>Completá tu <strong>CUIT</strong> sin guiones (ej: 20123456789)</li>
+                    <li>Completá tu <strong>CUIT</strong> (podés escribirlo con o sin guiones; ej: 20-12345678-6)</li>
                     <li>Poné tu <strong>Punto de venta</strong> (ej: 1)</li>
                     <li>Elegí <strong>Ambiente</strong>:<br/>— 🧪 <strong>Desarrollo</strong> = pruebas sin emitir facturas reales<br/>— 🚀 <strong>Producción</strong> = facturas reales (necesitás certificado)</li>
                     <li>Completá el <strong>IVA %</strong> (normalmente 21)</li>
