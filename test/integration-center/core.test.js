@@ -148,6 +148,45 @@ describe('Providers — ArcaProvider', () => {
     assert.ok(schema.fields);
     assert.ok(schema.fields.length > 0);
   });
+
+  it('debe pasar production:true y el CUIT propio en producción', () => {
+    const { ArcaProvider } = require('../../lib/integration-center/providers/ArcaProvider');
+    const opts = new ArcaProvider()._getAfipConfig({
+      arca_access_token: 'tok', arca_cuit: '20-12345678-6',
+      arca_ambiente: 'prod', arca_cert: 'CERT', arca_key: 'KEY',
+    });
+    assert.strictEqual(opts.CUIT, 20123456786);
+    assert.strictEqual(opts.production, true);
+    assert.strictEqual(opts.cert, 'CERT');
+    assert.strictEqual(opts.key, 'KEY');
+  });
+
+  it('debe usar el CUIT de prueba de afipsdk en desarrollo sin certificado', () => {
+    const { ArcaProvider } = require('../../lib/integration-center/providers/ArcaProvider');
+    const opts = new ArcaProvider()._getAfipConfig({
+      arca_access_token: 'tok', arca_cuit: '20-12345678-6', arca_ambiente: 'dev',
+    });
+    assert.strictEqual(opts.CUIT, 20409378472);
+    assert.strictEqual(opts.production, false);
+    assert.strictEqual(opts.cert, undefined);
+  });
+
+  it('connect: exige Access Token siempre', async () => {
+    const { ArcaProvider } = require('../../lib/integration-center/providers/ArcaProvider');
+    await assert.rejects(() => new ArcaProvider().connect({ arca_cuit: '20-12345678-6', arca_ambiente: 'dev' }));
+  });
+
+  it('connect: en producción exige CUIT y certificados', async () => {
+    const { ArcaProvider } = require('../../lib/integration-center/providers/ArcaProvider');
+    await assert.rejects(() => new ArcaProvider().connect({ arca_access_token: 'tok', arca_ambiente: 'prod' }));
+  });
+
+  it('connect: en desarrollo sin certificado conecta y reporta el CUIT de prueba', async () => {
+    const { ArcaProvider } = require('../../lib/integration-center/providers/ArcaProvider');
+    const r = await new ArcaProvider().connect({ arca_access_token: 'tok', arca_ambiente: 'dev' });
+    assert.strictEqual(r.connected, true);
+    assert.strictEqual(r.cuit_emisor, 20409378472);
+  });
 });
 
 describe('Providers — MercadoLibreProvider', () => {

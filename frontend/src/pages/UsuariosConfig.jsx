@@ -325,9 +325,11 @@ export function Config() {
   }
 
   async function testArca() {
-    if (!form.arca_cuit || !isValidCuit(form.arca_cuit)) { toast('Cargá un CUIT válido antes de probar','err'); return }
+    const prod = form.arca_ambiente === 'prod'
+    const tieneCerts = !!(form.arca_cert && form.arca_key)
+    if ((prod || tieneCerts) && !isValidCuit(form.arca_cuit)) { toast('Cargá un CUIT válido antes de probar','err'); return }
     if (!form.arca_access_token) { toast('Cargá el Access Token de ARCA','err'); return }
-    if (form.arca_ambiente === 'prod' && (!form.arca_cert || !form.arca_key)) { toast('En Producción necesitás certificado y clave privada','err'); return }
+    if (prod && !tieneCerts) { toast('En Producción necesitás certificado y clave privada','err'); return }
     setArcaTesting(true); setArcaTestRes(null)
     try {
       const payload = { ...form }
@@ -339,9 +341,13 @@ export function Config() {
       const r = await api('GET', '/arca/status')
       if (r.ok) {
         const ambiente = r.ambiente === 'prod' ? 'Producción' : 'Desarrollo'
-        setArcaTestRes({ ok: true, msg: `Conexión OK con AFIP — Ambiente ${ambiente}, CUIT ${formatCuit(r.cuit)}.` })
+        const propio = formatCuit(r.cuit)
+        const emisor = r.cuit_emisor ? formatCuit(r.cuit_emisor) : propio
+        // En desarrollo sin certificado propio, afipsdk emite con su CUIT de prueba.
+        const nota = emisor !== propio ? ` — comprobantes a nombre del CUIT de prueba ${emisor}` : ''
+        setArcaTestRes({ ok: true, msg: `Conexión OK con AFIP — Ambiente ${ambiente}, CUIT ${propio}${nota}.` })
       } else {
-        setArcaTestRes({ ok: false, msg: r.error || 'No se pudo conectar con ARCA' })
+        setArcaTestRes({ ok: false, msg: [r.error || 'No se pudo conectar con ARCA', r.detalle].filter(Boolean).join(' — ') })
       }
     } catch(e) { setArcaTestRes({ ok: false, msg: e.message }) }
     finally { setArcaTesting(false) }
@@ -433,6 +439,13 @@ export function Config() {
               Guía completa en la pestaña <strong>🆘 Ayuda</strong>.
             </div>
 
+            {form.arca_ambiente !== 'prod' && !(form.arca_cert && form.arca_key) && (
+              <div style={{background:'rgba(234,179,8,.08)',border:'1px solid rgba(234,179,8,.3)',borderRadius:8,padding:'10px 14px',fontSize:12,marginBottom:14}}>
+                🧪 En <strong>Desarrollo</strong> podés probar sin certificado: AFIP emite a nombre de su <strong>CUIT de prueba 20-40937847-2</strong>.
+                Los comprobantes son de prueba y no tienen valor fiscal. Para emitir con tu CUIT, cargá el certificado de homologación más abajo.
+              </div>
+            )}
+
             <Field label="Access Token (Afip SDK)">
               {form.arca_access_token === true ? (
                 <div style={{display:'flex',gap:8,alignItems:'center'}}>
@@ -481,33 +494,35 @@ export function Config() {
               </select>
             </Field>
 
-            {form.arca_ambiente === 'prod' && (
-              <>
-                <div style={{background:'rgba(234,179,8,.08)',border:'1px solid rgba(234,179,8,.3)',borderRadius:8,padding:'10px 14px',fontSize:12,marginBottom:14}}>
-                  🚀 En <strong>Producción</strong> también necesitás el certificado digital y la clave privada emitidos por AFIP (Paso 3 de la guía en Ayuda).
-                </div>
-                <Field label="Certificado digital (.crt / .pem)">
-                  {form.arca_cert === true ? (
-                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                      <input value="•••••••••••••• (configurado)" readOnly style={{flex:1}}/>
-                      <button type="button" className="btn btn-sm btn-secondary" onClick={()=>setForm(p=>({...p,arca_cert:null}))}>Cambiar</button>
-                    </div>
-                  ) : (
-                    <textarea value={form.arca_cert || ''} onChange={set('arca_cert')} rows={4} style={{resize:'vertical',fontFamily:'monospace',fontSize:11}} placeholder={"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"}/>
-                  )}
-                </Field>
-                <Field label="Clave privada (.key)">
-                  {form.arca_key === true ? (
-                    <div style={{display:'flex',gap:8,alignItems:'center'}}>
-                      <input value="•••••••••••••• (configurado)" readOnly style={{flex:1}}/>
-                      <button type="button" className="btn btn-sm btn-secondary" onClick={()=>setForm(p=>({...p,arca_key:null}))}>Cambiar</button>
-                    </div>
-                  ) : (
-                    <textarea value={form.arca_key || ''} onChange={set('arca_key')} rows={4} style={{resize:'vertical',fontFamily:'monospace',fontSize:11}} placeholder={"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"}/>
-                  )}
-                </Field>
-              </>
+            {form.arca_ambiente === 'prod' ? (
+              <div style={{background:'rgba(234,179,8,.08)',border:'1px solid rgba(234,179,8,.3)',borderRadius:8,padding:'10px 14px',fontSize:12,marginBottom:14}}>
+                🚀 En <strong>Producción</strong> también necesitás el certificado digital y la clave privada emitidos por AFIP (Paso 3 de la guía en Ayuda).
+              </div>
+            ) : (
+              <div style={{fontSize:12,color:'var(--muted)',marginBottom:10}}>
+                Opcional en desarrollo: si cargás un certificado de homologación, las pruebas salen a nombre de <strong>tu CUIT</strong> en vez del CUIT de prueba de AFIP.
+              </div>
             )}
+            <Field label="Certificado digital (.crt / .pem)">
+              {form.arca_cert === true ? (
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                  <input value="•••••••••••••• (configurado)" readOnly style={{flex:1}}/>
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={()=>setForm(p=>({...p,arca_cert:null}))}>Cambiar</button>
+                </div>
+              ) : (
+                <textarea value={form.arca_cert || ''} onChange={set('arca_cert')} rows={4} style={{resize:'vertical',fontFamily:'monospace',fontSize:11}} placeholder={"-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----"}/>
+              )}
+            </Field>
+            <Field label="Clave privada (.key)">
+              {form.arca_key === true ? (
+                <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                  <input value="•••••••••••••• (configurado)" readOnly style={{flex:1}}/>
+                  <button type="button" className="btn btn-sm btn-secondary" onClick={()=>setForm(p=>({...p,arca_key:null}))}>Cambiar</button>
+                </div>
+              ) : (
+                <textarea value={form.arca_key || ''} onChange={set('arca_key')} rows={4} style={{resize:'vertical',fontFamily:'monospace',fontSize:11}} placeholder={"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"}/>
+              )}
+            </Field>
 
             {arcaTestRes && (
               <div style={{padding:'10px 14px',borderRadius:8,fontSize:12,background:arcaTestRes.ok?'rgba(34,197,94,.08)':'rgba(239,68,68,.08)',border:'1px solid '+(arcaTestRes.ok?'rgba(34,197,94,.3)':'rgba(239,68,68,.3)'),color:arcaTestRes.ok?'var(--ok)':'var(--bad)',marginBottom:8}}>
@@ -854,7 +869,7 @@ export function Config() {
                     <li>Te va a dar dos archivos: el <strong>certificado</strong> (.crt o .pem) y la <strong>clave privada</strong> (.key)</li>
                     <li>Abrí cada archivo con el Bloc de Notas y copiá TODO su contenido (incluyendo las líneas <code>-----BEGIN CERTIFICATE-----</code> y <code>-----END CERTIFICATE-----</code>)</li>
                   </ol>
-                  <p style={{fontSize:11,color:'var(--mu)',marginTop:6}}>Para <strong>modo prueba</strong> no hace falta certificado, pero sí tu <strong>CUIT real</strong> y un Access Token de Afip SDK. Cada empresa factura con su propio CUIT.</p>
+                  <p style={{fontSize:11,color:'var(--mu)',marginTop:6}}>Para <strong>modo prueba (🧪 Desarrollo)</strong> no hace falta certificado: AFIP emite a nombre de su <strong>CUIT de prueba 20-40937847-2</strong> y los comprobantes no tienen valor fiscal. Si querés que las pruebas salgan a nombre de tu CUIT, cargá un certificado de homologación. En <strong>🚀 Producción</strong> el certificado es obligatorio y se factura con tu CUIT real.</p>
                 </div>
 
                 <div style={{background:'var(--bg)',borderRadius:8,padding:'12px 14px',marginBottom:12,border:'1px solid var(--bd)'}}>

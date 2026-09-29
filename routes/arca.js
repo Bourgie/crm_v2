@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const { normalizeCuit, isValidCuit } = require('../lib/validar-cuit');
+const { buildSdkOptions, emitterCuit, missingConfig, mensajeConfigPendiente, afipErrorDetail } = require('../lib/arca-sdk-config');
 const { authMiddleware, requireRol, permiteSucursal } = require('../middleware/auth');
 router.use(authMiddleware);
 
@@ -27,38 +28,17 @@ function _requireDB(req, res) {
 
 /**
  * Valida que la empresa tenga su propia config fiscal completa.
- * El CUIT es la identidad del contribuyente: sin uno propio no se emite nada.
+ * En Producción el CUIT propio y los certificados son obligatorios.
+ * En Desarrollo alcanza con el Access Token: sin certificado propio, afipsdk
+ * emite con su CUIT de prueba compartido (ver lib/arca-sdk-config.js).
  */
 function assertFiscalConfig(cfg, res) {
-  if (!cfg.arca_access_token) {
-    res.status(400).json({ error: 'Falta el Access Token de ARCA. Configuralo en Configuración → ARCA.' });
-    return false;
-  }
-  if (!isValidCuit(cfg.arca_cuit)) {
-    res.status(400).json({ error: 'CUIT de la empresa vacío o inválido. Cargalo en Configuración → ARCA (11 dígitos, con o sin guiones).' });
-    return false;
-  }
-  if (cfg.arca_ambiente === 'prod' && (!cfg.arca_cert || !cfg.arca_key)) {
-    res.status(400).json({ error: 'Para facturar en Producción falta el certificado o la clave privada. Cargalos en Configuración → ARCA.' });
+  const falta = missingConfig(cfg);
+  if (falta) {
+    res.status(400).json({ error: mensajeConfigPendiente(falta) });
     return false;
   }
   return true;
-}
-
-function getAfipConfig(cfg) {
-  const cuit = normalizeCuit(cfg.arca_cuit);
-  if (!isValidCuit(cuit)) {
-    throw new Error('CUIT de la empresa no configurado o inválido');
-  }
-  const opts = {
-    CUIT: parseInt(cuit, 10),
-    access_token: cfg.arca_access_token || '',
-  };
-  if (cfg.arca_ambiente === 'prod' && cfg.arca_cert && cfg.arca_key) {
-    opts.cert = cfg.arca_cert;
-    opts.key = cfg.arca_key;
-  }
-  return opts;
 }
 
 function getDocTipo(cliente) {
@@ -86,20 +66,18 @@ router.get('/status', async (req, res) => {
   if (!db) return;
   try {
     const cfg = db.getConfig();
-    const cuitOk = isValidCuit(cfg.arca_cuit);
-    if (!cfg.arca_access_token || !cuitOk) {
+    const falta = missingConfig(cfg);
+    if (falta) {
       return res.json({
         ok: false,
         ambiente: cfg.arca_ambiente || 'dev',
-        cuit: cuitOk ? normalizeCuit(cfg.arca_cuit) : '',
-        config_pendiente: !cfg.arca_access_token ? 'access_token' : 'cuit',
-        error: !cfg.arca_access_token
-          ? 'Access Token no configurado'
-          : 'CUIT de la empresa vacío o inválido',
+        cuit: isValidCuit(cfg.arca_cuit) ? normalizeCuit(cfg.arca_cuit) : '',
+        config_pendiente: falta,
+        error: mensajeConfigPendiente(falta),
       });
     }
     const Afip = require('@afipsdk/afip.js');
-    const afip = new Afip(getAfipConfig(cfg));
+    const afip = new Afip(buildSdkOptions(cfg));
     const status = await afip.ElectronicBilling.getServerStatus();
 
     const ptoVta = parseInt(cfg.arca_punto_venta) || 1;
@@ -117,12 +95,13 @@ router.get('/status', async (req, res) => {
       condicion_fiscal: cfg.arca_condicion_fiscal || 'responsable_inscripto',
       iva_pct: parseFloat(cfg.arca_iva_pct) || 21,
       punto_venta: ptoVta,
+      cuit_emisor: emitterCuit(cfg),
       server: status,
       ultimos_comprobantes: lastVouchers,
       tiene_certificados: !!(cfg.arca_cert && cfg.arca_key),
     });
   } catch (e) {
-    res.json({ ok: false, error: e.message });
+    res.json({ ok: false, error: e.message, detalle: afipErrorDetail(e) });
   }
 });
 
@@ -152,7 +131,7 @@ router.post('/ventas/:id/facturar', requireRol('admin', 'supervisor', 'cajero'),
 
   try {
     const Afip = require('@afipsdk/afip.js');
-    const afip = new Afip(getAfipConfig(cfg));
+    const afip = new Afip(buildSdkOptions(cfg));
     const ptoVta = parseInt(cfg.arca_punto_venta) || 1;
     const cbteTipo = TIPOS_FACTURA[tipo];
 
@@ -205,8 +184,9 @@ router.post('/ventas/:id/facturar', requireRol('admin', 'supervisor', 'cajero'),
 
     res.json({ ok: true, cae: resp.CAE, vencimiento: resp.CAEFchVto, numero: voucherNumber, tipo });
   } catch (e) {
-    console.error('[ARCA] Error:', e.message);
-    res.status(500).json({ error: 'Error al facturar: ' + e.message });
+    const detalle = afipErrorDetail(e);
+    console.error('[ARCA] Error al facturar:', e.message, detalle || '');
+    res.status(500).json({ error: 'Error al facturar: ' + e.message, detalle });
   }
 });
 
@@ -227,7 +207,7 @@ router.post('/ventas/:id/nota-credito', requireRol('admin', 'supervisor'), async
   const tipo = venta.factura_tipo || 'B';
   try {
     const Afip = require('@afipsdk/afip.js');
-    const afip = new Afip(getAfipConfig(cfg));
+    const afip = new Afip(buildSdkOptions(cfg));
     const ptoVta = parseInt(cfg.arca_punto_venta) || 1;
     const cbteTipo = TIPOS_NOTA_CREDITO[tipo] || 8;
 
@@ -253,7 +233,7 @@ router.post('/ventas/:id/nota-credito', requireRol('admin', 'supervisor'), async
       MonId: 'PES', MonCotiz: 1,
       CondicionIVAReceptorId: tipo === 'A' ? 1 : 5,
       Iva: [{ Id: getIvaId(cfg), BaseImp: impNeto, Importe: impIVA }],
-      CbtesAsoc: [{ Tipo: TIPOS_FACTURA[tipo], PtoVta: ptoVta, Nro: venta.factura_numero, Cuit: parseInt(normalizeCuit(cfg.arca_cuit), 10) }],
+      CbtesAsoc: [{ Tipo: TIPOS_FACTURA[tipo], PtoVta: ptoVta, Nro: venta.factura_numero, Cuit: emitterCuit(cfg) }],
     };
 
     const resp = await afip.ElectronicBilling.createVoucher(data);
@@ -271,8 +251,9 @@ router.post('/ventas/:id/nota-credito', requireRol('admin', 'supervisor'), async
 
     res.json({ ok: true, cae: resp.CAE, vencimiento: resp.CAEFchVto, numero: voucherNumber, tipo: 'NC-' + tipo });
   } catch (e) {
-    console.error('[ARCA] Error Nota Crédito:', e.message);
-    res.status(500).json({ error: 'Error al generar nota de crédito: ' + e.message });
+    const detalle = afipErrorDetail(e);
+    console.error('[ARCA] Error Nota Crédito:', e.message, detalle || '');
+    res.status(500).json({ error: 'Error al generar nota de crédito: ' + e.message, detalle });
   }
 });
 
@@ -284,12 +265,13 @@ router.get('/consultar-cae/:cae', requireRol('admin', 'supervisor'), async (req,
     const cfg = db.getConfig();
     if (!assertFiscalConfig(cfg, res)) return;
     const Afip = require('@afipsdk/afip.js');
-    const afip = new Afip(getAfipConfig(cfg));
+    const afip = new Afip(buildSdkOptions(cfg));
     const info = await afip.ElectronicBilling.getVoucherInfo(req.params.cae);
     res.json({ ok: true, comprobante: info });
   } catch (e) {
-    console.error('[ARCA] Error consulta CAE:', e.message);
-    res.status(500).json({ error: 'Error al consultar CAE: ' + e.message });
+    const detalle = afipErrorDetail(e);
+    console.error('[ARCA] Error consulta CAE:', e.message, detalle || '');
+    res.status(500).json({ error: 'Error al consultar CAE: ' + e.message, detalle });
   }
 });
 

@@ -11,6 +11,7 @@ module.exports = defineConfig({
       'test/security-tenant.test.js',
       'test/dashboard-objetivos.test.js',
       'test/marketing-output.test.js',
+      'test/arca-sdk-config.test.js',
       'test/integration-center/**',
       'node_modules/**',
     ],
