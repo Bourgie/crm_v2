@@ -3,11 +3,9 @@ const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const { normalizeCuit, isValidCuit } = require('../lib/validar-cuit');
 const { buildSdkOptions, emitterCuit, missingConfig, mensajeConfigPendiente, tieneCertificados, afipErrorDetail } = require('../lib/arca-sdk-config');
+const { TIPOS_FACTURA, TIPOS_NOTA_CREDITO, condicionIvaReceptor, docTipo, docNro, cbteAsociado, buildVoucherData } = require('../lib/arca-voucher');
 const { authMiddleware, requireRol, permiteSucursal } = require('../middleware/auth');
 router.use(authMiddleware);
-
-const TIPOS_FACTURA = { 'A': 1, 'B': 6, 'C': 11 };
-const TIPOS_NOTA_CREDITO = { 'A': 3, 'B': 8, 'C': 13 };
 
 // ── Multi-tenant: nunca tocar la DB legacy compartida (data/crm.db) ──
 // Si el tenant no resolvió su DB (empresa dada de baja, código inválido),
@@ -39,26 +37,6 @@ function assertFiscalConfig(cfg, res) {
     return false;
   }
   return true;
-}
-
-function getDocTipo(cliente) {
-  if (!cliente || !cliente.dni) return 99;
-  const dni = String(cliente.dni).replace(/[-\s]/g, '');
-  if (dni.length === 11) return 80;
-  if (dni.length >= 7) return 96;
-  return 99;
-}
-
-function getCondicionIVA(tipo) {
-  if (tipo === 'A') return 1;
-  if (tipo === 'C') return 6;
-  return 5;
-}
-
-function getIvaId(cfg) {
-  const pct = parseFloat(cfg.arca_iva_pct) || 21;
-  const map = { 27: 3, 21: 5, 10.5: 4, 0: 2 };
-  return map[pct] || 5;
 }
 
 router.get('/status', async (req, res) => {
@@ -150,33 +128,27 @@ router.post('/ventas/:id/facturar', requireRol('admin', 'supervisor', 'cajero'),
       return res.status(400).json({ error: 'Factura A requiere un cliente registrado como Responsable Inscripto' });
     }
 
-    const docTipo = getDocTipo(cliente);
-    const docNro = docTipo === 99 ? 0 : parseInt(String(cliente?.dni || '0').replace(/[-\s]/g, '')) || 0;
-    const condicionIva = getCondicionIVA(tipo);
-    const ivaPct = parseFloat(cfg.arca_iva_pct) || 21;
-    const impTotal = Math.round(parseFloat(venta.total) * 100) / 100;
-    const impNeto = Math.round(impTotal / (1 + ivaPct / 100) * 100) / 100;
-    const impIVA = Math.round((impTotal - impNeto) * 100) / 100;
+    const clienteDocTipo = docTipo(cliente && cliente.dni);
+    const clienteDocNro = docNro(clienteDocTipo, cliente && cliente.dni);
 
-    const fecha = new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0];
-
-    const data = {
-      CantReg: 1, PtoVta: ptoVta, CbteTipo: cbteTipo, Concepto: 1,
-      DocTipo: docTipo, DocNro: docNro,
-      CbteDesde: voucherNumber, CbteHasta: voucherNumber,
-      CbteFch: parseInt(fecha.replace(/-/g, '')),
-      ImpTotal: impTotal, ImpTotConc: 0, ImpNeto, ImpOpEx: 0, ImpIVA, ImpTrib: 0,
-      MonId: 'PES', MonCotiz: 1,
-      CondicionIVAReceptorId: condicionIva,
-      Iva: [{ Id: getIvaId(cfg), BaseImp: impNeto, Importe: impIVA }],
-    };
+    const data = buildVoucherData({
+      cbteTipo,
+      numero: voucherNumber,
+      ptoVta,
+      total: venta.total,
+      ivaPct: cfg.arca_iva_pct,
+      condicionFiscal: condicionFiscalEmpresa,
+      condicionIvaReceptor: condicionIvaReceptor(tipo),
+      docTipo: clienteDocTipo,
+      docNro: clienteDocNro,
+    });
 
     const resp = await afip.ElectronicBilling.createVoucher(data);
 
     db.update('ventas', req.params.id, {
       facturada: true, factura_cae: resp.CAE, factura_numero: voucherNumber,
       factura_tipo: tipo, factura_fecha_vto: resp.CAEFchVto,
-      factura_doc_tipo: docTipo, factura_doc_nro: docNro,
+      factura_doc_tipo: clienteDocTipo, factura_doc_nro: clienteDocNro,
     });
 
     db.audit(req.user, venta.suc_id, 'ventas', 'facturar',
@@ -214,27 +186,23 @@ router.post('/ventas/:id/nota-credito', requireRol('admin', 'supervisor'), async
     const lastVoucher = await afip.ElectronicBilling.getLastVoucher(ptoVta, cbteTipo);
     const voucherNumber = lastVoucher + 1;
 
-    const ivaPct = parseFloat(cfg.arca_iva_pct) || 21;
-    const montoTotal = parseFloat(monto || venta.total);
-    const impTotal = Math.round(montoTotal * 100) / 100;
-    const impNeto = Math.round(impTotal / (1 + ivaPct / 100) * 100) / 100;
-    const impIVA = Math.round((impTotal - impNeto) * 100) / 100;
-
-    const docTipo = venta.factura_doc_tipo || 99;
-    const docNro = venta.factura_doc_nro || 0;
-    const fecha = new Date(Date.now() - (new Date()).getTimezoneOffset() * 60000).toISOString().split('T')[0];
-
-    const data = {
-      CantReg: 1, PtoVta: ptoVta, CbteTipo: cbteTipo, Concepto: 1,
-      DocTipo: docTipo, DocNro: docNro,
-      CbteDesde: voucherNumber, CbteHasta: voucherNumber,
-      CbteFch: parseInt(fecha.replace(/-/g, '')),
-      ImpTotal: impTotal, ImpTotConc: 0, ImpNeto, ImpOpEx: 0, ImpIVA, ImpTrib: 0,
-      MonId: 'PES', MonCotiz: 1,
-      CondicionIVAReceptorId: tipo === 'A' ? 1 : 5,
-      Iva: [{ Id: getIvaId(cfg), BaseImp: impNeto, Importe: impIVA }],
-      CbtesAsoc: [{ Tipo: TIPOS_FACTURA[tipo], PtoVta: ptoVta, Nro: venta.factura_numero, Cuit: emitterCuit(cfg) }],
-    };
+    const data = buildVoucherData({
+      cbteTipo,
+      numero: voucherNumber,
+      ptoVta,
+      total: monto || venta.total,
+      ivaPct: cfg.arca_iva_pct,
+      condicionFiscal: cfg.arca_condicion_fiscal || 'responsable_inscripto',
+      condicionIvaReceptor: condicionIvaReceptor(tipo),
+      docTipo: venta.factura_doc_tipo || 99,
+      docNro: venta.factura_doc_nro || 0,
+      cbtesAsoc: [cbteAsociado({
+        tipo,
+        ptoVta,
+        numero: venta.factura_numero,
+        cuitEmisor: emitterCuit(cfg),
+      })],
+    });
 
     const resp = await afip.ElectronicBilling.createVoucher(data);
 
@@ -242,7 +210,7 @@ router.post('/ventas/:id/nota-credito', requireRol('admin', 'supervisor'), async
       factura_nc_cae: resp.CAE,
       factura_nc_numero: voucherNumber,
       factura_nc_fecha_vto: resp.CAEFchVto,
-      factura_nc_monto: impTotal,
+      factura_nc_monto: data.ImpTotal,
       factura_nc_motivo: motivo || '',
     });
 

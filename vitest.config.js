@@ -12,6 +12,7 @@ module.exports = defineConfig({
       'test/dashboard-objetivos.test.js',
       'test/marketing-output.test.js',
       'test/arca-sdk-config.test.js',
+      'test/arca-voucher.test.js',
       'test/integration-center/**',
       'node_modules/**',
     ],
