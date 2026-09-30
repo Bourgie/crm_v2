@@ -153,12 +153,14 @@ describe('Providers — ArcaProvider', () => {
     const { ArcaProvider } = require('../../lib/integration-center/providers/ArcaProvider');
     const opts = new ArcaProvider()._getAfipConfig({
       arca_access_token: 'tok', arca_cuit: '20-12345678-6',
-      arca_ambiente: 'prod', arca_cert: 'CERT', arca_key: 'KEY',
+      arca_ambiente: 'prod',
+      arca_cert: '-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----',
+      arca_key: '-----BEGIN PRIVATE KEY-----\nMIIE\n-----END PRIVATE KEY-----',
     });
     assert.strictEqual(opts.CUIT, 20123456786);
     assert.strictEqual(opts.production, true);
-    assert.strictEqual(opts.cert, 'CERT');
-    assert.strictEqual(opts.key, 'KEY');
+    assert.ok(opts.cert.includes('BEGIN CERTIFICATE'));
+    assert.ok(opts.key.includes('BEGIN PRIVATE KEY'));
   });
 
   it('debe usar el CUIT de prueba de afipsdk en desarrollo sin certificado', () => {

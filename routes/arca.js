@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db, uid } = require('../db_sqlite');
 const { normalizeCuit, isValidCuit } = require('../lib/validar-cuit');
-const { buildSdkOptions, emitterCuit, missingConfig, mensajeConfigPendiente, afipErrorDetail } = require('../lib/arca-sdk-config');
+const { buildSdkOptions, emitterCuit, missingConfig, mensajeConfigPendiente, tieneCertificados, afipErrorDetail } = require('../lib/arca-sdk-config');
 const { authMiddleware, requireRol, permiteSucursal } = require('../middleware/auth');
 router.use(authMiddleware);
 
@@ -98,7 +98,7 @@ router.get('/status', async (req, res) => {
       cuit_emisor: emitterCuit(cfg),
       server: status,
       ultimos_comprobantes: lastVouchers,
-      tiene_certificados: !!(cfg.arca_cert && cfg.arca_key),
+      tiene_certificados: tieneCertificados(cfg),
     });
   } catch (e) {
     res.json({ ok: false, error: e.message, detalle: afipErrorDetail(e) });
