@@ -34,3 +34,11 @@ Las checklists de referencia están en `.agents/references/`:
 - `observability-checklist.md`
 - `orchestration-patterns.md`
 <!-- agent-skills:end -->
+
+
+<!-- production-workflow:start -->
+## Proyecto Producción
+Para tareas de Producción leer tasks/production-roadmap.md, production-spec.md, plan.md y todo.md. Usar production-coordinator y especialistas .opencode/agents/production-*.md. Cargar las skills crm-production-* pertinentes. Trabajar exclusivamente en feat/produccion, con una tarea y commits pequeños. Ejecutar scripts/production/check_branch.py antes de mutar. ARCA es un proyecto separado.
+Auditoría integral obligatoria: operaciones y cambios de usuarios/roles/planes/sucursales/recetas/stock/pedidos, con actores y antes/después saneado. No secretos. No push/merge/deploy sin instrucción específica. El historial Git no sustituye auditoría de negocio.
+Los revisores son solo lectura; un escritor por archivos compartidos. No marcar P00 terminado hasta revisar contratos y baseline. Revertir commits revisados, no reset destructivo; tras datos reales mantener gateway compatible con lotes/reservas.
+<!-- production-workflow:end -->
